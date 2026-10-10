@@ -1,0 +1,13 @@
+{
+  "name": "Light",
+  "windowBackground": "#F5F5F7D9",
+  "keycap": "#FFFFFF",
+  "keycapBorder": "#D1D1D6",
+  "label": "#1D1D1F",
+  "pressed": "#0A84FF",
+  "pressedLabel": "#FFFFFF",
+  "heatLow": "#FFE5D9",
+  "heatHigh": "#D0342C",
+  "heatLabel": "#1D1D1F",
+  "decor": "#E8E8ED"
+}

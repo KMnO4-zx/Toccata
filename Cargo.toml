@@ -1,0 +1,8 @@
+[workspace]
+members = ["core/toccata-core"]
+resolver = "2"
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
