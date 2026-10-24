@@ -17,8 +17,7 @@ enum DatabaseError: Error, LocalizedError {
 
 /// 只读 SQLite 查询封装：daemon 是唯一写方，本 App 仅以只读方式打开。
 final class Database {
-    static let defaultURL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/Toccata/toccata.db", isDirectory: false)
+    static var defaultURL: URL { AppPaths.databaseURL }
 
     private let handle: OpaquePointer
 

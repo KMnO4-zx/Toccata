@@ -1,89 +1,121 @@
+<img src="shared/branding/toccata-app-icon.svg" alt="Toccata Logo" width="96">
+
 # Toccata
 
-macOS 键盘监控器 — 名字取自「触键曲」（toccata，词根 toccare = 触碰）。
+一个 macOS 本地任务与键盘活跃工作台。想到的事情先放进收集箱，完成后按真实完成时间回顾；键盘活动在工作台里显示为时间线。
 
-Rust daemon 常驻后台做键盘采集与统计，Swift 侧提供两个按需启动的 App：悬浮键盘（toccata-overlay）与可视化界面（toccata-studio）。
+名字取自「触键曲」（toccata，词根 toccare = 触碰）。
 
-```
-┌──────────────────────────────────────────────────┐
-│ toccata-core (Rust daemon, 常驻)                  │
-│  CGEventTap(ListenOnly) ──→ 配对计时 / idle-gap   │
-│         │                      │                 │
-│    SQLite (WAL, 批量写)    Unix socket 广播       │
-└──────────│─────────────────────│─────────────────┘
-           │ 只读直连             │ JSON Lines 订阅
-   ┌───────┴─────────┐   ┌───────┴─────────┐
-   │ toccata-studio  │   │ toccata-overlay │
-   │ Swift Charts    │   │ NSPanel 悬浮键盘 │
-   └─────────────────┘   └─────────────────┘
-```
+## 任务怎么用
 
-## 模块
+- **想到就记**：在任务列表或菜单栏快速添加任务。新任务默认没有计划日期，也不会自动成为“今天必须完成”的任务；创建时间单独记录，计划日期可按需要设置。
+- **按任务视图查看**：工作台和菜单栏默认显示“本周任务”，可切换“收集箱 / 最近 7 天 / 本周任务”。收集箱保留全部顶层任务，最近 7 天按创建时间筛选，本周任务汇集本周创建、之前遗留未完成和本周完成的任务；每个视图都保留符合条件的已完成任务。
+- **菜单栏直接编辑**：点击状态栏图标打开 312 × 554 pt 的白底紧凑任务列表，每项标题单行显示，不常驻显示创建时间副行，创建时间仍完整记录并用于视图筛选。子任务缩进显示在父任务下方，可折叠展开，已完成任务也保留层级。点击任务会在列表左侧打开独立的 400 × 300 pt 小浮窗，可编辑标题、描述、计划日期及子任务，通过旗标设置优先级，通过评论添加过程记录；原列表保持原有宽度并持续可见。选中任务后，按 Tab 定位到描述；选中顶层任务时，按 Enter 定位到添加子任务，子任务没有继续新增下级的入口；描述中的 Enter 仍然换行。右键或“更多操作”可删除任务，删除前会确认并说明子任务联动。
+- **菜单栏快捷导航**：底部提供任务、日历、设置三个图标。日历打开工作台的任务日历；设置菜单可打开工作台或退出应用。工作台仍提供完整任务详情。
+- **写清楚过程**：每个任务可补充详情、拆分一级子任务，记录带时间的推进过程、卡点和感受。子任务也有独立详情和过程记录，但不能继续创建下级任务。
+- **保留完成记录**：菜单栏的完成状态显示为圆内对号，完成保存成功后播放一次系统提示音，恢复待办不播放。完成任务后仍可在收集箱的“已完成”区域查看、展开详情或恢复为待办。
+- **在任务月历里查看**：可按创建、计划、完成或全部事件查看任务，选择日期后可查看、编辑当天任务。同一任务在一天内只列一次；没有计划日期的任务另列。常规新增仍不设置计划日期，只有明确选择按所选日期新建才会安排到当天。
+- **按完成时间回顾**：“完成回顾”支持“本周”和“最近7天”，包含已完成的任务与子任务。归属依据实际 `completedAt`，创建日期和计划日期不影响归档。
+- **准备周报素材**：可搜索任务、详情与过程记录，并将当前回顾连同详情和过程复制为文本。自动按模板生成周报尚未实现。
 
-| 模块 | 技术 | 说明 |
-|---|---|---|
-| `core/toccata-core` | Rust | 常驻 daemon：CGEventTap 采集、autorepeat 过滤、keyDown/keyUp 配对算按住时长、NSWorkspace 前台 App 归属、idle-gap「真实使用时间」、SQLite 批量写入、Unix socket 实时广播、tap 超时自动重启 |
-| `apps/toccata-overlay` | Swift (AppKit) | 悬浮键盘：实时点亮按住中的键 / 按累计次数的热力图模式（log 归一化）、鼠标穿透不抢焦点、透明度调节 |
-| `apps/toccata-studio` | SwiftUI + Charts | 可视化：24 小时柱状图、GitHub 风格日历热力图、按键/App 排行、输入验证使用时长 |
-| `shared/` | JSON | 键盘布局与主题的唯一事实来源（可替换 = 换肤），IPC 与 DB 契约见 `shared/protocol.md` |
+日期范围按本机时区计算：“本周”从周一零点到当前时刻；“最近 7 天”从六天前零点到当前时刻，覆盖含今天的七个自然日。时间视图也会列出符合条件的子任务，较早创建的父任务不会遮住新进展。任务视图和“完成回顾”使用不同依据：前者用于查看任务，后者只按真实完成时间整理周报素材。
 
-## 构建
+完成父任务会同时完成尚未完成的子任务，保留已完成子任务的原完成时间。恢复一个任务会同时恢复其已完成的祖先，保留其他已完成子任务；给已完成父任务新增子任务也会恢复父任务。删除父任务会一并删除子任务和它们的过程记录。
 
-```bash
-# daemon
-cargo build --release          # 产物 target/release/toccata-core
+## 键盘活跃怎么计算
 
-# 两个 App（各自目录下）
-cd apps/toccata-overlay && swift build -c release
-cd apps/toccata-studio  && swift build -c release
-```
+“键盘活跃”提供今日、最近 7 天、本周视图，每格代表 15 分钟，显示活跃时间、按键次数和 Fn 按住时间。另有活跃日历及按键、应用排行。
 
-改完 `shared/` 下的布局/主题后运行 `scripts/sync-assets.sh` 同步进两个 App 的资源。
+默认相邻输入间隔小于 60 秒视为连续活跃，末次输入后补 5 秒；持续按住按键的区间也计入，重叠区间只计算一次。长按产生的重复输入事件会过滤。当前活跃段直接从原始按键事件和实时事件重建。
 
-## 运行
+这些数字是**根据键盘活动估算的电脑使用时间**。阅读、看视频、仅使用鼠标时可能没有记录。**Fn 累计按住时间用于估算语音输出时间**，也可能包含 Fn 快捷键操作；Toccata 不检测麦克风录音。
 
-**首次运行需要授权「输入监控」权限**（系统设置 → 隐私与安全性 → 输入监控）。daemon 无权限时会打印引导日志并每 5 秒自动重试，授权后无需重启即开始采集。
+键盘采集由独立的 Rust 后台服务运行，记录键码、时间、按住时长和前台应用归属。任务功能可独立使用，后台服务未连接时仍能添加、编辑和完成任务。
+
+## 构建与运行
+
+需要 macOS 13 或更新版本、Rust 工具链和支持 Swift 5.9 的 Xcode Command Line Tools。
 
 ```bash
-./target/release/toccata-core                                  # 前台跑（调试用）
-./apps/toccata-overlay/.build/release/toccata-overlay          # 悬浮键盘
-./apps/toccata-studio/.build/release/toccata-studio            # 可视化
+# 在项目根目录：构建工作台应用，产物为 dist/Toccata.app
+./scripts/build-app.sh
+open dist/Toccata.app
+
+# 单独构建并启动键盘采集服务
+cargo build --release --locked
+./target/release/toccata-core
 ```
 
-开机常驻（LaunchAgent）：
+首次启动采集服务需要在“系统设置 → 隐私与安全性 → 输入监控”中授权。服务会在等待授权时定期重试。工作台界面本身不负责启动后台采集。
+
+也可直接通过 SwiftPM 构建界面：
 
 ```bash
-sudo cp target/release/toccata-core /usr/local/bin/
-cp scripts/com.toccata.core.plist ~/Library/LaunchAgents/
-# 如安装路径不同，先改 plist 里的 ProgramArguments
-launchctl load ~/Library/LaunchAgents/com.toccata.core.plist
+./scripts/sync-assets.sh
+cd apps/toccata-studio
+swift build -c release
+./.build/release/toccata-studio
 ```
+
+如需后台服务随登录启动，可使用 `scripts/com.toccata.core.plist`：先将其中 `ProgramArguments` 改为实际服务可执行文件的绝对路径，再安装并加载：
+
+```bash
+mkdir -p "$HOME/Library/LaunchAgents"
+cp scripts/com.toccata.core.plist "$HOME/Library/LaunchAgents/"
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.toccata.core.plist"
+```
+
+工作台应用和后台服务分别运行。
 
 ## 数据与配置
 
-全部在 `~/Library/Application Support/Toccata/` 下：
+默认全部保存在 `~/Library/Application Support/Toccata/`：
 
-- `toccata.db` — SQLite（WAL），表结构与统计查询示例见 `shared/protocol.md`
-- `toccata.sock` — 实时事件广播（JSON Lines，无客户端时零开销）
-- `config.json` — daemon 配置（全部可选）：`idle_gap_secs`(60)、`trailing_grace_secs`(5)、`flush_interval_secs`(10)、`flush_batch_size`(500)、`db_path`、`socket_path`
-- `layouts/` `themes/` — 放同名 JSON 即可覆盖内置布局/主题，不用重新编译
-
-## 换肤
-
-内置 `Light` / `Dark` 两套主题（overlay 状态栏菜单切换）。自定义：复制 `shared/theme/dark.json` 改名改色，丢进 `~/Library/Application Support/Toccata/themes/`。字段说明见 `shared/README.md`。
-
-## 资源占用（实测）
-
-| 指标 | 数值 |
+| 文件 | 用途与写入方 |
 |---|---|
-| daemon 物理内存（footprint） | ≈ 2.2 MB |
-| daemon ps RSS（含共享页口径） | ≈ 10.9 MB |
-| 空闲 CPU | 0.0% |
-| 无客户端时广播开销 | 空集合遍历，零 syscall |
+| `tasks.sqlite` | 任务、子任务、创建时间、计划日期、完成时间和过程记录；Studio 独立读写 |
+| `toccata.db` | 原始键盘事件与历史应用会话；后台服务独占写入，Studio 只读 |
+| `toccata.sock` | 后台服务的实时 JSON Lines 订阅接口 |
+| `config.json` | 后台服务配置；Studio 跟随其中的数据库、socket 路径及活跃估算参数 |
+| `toccata.lock` | 后台服务的单实例锁 |
 
-事件回调只做微秒级内存操作后经 channel 交给 writer 线程，绝不阻塞系统事件流；落盘为每 10s 或满 500 条一次事务批量写入。
+SQLite 使用 WAL 模式。已有 `toccata.db` 和历史记录继续保留；任务存储在单独的 `tasks.sqlite` 中。
 
-daemon 带单实例保护（`toccata.lock` 文件 flock）：重复启动第二个实例会立即退出并提示，避免多实例双写数据库。
+`config.json` 所有字段均可省略，默认值如下：
+
+```json
+{
+  "idle_gap_secs": 60,
+  "trailing_grace_secs": 5,
+  "flush_interval_secs": 2,
+  "flush_batch_size": 500,
+  "db_path": null,
+  "socket_path": null
+}
+```
+
+后台服务每 2 秒按固定周期批量落盘，达到批量阈值时也会落盘；持续输入不会推迟周期写入。成功提交后通知界面刷新，界面另有定时读取作为兜底。写入失败会保留该批缓冲，供后续重试。
+
+如需便携数据目录或隔离运行，可在启动工作台与后台服务的进程环境中设置同一个非空 `TOCCATA_DATA_DIR`，建议使用绝对路径。两个进程会从该目录读取 `config.json`，任务库固定放在该目录的 `tasks.sqlite`。非空 `db_path` 和 `socket_path` 可进一步指定键盘数据库与 socket 的绝对路径，Studio 会跟随这些设置。通过终端运行 SwiftPM 可执行文件时可直接继承该环境变量；已运行的应用需重新启动才能切换数据目录。
+
+完整表结构和统计口径见 [shared/protocol.md](shared/protocol.md)。布局标签和日历热力图配色是随包资源，修改后需同步资源并重新构建，见 [shared/README.md](shared/README.md)。
+
+## 模块
+
+| 模块 | 职责 |
+|---|---|
+| `core/toccata-core` | CGEventTap 采集、按键配对、SQLite 批量写入、Unix socket 广播 |
+| `apps/toccata-studio` | SwiftUI 任务工作台、任务月历、菜单栏快速记录与编辑、完成回顾和键盘活动统计 |
+| `shared/` | 协议、数据库契约、键码标签与日历热力图主题资源 |
+| `scripts/` | 应用打包、资源同步和后台服务启动配置 |
+
+## 验证
+
+```bash
+cargo test --locked --offline
+cd apps/toccata-studio
+swift test
+```
 
 ## License
 

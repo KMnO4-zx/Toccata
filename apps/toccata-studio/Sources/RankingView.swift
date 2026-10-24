@@ -26,6 +26,7 @@ struct RankingView: View {
                 }
             }
         }
+        .background(TaskScrollerStyle())
         .onAppear(perform: reload)
         .onValueChange(of: range) { reload() }
         .onReceive(refresher.$generation.dropFirst()) { _ in reload() }

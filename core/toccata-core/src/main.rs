@@ -16,7 +16,7 @@ mod tracker;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use core_foundation::date::CFAbsoluteTimeGetCurrent;
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopTimer, CFRunLoopTimerRef};
@@ -31,6 +31,35 @@ use tracker::{KeyKind, Tracker};
 enum WriterMsg {
     Event(RawKeyEvent),
     Shutdown,
+}
+
+/// 独立于事件到达频率的周期时钟，持续输入也不能推迟落盘。
+struct FlushSchedule {
+    interval: Duration,
+    next: Instant,
+}
+
+impl FlushSchedule {
+    fn new(now: Instant, interval: Duration) -> Self {
+        // 配置为 0 时仍保持有限等待，避免空闲时忙循环。
+        let interval = interval.max(Duration::from_secs(1));
+        Self { interval, next: now + interval }
+    }
+
+    fn remaining(&self, now: Instant) -> Duration {
+        self.next.saturating_duration_since(now)
+    }
+
+    fn take_due(&mut self, now: Instant) -> bool {
+        if now < self.next {
+            return false;
+        }
+        // 保留原始周期锚点；唤醒延迟或机器休眠后跳过已错过的周期。
+        while self.next <= now {
+            self.next += self.interval;
+        }
+        true
+    }
 }
 
 static SHUTDOWN: OnceLock<Arc<AtomicBool>> = OnceLock::new();
@@ -178,27 +207,33 @@ fn writer_main(rx: Receiver<WriterMsg>, cfg: Config, broadcaster: Broadcaster) {
     };
     let mut tracker = Tracker::new();
     let mut sessions = SessionTracker::new(cfg.idle_gap_secs, cfg.trailing_grace_secs);
-    let flush_every = Duration::from_secs(cfg.flush_interval_secs);
+    let mut flush_schedule = FlushSchedule::new(
+        Instant::now(),
+        Duration::from_secs(cfg.flush_interval_secs),
+    );
 
     loop {
-        match rx.recv_timeout(flush_every) {
+        match rx.recv_timeout(flush_schedule.remaining(Instant::now())) {
             Ok(WriterMsg::Event(ev)) => {
                 handle_event(&ev, &mut tracker, &mut sessions, &mut store, &broadcaster);
                 if store.pending() >= cfg.flush_batch_size {
-                    flush_store(&mut store);
+                    flush_store(&mut store, &broadcaster);
                 }
             }
             Ok(WriterMsg::Shutdown) => {
                 settle_open_session(&mut sessions, &mut store);
-                flush_store(&mut store);
+                flush_store(&mut store, &broadcaster);
                 return;
             }
-            Err(RecvTimeoutError::Timeout) => flush_store(&mut store),
+            Err(RecvTimeoutError::Timeout) => {},
             Err(RecvTimeoutError::Disconnected) => {
                 settle_open_session(&mut sessions, &mut store);
-                flush_store(&mut store);
+                flush_store(&mut store, &broadcaster);
                 return;
             }
+        }
+        if flush_schedule.take_due(Instant::now()) {
+            flush_store(&mut store, &broadcaster);
         }
     }
 }
@@ -211,6 +246,9 @@ fn handle_event(
     broadcaster: &Broadcaster,
 ) {
     let tracked = tracker.on_key(ev.keycode, ev.kind, ev.at);
+    if !tracked.accepted {
+        return;
+    }
     store.push_key_event(KeyEventRow {
         ts_ms: ev.ts_ms,
         keycode: ev.keycode,
@@ -247,10 +285,71 @@ fn settle_open_session(sessions: &mut SessionTracker, store: &mut Store) {
     }
 }
 
-fn flush_store(store: &mut Store) {
+fn flush_store(store: &mut Store, broadcaster: &Broadcaster) {
     if store.pending() > 0 {
-        if let Err(e) = store.flush() {
-            eprintln!("[toccata-core] 数据库写入失败: {e}");
+        match store.flush() {
+            Ok(()) => broadcaster.broadcast(r#"{"type":"updated"}"#),
+            Err(e) => eprintln!("[toccata-core] 数据库写入失败: {e}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn duplicate_fn_down_does_not_persist_or_extend_the_session() {
+        let mut tracker = Tracker::new();
+        let mut sessions = SessionTracker::new(60, 5);
+        let mut store = Store::open(std::path::Path::new(":memory:"), 500).unwrap();
+        let broadcaster = Broadcaster::empty();
+        let start = Instant::now();
+        for ts_ms in [1_000, 1_600] {
+            let event = RawKeyEvent {
+                ts_ms,
+                keycode: 63,
+                kind: KeyKind::Down,
+                at: start + Duration::from_millis(ts_ms as u64),
+                app: Some("test.app".into()),
+            };
+            handle_event(&event, &mut tracker, &mut sessions, &mut store, &broadcaster);
+        }
+        assert_eq!(store.pending(), 1, "only the first down may be persisted");
+        let settled = sessions.flush().unwrap();
+        assert_eq!(settled.key_count, 1);
+        assert_eq!(settled.end_ms, 6_000, "a duplicate down must not extend activity");
+    }
+
+    #[test]
+    fn frequent_events_do_not_extend_flush_deadline() {
+        let start = Instant::now();
+        let mut schedule = FlushSchedule::new(start, Duration::from_secs(2));
+        for millis in [100, 500, 1_000, 1_999] {
+            let now = start + Duration::from_millis(millis);
+            assert!(!schedule.take_due(now));
+            assert_eq!(schedule.remaining(now), Duration::from_millis(2_000 - millis));
+        }
+        assert!(schedule.take_due(start + Duration::from_secs(2)));
+        assert!(!schedule.take_due(start + Duration::from_secs(2)));
+        assert_eq!(schedule.remaining(start + Duration::from_secs(2)), Duration::from_secs(2));
+    }
+
+    #[test]
+    fn late_flush_keeps_the_original_schedule() {
+        let start = Instant::now();
+        let mut schedule = FlushSchedule::new(start, Duration::from_secs(2));
+        assert!(schedule.take_due(start + Duration::from_millis(7_500)));
+        assert_eq!(schedule.remaining(start + Duration::from_millis(7_500)), Duration::from_millis(500));
+        assert!(schedule.take_due(start + Duration::from_secs(8)));
+    }
+
+    #[test]
+    fn zero_flush_interval_cannot_busy_loop() {
+        let start = Instant::now();
+        let mut schedule = FlushSchedule::new(start, Duration::ZERO);
+        assert_eq!(schedule.remaining(start), Duration::from_secs(1));
+        assert!(schedule.take_due(start + Duration::from_secs(1)));
+        assert!(!schedule.take_due(start + Duration::from_secs(1)));
     }
 }

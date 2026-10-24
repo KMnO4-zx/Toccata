@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Toccata 应用图标</title>
+  <desc id="desc">字母 T、完成勾与琴键节奏融合的触键标志</desc>
+  <defs>
+    <linearGradient id="plate" x1="170" y1="100" x2="850" y2="950" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#11172E"/>
+      <stop offset="0.48" stop-color="#1B2A5B"/>
+      <stop offset="1" stop-color="#4059C9"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(820 184) rotate(132) scale(620)">
+      <stop offset="0" stop-color="#7185FF" stop-opacity="0.72"/>
+      <stop offset="0.55" stop-color="#536DEF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#536DEF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="touch" x1="520" y1="674" x2="708" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FAFCFF"/>
+      <stop offset="0.58" stop-color="#FAFCFF"/>
+      <stop offset="1" stop-color="#83E7C3"/>
+    </linearGradient>
+    <clipPath id="plateClip">
+      <rect x="52" y="52" width="920" height="920" rx="210"/>
+    </clipPath>
+    <filter id="plateShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+    <filter id="markShadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feGaussianBlur stdDeviation="13"/>
+    </filter>
+    <g id="symbol" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M452 342 V580 C452 626 458 650 474 664" stroke="#FAFCFF" stroke-width="76"/>
+      <path d="M326 560 L450 662 Q478 692 510 670 L708 420" stroke="url(#touch)" stroke-width="76"/>
+      <path d="M336 472 H572" stroke="#FAFCFF" stroke-width="76"/>
+      <path d="M404 442 V502 M510 442 V502 M570 446 V498" stroke="#223463" stroke-opacity="0.24" stroke-width="10"/>
+    </g>
+  </defs>
+  <rect x="76" y="86" width="872" height="884" rx="198" fill="#080D20" fill-opacity="0.34" filter="url(#plateShadow)"/>
+  <g clip-path="url(#plateClip)">
+    <rect x="52" y="52" width="920" height="920" fill="url(#plate)"/>
+    <rect x="52" y="52" width="920" height="920" fill="url(#glow)"/>
+    <g fill="none" stroke="#DDE5FF" stroke-width="3">
+      <circle cx="708" cy="420" r="154" stroke-opacity="0.075"/>
+      <circle cx="708" cy="420" r="228" stroke-opacity="0.05"/>
+      <circle cx="708" cy="420" r="302" stroke-opacity="0.03"/>
+    </g>
+    <path d="M52 52 H972 V244 C736 150 426 162 52 368 Z" fill="#FFFFFF" fill-opacity="0.045"/>
+    <use xlink:href="#symbol" transform="translate(0 15)" opacity="0.28" filter="url(#markShadow)"/>
+    <use xlink:href="#symbol"/>
+  </g>
+  <rect x="53.5" y="53.5" width="917" height="917" rx="208.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="3"/>
+</svg>

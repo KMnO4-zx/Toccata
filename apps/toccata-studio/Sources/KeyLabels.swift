@@ -4,10 +4,10 @@ enum ResourceLoader {
     /// .process("Resources") 正常会保留 Layout/、Themes/ 子目录；
     /// 若目录结构被扁平化则退回 bundle 根目录查找。
     static func jsonData(named name: String, subdirectory: String) -> Data? {
-        if let url = Bundle.module.url(forResource: name, withExtension: "json", subdirectory: subdirectory) {
+        if let url = AppResources.bundle.url(forResource: name, withExtension: "json", subdirectory: subdirectory) {
             return try? Data(contentsOf: url)
         }
-        if let url = Bundle.module.url(forResource: name, withExtension: "json") {
+        if let url = AppResources.bundle.url(forResource: name, withExtension: "json") {
             return try? Data(contentsOf: url)
         }
         return nil

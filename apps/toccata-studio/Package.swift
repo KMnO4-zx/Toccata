@@ -8,8 +8,14 @@ let package = Package(
         .executableTarget(
             name: "toccata-studio",
             path: ".",
+            exclude: ["Tests"],
             sources: ["Sources"],
             resources: [.process("Resources")]
+        ),
+        .testTarget(
+            name: "ToccataStudioTests",
+            dependencies: ["toccata-studio"],
+            path: "Tests"
         )
     ]
 )

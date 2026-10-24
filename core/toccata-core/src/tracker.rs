@@ -28,6 +28,8 @@ impl KeyKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrackedKey {
     pub kind: KeyKind,
+    /// 重复 Fn down 不应落盘、广播或影响会话统计。
+    pub accepted: bool,
     /// 仅 Up 且存在配对 Down 时有值。
     pub hold_ms: Option<u64>,
 }
@@ -52,18 +54,23 @@ impl Tracker {
         }
     }
 
-    /// down：计数 +1、记录 Instant（槽位已有值则覆盖，防止丢 up 后计时错乱）。
+    /// down：计数 +1、记录 Instant；Fn 重复 down 保留首次时间，避免缩短语音时长。
+    /// 其他按键槽位已有值则覆盖，防止丢 up 后计时错乱。
     /// up：有配对则算出 hold_ms 并清槽；孤儿 up 不影响任何状态。
     pub fn on_key(&mut self, keycode: i64, kind: KeyKind, at: Instant) -> TrackedKey {
         let slot = (0..256).contains(&keycode).then_some(keycode as usize);
         match kind {
             KeyKind::Down => {
-                self.key_count += 1;
-                if let Some(i) = slot {
-                    self.down_at[i] = Some(at);
+                let duplicate_fn = keycode == 63 && self.down_at[63].is_some();
+                if !duplicate_fn {
+                    self.key_count += 1;
+                    if let Some(i) = slot {
+                        self.down_at[i] = Some(at);
+                    }
                 }
                 TrackedKey {
                     kind,
+                    accepted: !duplicate_fn,
                     hold_ms: None,
                 }
             }
@@ -71,7 +78,7 @@ impl Tracker {
                 let hold_ms = slot.and_then(|i| self.down_at[i].take()).map(|down| {
                     at.saturating_duration_since(down).as_millis() as u64
                 });
-                TrackedKey { kind, hold_ms }
+                TrackedKey { kind, accepted: true, hold_ms }
             }
         }
     }
@@ -87,11 +94,11 @@ mod tests {
         let mut t = Tracker::new();
         let t0 = Instant::now();
         let down = t.on_key(13, KeyKind::Down, t0);
-        assert_eq!(down, TrackedKey { kind: KeyKind::Down, hold_ms: None });
+        assert_eq!(down, TrackedKey { kind: KeyKind::Down, accepted: true, hold_ms: None });
         assert_eq!(t.key_count, 1);
 
         let up = t.on_key(13, KeyKind::Up, t0 + Duration::from_millis(120));
-        assert_eq!(up, TrackedKey { kind: KeyKind::Up, hold_ms: Some(120) });
+        assert_eq!(up, TrackedKey { kind: KeyKind::Up, accepted: true, hold_ms: Some(120) });
         assert_eq!(t.key_count, 1);
     }
 
@@ -99,7 +106,7 @@ mod tests {
     fn orphan_up_is_ignored() {
         let mut t = Tracker::new();
         let up = t.on_key(13, KeyKind::Up, Instant::now());
-        assert_eq!(up, TrackedKey { kind: KeyKind::Up, hold_ms: None });
+        assert_eq!(up, TrackedKey { kind: KeyKind::Up, accepted: true, hold_ms: None });
         assert_eq!(t.key_count, 0);
         // 孤儿 up 不清别人的槽位
         let t0 = Instant::now();
@@ -121,6 +128,22 @@ mod tests {
         // 槽位已清，再 up 是孤儿
         let up2 = t.on_key(13, KeyKind::Up, t0 + Duration::from_millis(90));
         assert_eq!(up2.hold_ms, None);
+    }
+
+    #[test]
+    fn repeated_fn_down_keeps_original_hold_start() {
+        let mut t = Tracker::new();
+        let t0 = Instant::now();
+        assert!(t.on_key(63, KeyKind::Down, t0).accepted);
+        assert!(!t.on_key(63, KeyKind::Down, t0 + Duration::from_millis(600)).accepted);
+        assert_eq!(t.key_count, 1);
+        let up = t.on_key(63, KeyKind::Up, t0 + Duration::from_millis(1_000));
+        assert_eq!(up.hold_ms, Some(1_000));
+        assert_eq!(t.on_key(63, KeyKind::Up, t0 + Duration::from_millis(1_100)).hold_ms, None);
+
+        assert!(t.on_key(63, KeyKind::Down, t0 + Duration::from_millis(1_200)).accepted);
+        assert_eq!(t.on_key(63, KeyKind::Up, t0 + Duration::from_millis(1_500)).hold_ms, Some(300));
+        assert_eq!(t.key_count, 2);
     }
 
     #[test]

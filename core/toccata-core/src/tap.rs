@@ -71,16 +71,22 @@ fn frontmost_app() -> Option<String> {
 /// 55/54=cmd, 56/60=shift, 58/61=option, 59/62=ctrl, 63=fn, 57=caps
 fn modifier_kind(keycode: i64, flags: core_graphics::event::CGEventFlags) -> Option<KeyKind> {
     use core_graphics::event::CGEventFlags as F;
+    // IOKit/hidsystem/IOLLEvent.h 中的 NX_DEVICE*KEYMASK 区分左右键。
+    // 仅判断 Command / Shift 等聚合位时，松开左键而右键仍按住会被误判为 down。
     let mask = match keycode {
-        55 | 54 => F::CGEventFlagCommand,   // 0x100000
-        56 | 60 => F::CGEventFlagShift,     // 0x20000
-        58 | 61 => F::CGEventFlagAlternate, // 0x80000
-        59 | 62 => F::CGEventFlagControl,   // 0x40000
-        63 => F::CGEventFlagSecondaryFn,    // 0x800000
-        57 => F::CGEventFlagAlphaShift,     // 0x10000
+        55 => 0x00000008, // left command
+        54 => 0x00000010, // right command
+        56 => 0x00000002, // left shift
+        60 => 0x00000004, // right shift
+        58 => 0x00000020, // left option
+        61 => 0x00000040, // right option
+        59 => 0x00000001, // left control
+        62 => 0x00002000, // right control
+        63 => F::CGEventFlagSecondaryFn.bits(),
+        57 => F::CGEventFlagAlphaShift.bits(),
         _ => return None,
     };
-    Some(if flags.contains(mask) { KeyKind::Down } else { KeyKind::Up })
+    Some(if flags.bits() & mask != 0 { KeyKind::Down } else { KeyKind::Up })
 }
 
 fn callback(
@@ -167,4 +173,34 @@ pub fn watchdog_check() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core_graphics::event::CGEventFlags as F;
+
+    #[test]
+    fn releasing_one_modifier_side_does_not_use_other_sides_flag() {
+        for (left, right, left_mask, right_mask, aggregate) in [
+            (55, 54, 0x08, 0x10, F::CGEventFlagCommand),
+            (56, 60, 0x02, 0x04, F::CGEventFlagShift),
+            (58, 61, 0x20, 0x40, F::CGEventFlagAlternate),
+            (59, 62, 0x01, 0x2000, F::CGEventFlagControl),
+        ] {
+            let right_only = F::from_bits_retain(aggregate.bits() | right_mask);
+            assert_eq!(modifier_kind(left, right_only), Some(KeyKind::Up));
+            assert_eq!(modifier_kind(right, right_only), Some(KeyKind::Down));
+            let left_only = F::from_bits_retain(aggregate.bits() | left_mask);
+            assert_eq!(modifier_kind(right, left_only), Some(KeyKind::Up));
+            assert_eq!(modifier_kind(left, left_only), Some(KeyKind::Down));
+        }
+    }
+
+    #[test]
+    fn fn_uses_its_own_flag() {
+        assert_eq!(modifier_kind(63, F::CGEventFlagSecondaryFn), Some(KeyKind::Down));
+        assert_eq!(modifier_kind(63, F::CGEventFlagCommand), Some(KeyKind::Up));
+        assert_eq!(modifier_kind(13, F::CGEventFlagSecondaryFn), None);
+    }
 }

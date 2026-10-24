@@ -1,50 +1,57 @@
-# shared/ — 布局与主题规范
+# shared/ — 契约与随包资源
 
-Toccata 的键盘布局和配色全部外置为 JSON，可替换 = 换肤。
+- [protocol.md](protocol.md)：后台服务与 Studio 的 IPC、SQLite 表结构、任务语义和统计口径。
+- `layout/`：键盘布局 JSON。Studio 当前读取其中的 `code` 和 `label`，为按键排行提供键名。
+- `theme/`：主题 JSON。Studio 当前读取 `heatLow` 和 `heatHigh`，绘制活跃日历的颜色渐变。
 
-## 布局 JSON（layout/）
+修改资源后，在项目根目录运行：
+
+```bash
+./scripts/sync-assets.sh
+```
+
+脚本将资源同步到 `apps/toccata-studio/Resources/Layout/` 和 `Resources/Themes/`。随后重新构建 Studio；应用打包脚本也会执行同步。当前 Studio 从应用资源包读取这些 JSON，没有数据目录中的运行时覆盖机制。
+
+## 布局 JSON
 
 ```json
 {
-  "id": "macbook-air-ansi",
-  "name": "MacBook Air (ANSI)",
-  "unit": 54,        // 1u 的像素基准（overlay 按窗口宽度等比缩放）
-  "keyGap": 6,       // 键与键之间的像素间距（按 1u=unit 基准）
-  "rows": [ [ <key>, ... ], ... ]
+  "id": "example",
+  "name": "Example keyboard",
+  "unit": 54,
+  "keyGap": 6,
+  "rows": [[
+    { "code": 13, "label": "W" },
+    { "code": 63, "label": "fn" },
+    { "code": null, "label": "Touch ID", "decor": true }
+  ]]
 }
 ```
 
-每个 `<key>`：
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `rows` | 二维数组 | 按行保存的按键列表；Studio 遍历所有行建立键名映射 |
+| `code` | 整数或 `null` | macOS CGKeyCode；`null` 项不进入键名映射 |
+| `label` | 字符串 | 按键排行中的名称；空字符串显示为 `Space` |
+| `id` / `name` | 字符串 | 布局标识与名称，当前 Studio 不读取 |
+| `unit` / `keyGap` | 数字 | 布局几何元数据，当前 Studio 不读取 |
+| `w` / `h` / `x` / `y` | 数字 | 按键大小与偏移元数据，当前 Studio 不读取 |
+| `decor` | 布尔值 | 装饰项元数据，当前 Studio 不读取 |
 
-| 字段 | 类型 | 默认 | 说明 |
-|---|---|---|---|
-| `code` | u16 或 null | — | CGKeyCode；`null` = 纯装饰键（如 Touch ID），不参与点亮/统计 |
-| `label` | string | `""` | 键帽文字 |
-| `w` | number | 1 | 宽（单位 u） |
-| `h` | number | 1 | 高（单位 u），半高键用 0.5 |
-| `x` | number | 0 | 绘制前的额外水平偏移（u），可为负（配合半高键回退一列） |
-| `y` | number | 0 | 行内垂直偏移（u），半高键在下排用 0.5 |
-| `decor` | bool | false | 装饰键标记 |
+当前使用 `macbook-air-ansi.json`。读取失败或键码未在表内时，Studio 显示 `Key<code>`。
 
-渲染规则：每行光标 x 从 0 开始，行 y 为行号。对每个键：`cursor += key.x`；在 `(cursor, rowY + key.y)` 处绘制 `w × h` 的键帽；然后 `cursor += w`。窗口按最宽行等比缩放。
+## 主题 JSON
 
-方向键四键的半高布局示例见 `macbook-air-ansi.json` 最后一行（`up` 在上排，`down` 用 `x: -1` 回退到同一列的下排）。
+```json
+{
+  "name": "Light",
+  "heatLow": "#FFE5D9",
+  "heatHigh": "#D0342C"
+}
+```
 
-## 主题 JSON（theme/）
+颜色支持 `#RRGGBB` 和 `#RRGGBBAA`。日历按当天按键次数进行 `log(1 + count)` 归一化，在 `heatLow` 到 `heatHigh` 之间插值；无按键日期使用界面默认空白色。
 
-所有颜色为 `#RRGGBB` 或 `#RRGGBBAA`：
+Studio 根据系统的浅色/深色外观加载 `light.json` 或 `dark.json`。主题中的其他现有字段作为资源元数据保留，当前 Studio 不读取。读取或颜色解析失败时使用代码内置的默认日历配色。
 
-| 字段 | 说明 |
-|---|---|
-| `name` | 主题名（菜单里显示） |
-| `windowBackground` | 悬浮窗背景 |
-| `keycap` / `keycapBorder` | 键帽填充 / 描边 |
-| `label` | 键帽文字 |
-| `pressed` / `pressedLabel` | 实时模式按下态填充 / 文字 |
-| `heatLow` / `heatHigh` | 热力模式渐变两端（log 归一化后插值） |
-| `heatLabel` | 热力模式文字 |
-| `decor` | 装饰键填充 |
-
-## 覆盖机制
-
-App 内置一份默认（构建时由 `scripts/sync-assets.sh` 从本目录同步）。运行时优先读取 `~/Library/Application Support/Toccata/{layouts,themes}/` 下的同名 JSON——换肤只需丢一个 JSON 文件进去，无需重新编译。
+键盘活跃页的 15 分钟时间线使用界面强调色，与日历主题 JSON 分开。

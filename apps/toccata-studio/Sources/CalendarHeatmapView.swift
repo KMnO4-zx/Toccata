@@ -47,6 +47,7 @@ struct CalendarHeatmapView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
+        .background(TaskScrollerStyle())
         .onAppear(perform: reload)
         .onReceive(refresher.$generation.dropFirst()) { _ in reload() }
     }

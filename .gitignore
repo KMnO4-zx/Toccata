@@ -4,3 +4,7 @@ target/
 *.db-wal
 *.db-shm
 .DS_Store
+dist/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

@@ -4,13 +4,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-OVERLAY_RES="apps/toccata-overlay/Resources"
 STUDIO_RES="apps/toccata-studio/Resources"
 
-mkdir -p "$OVERLAY_RES/Layout" "$OVERLAY_RES/Themes" "$STUDIO_RES/Layout" "$STUDIO_RES/Themes"
-cp shared/layout/*.json "$OVERLAY_RES/Layout/"
-cp shared/theme/*.json "$OVERLAY_RES/Themes/"
+mkdir -p "$STUDIO_RES/Layout" "$STUDIO_RES/Themes"
 cp shared/layout/*.json "$STUDIO_RES/Layout/"
 cp shared/theme/*.json "$STUDIO_RES/Themes/"
 
-echo "synced: layout + themes -> overlay & studio Resources"
+echo "synced: layout + themes -> studio Resources"

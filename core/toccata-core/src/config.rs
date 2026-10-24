@@ -18,7 +18,7 @@ impl Default for Config {
         Self {
             idle_gap_secs: 60,
             trailing_grace_secs: 5,
-            flush_interval_secs: 10,
+            flush_interval_secs: 2,
             flush_batch_size: 500,
             db_path: None,
             socket_path: None,
@@ -29,6 +29,9 @@ impl Default for Config {
 impl Config {
     /// ~/Library/Application Support/Toccata/
     pub fn data_dir() -> PathBuf {
+        if let Some(path) = std::env::var_os("TOCCATA_DATA_DIR").filter(|path| !path.is_empty()) {
+            return PathBuf::from(path);
+        }
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         PathBuf::from(home).join("Library/Application Support/Toccata")
     }
