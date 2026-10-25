@@ -79,6 +79,12 @@ fn is_shutdown() -> bool {
         .unwrap_or(false)
 }
 
+/// Studio suppresses system permission prompts during login/background startup.
+/// Standalone CLI launches keep their existing prompt behavior unless opted out.
+fn should_request_input_permission(value: Option<&str>) -> bool {
+    value != Some("0")
+}
+
 /// 主线程 CFRunLoop 1s 周期 timer：检查退出标志；每 10s 检查 tap 并上报采集状态。
 extern "C" fn runloop_tick(_timer: CFRunLoopTimerRef, _info: *mut std::ffi::c_void) {
     if is_shutdown() {
@@ -133,7 +139,10 @@ fn main() {
     let _ = SHUTDOWN.set(flag);
 
     // 权限检测 + tap 创建。无权限时每 5s 重试，进程保持存活，授权后自动开始采集。
-    let mut requested = false;
+    let request_permission = should_request_input_permission(
+        std::env::var("TOCCATA_REQUEST_INPUT_PERMISSION").ok().as_deref(),
+    );
+    let mut reported_missing_permission = false;
     loop {
         if is_shutdown() {
             shutdown(tx, writer);
@@ -150,9 +159,11 @@ fn main() {
                 }
             }
         } else {
-            if !requested {
-                requested = true;
-                tap::request_access();
+            if !reported_missing_permission {
+                reported_missing_permission = true;
+                if request_permission {
+                    tap::request_access();
+                }
                 eprintln!("[toccata-core] 缺少「输入监控」权限，无法监听键盘。");
                 eprintln!("[toccata-core] 请前往 系统设置 → 隐私与安全性 → 输入监控，勾选本程序（或运行它的终端）。");
                 eprintln!("[toccata-core] 授权后无需重启，程序会自动开始采集；正在每 5 秒重试…");
@@ -323,6 +334,15 @@ fn flush_store(store: &mut Store, broadcaster: &Broadcaster) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn background_permission_policy_preserves_standalone_cli_behavior() {
+        assert!(!should_request_input_permission(Some("0")),
+                "a background Studio launch must not request system permission");
+        assert!(should_request_input_permission(Some("1")));
+        assert!(should_request_input_permission(None),
+                "standalone CLI launches must keep requesting permission by default");
+    }
 
     #[test]
     fn capture_json_reports_permission_and_writer_readiness() {

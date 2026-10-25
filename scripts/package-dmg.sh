@@ -1,0 +1,116 @@
+#!/bin/bash
+# Package a built Toccata app without installing or launching it.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DIST="$ROOT/dist"
+APP="$DIST/Toccata.app"
+SKIP_BUILD=false
+
+usage() {
+    cat <<'USAGE'
+Usage: ./scripts/package-dmg.sh [--skip-build]
+
+Build Toccata, then create dist/Toccata-<version>-<arch>.dmg and its SHA-256 file.
+  --skip-build  Package the existing dist/Toccata.app after validation.
+  -h, --help    Show this help.
+
+The DMG contains Toccata.app, an Applications shortcut, and installation notes.
+This script does not install the app, launch it, or change login items or permissions.
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --skip-build) SKIP_BUILD=true ;;
+        -h|--help) usage; exit 0 ;;
+        *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
+    esac
+    shift
+done
+
+if [ "$SKIP_BUILD" = false ]; then
+    "$ROOT/scripts/build-app.sh"
+fi
+
+PLIST="$APP/Contents/Info.plist"
+STUDIO="$APP/Contents/MacOS/Toccata"
+HELPER="$APP/Contents/MacOS/toccata-core"
+if [ ! -f "$PLIST" ] || [ ! -x "$STUDIO" ] || [ ! -x "$HELPER" ]; then
+    printf 'Missing built app or helper: %s\nRun ./scripts/build-app.sh first.\n' "$APP" >&2
+    exit 1
+fi
+
+VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")"
+BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")"
+if [[ ! "$VERSION" =~ ^[0-9]+([.][0-9]+){0,2}$ ]]; then
+    printf 'Invalid app version for DMG filename: %s\n' "$VERSION" >&2
+    exit 1
+fi
+if [ "$BUNDLE_ID" != 'com.toccata.studio' ]; then
+    printf 'Unexpected app bundle identifier: %s\n' "$BUNDLE_ID" >&2
+    exit 1
+fi
+
+/usr/bin/codesign --verify --deep --strict "$APP"
+/usr/bin/codesign --verify --strict "$HELPER"
+
+architectures() {
+    /usr/bin/lipo -archs "$1" | /usr/bin/tr ' ' '\n' | LC_ALL=C /usr/bin/sort | /usr/bin/xargs
+}
+
+STUDIO_ARCHS="$(architectures "$STUDIO")"
+HELPER_ARCHS="$(architectures "$HELPER")"
+if [ "$STUDIO_ARCHS" != "$HELPER_ARCHS" ]; then
+    printf 'App/helper architecture mismatch: app=%s helper=%s\n' "$STUDIO_ARCHS" "$HELPER_ARCHS" >&2
+    exit 1
+fi
+case "$STUDIO_ARCHS" in
+    arm64) ARCH=arm64 ;;
+    x86_64) ARCH=x86_64 ;;
+    'arm64 x86_64') ARCH=universal ;;
+    *) printf 'Unsupported app architecture: %s\n' "$STUDIO_ARCHS" >&2; exit 1 ;;
+esac
+
+mkdir -p "$DIST"
+STAGING="$(mktemp -d "$DIST/.Toccata-dmg.XXXXXX")"
+trap 'rm -rf "$STAGING"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+PAYLOAD="$STAGING/payload"
+mkdir -p "$PAYLOAD"
+/usr/bin/ditto "$APP" "$PAYLOAD/Toccata.app"
+/bin/ln -s /Applications "$PAYLOAD/Applications"
+cat > "$PAYLOAD/安装说明.txt" <<'INSTALL'
+Toccata 安装说明
+
+1. 将 Toccata.app 拖到 Applications 文件夹，然后推出此磁盘映像。
+2. 从“应用程序”打开 Toccata。任务与键盘活动记录保存在本机。
+3. 关闭工作台窗口后，Toccata 继续在菜单栏运行；可从菜单重新打开工作台，选择“退出 Toccata”结束应用。
+4. “登录时启动”默认关闭，可在 Toccata 的设置菜单中按需开启。登录自动启动时只显示菜单栏图标。建议先完成拖拽安装，再开启此选项。
+5. 如需记录键盘活动，请自行在“系统设置 → 隐私与安全性 → 输入监控”中开启 Toccata。任务功能可独立使用。
+
+此打包脚本默认生成 ad-hoc 签名的本机测试包，未执行 Apple 公证。
+正式分发需另行完成 Developer ID 签名、Hardened Runtime、Apple 公证及公证票据装订。
+打开磁盘映像和拖拽安装不会自动修改登录项或输入监控权限。
+INSTALL
+
+# Validate the copied payload before creating the final read-only image.
+/usr/bin/codesign --verify --deep --strict "$PAYLOAD/Toccata.app"
+DMG_NAME="Toccata-$VERSION-$ARCH.dmg"
+STAGED_DMG="$STAGING/$DMG_NAME"
+/usr/bin/hdiutil create -volname Toccata -srcfolder "$PAYLOAD" -fs HFS+ \
+    -format UDZO -imagekey zlib-level=9 "$STAGED_DMG"
+/usr/bin/hdiutil verify "$STAGED_DMG"
+(
+    cd "$STAGING"
+    /usr/bin/shasum -a 256 "$DMG_NAME"
+) > "$STAGING/$DMG_NAME.sha256"
+
+# Keep any previous package until the replacement has passed verification.
+/bin/mv -f "$STAGED_DMG" "$DIST/$DMG_NAME"
+/bin/mv -f "$STAGING/$DMG_NAME.sha256" "$DIST/$DMG_NAME.sha256"
+printf 'Packaged: %s\nArchitecture: %s\nSHA-256: ' "$DIST/$DMG_NAME" "$STUDIO_ARCHS"
+/bin/cat "$DIST/$DMG_NAME.sha256"

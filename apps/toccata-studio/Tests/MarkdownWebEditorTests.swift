@@ -125,6 +125,24 @@ final class MarkdownWebEditorTests: XCTestCase {
         XCTAssertEqual(markdown, state.text)
     }
 
+    func testFlushReadsFinalTypingBeforeDebounceAndDoesNotRerenderOldBinding() async throws {
+        let (editor, coordinator, state) = try await loadCoordinatedEditor()
+        _ = try await evaluate(editor, """
+            focusEditor();
+            document.execCommand('insertText', false, '最后一段描述');
+            clearTimeout(normalizeTimer);
+        """)
+        XCTAssertEqual(state.text, "")
+        let saved = await coordinator.flushPendingMarkdown()
+        XCTAssertTrue(saved)
+        XCTAssertEqual(state.text, "最后一段描述")
+        coordinator.update(text: state.text, isFocused: true, fontSize: 12, textColor: .labelColor)
+        let visibleText = try await evaluate(editor, "document.getElementById('editor').textContent")
+        let renderCount = try await evaluate(editor, "String(window.externalRenders)")
+        XCTAssertEqual(visibleText, "最后一段描述")
+        XCTAssertEqual(renderCount, "0")
+    }
+
     func testCompositionSyncDoesNotInterruptFollowingInput() async throws {
         let (editor, coordinator, state) = try await loadCoordinatedEditor()
         _ = try await evaluate(editor, """

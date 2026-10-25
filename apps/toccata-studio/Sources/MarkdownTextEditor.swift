@@ -25,6 +25,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ view: WKWebView, coordinator: MarkdownEditorCoordinator) {
+        PendingEdits.shared.unregisterEditor(coordinator)
         view.configuration.userContentController.removeScriptMessageHandler(forName: "markdownChanged")
         view.configuration.userContentController.removeScriptMessageHandler(forName: "focusChanged")
     }
@@ -100,6 +101,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
         editor.dataset.placeholder = \(javascriptString(placeholder));
         let composing = false;
         let normalizeTimer = null;
+        let markdownRevision = 0;
 
         function esc(text) {
             return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -321,9 +323,13 @@ struct MarkdownTextEditor: NSViewRepresentable {
 
         function setMarkdown(markdown) { render(markdown); }
 
+        function markdownSnapshot() {
+            return { text: getMarkdown(true), revision: ++markdownRevision };
+        }
+
         function notify() {
             if (window.webkit && window.webkit.messageHandlers.markdownChanged) {
-                window.webkit.messageHandlers.markdownChanged.postMessage(getMarkdown(true));
+                window.webkit.messageHandlers.markdownChanged.postMessage(markdownSnapshot());
             }
         }
 
@@ -644,12 +650,14 @@ struct MarkdownTextEditor: NSViewRepresentable {
 }
 
 @MainActor
-final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler, PendingMarkdownFlushing {
     @Binding var text: String
     @Binding var isFocused: Bool
     private weak var webView: WKWebView?
     private var isReady = false
     private var lastMarkdown: String?
+    private var lastReceivedRevision = -1
+    private var isFlushing = false
     private var requestedFocus: Bool
     private var lastFocus: Bool?
     private var lastStyle: String?
@@ -664,6 +672,7 @@ final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptM
 
     func attach(to webView: WKWebView, placeholder: String) {
         self.webView = webView
+        PendingEdits.shared.registerEditor(self)
         webView.navigationDelegate = self
         webView.configuration.userContentController.add(self, name: "markdownChanged")
         webView.configuration.userContentController.add(self, name: "focusChanged")
@@ -675,20 +684,53 @@ final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptM
         self.fontSize = fontSize
         self.textColor = textColor
         guard isReady else { return }
-        if lastMarkdown != text { setMarkdown(text) }
+        // SwiftUI can redraw with the previous binding while WebKit is returning
+        // the final edit. Do not replace that edit with a stale external render.
+        if !isFlushing, lastMarkdown != text { setMarkdown(text) }
         updateStyle()
-        updateFocus(isFocused)
+        if !isFlushing { updateFocus(isFocused) }
     }
 
     func userContentController(_ userContentController: WKUserContentController,
                                didReceive message: WKScriptMessage) {
-        if message.name == "markdownChanged", let markdown = message.body as? String {
-            lastMarkdown = markdown
-            if text != markdown { text = markdown }
+        if message.name == "markdownChanged" {
+            applySnapshot(message.body)
         } else if message.name == "focusChanged", let focused = message.body as? Bool {
             lastFocus = focused
             isFocused = focused
         }
+    }
+
+    func flushPendingMarkdown() async -> Bool {
+        // Before navigation completes, the web editor cannot have accepted input;
+        // the native binding still holds the complete draft.
+        guard isReady else { return true }
+        guard let webView else { return false }
+        isFlushing = true
+        defer { isFlushing = false }
+        return await withCheckedContinuation { continuation in
+            let completion = PendingEditCompletion(continuation, timeout: 2)
+            webView.evaluateJavaScript("flushEditor(); markdownSnapshot();") { [weak self] result, error in
+                guard !completion.finished else { return }
+                guard let self, error == nil, let result else {
+                    completion.finish(false)
+                    return
+                }
+                completion.finish(self.applySnapshot(result))
+            }
+        }
+    }
+
+    @discardableResult
+    private func applySnapshot(_ value: Any) -> Bool {
+        guard let snapshot = value as? [String: Any],
+              let markdown = snapshot["text"] as? String,
+              let revision = snapshot["revision"] as? NSNumber else { return false }
+        guard revision.intValue >= lastReceivedRevision else { return true }
+        lastReceivedRevision = revision.intValue
+        lastMarkdown = markdown
+        if text != markdown { text = markdown }
+        return true
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

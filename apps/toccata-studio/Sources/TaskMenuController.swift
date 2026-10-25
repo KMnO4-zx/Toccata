@@ -11,6 +11,7 @@ final class TaskMenuController: NSObject, ObservableObject {
     private(set) var editorPanel: NSPanel?
     private var statusItem: NSStatusItem?
     private var store: TaskStore?
+    private var loginItems: LoginItemController?
     private var openWorkbenchAction: (() -> Void)?
     private var clickMonitor: Any?
     private var observers: [NSObjectProtocol] = []
@@ -19,10 +20,11 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var isEditorRevealing = false
     private var editorRevealGeneration = UUID()
 
-    func configure(store: TaskStore, openWorkbench: @escaping () -> Void) {
+    func configure(store: TaskStore, loginItems: LoginItemController, openWorkbench: @escaping () -> Void) {
         openWorkbenchAction = openWorkbench
         guard statusItem == nil else { return }
         self.store = store
+        self.loginItems = loginItems
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             button.image = NSImage(systemSymbolName: "square.stack.3d.up.fill", accessibilityDescription: "Toccata 任务")
@@ -82,7 +84,8 @@ final class TaskMenuController: NSObject, ObservableObject {
     }
 
     func showMenu() {
-        guard let store, let button = statusItem?.button, let statusWindow = button.window else { return }
+        guard let store, let loginItems, let button = statusItem?.button, let statusWindow = button.window else { return }
+        loginItems.refresh()
         let anchor = statusWindow.convertToScreen(button.convert(button.bounds, to: nil))
         let screen = statusWindow.screen ?? NSScreen.main ?? NSScreen.screens[0]
         let frame = MenuPanelLayout.listFrame(anchor: anchor, screen: screen.visibleFrame)
@@ -93,6 +96,7 @@ final class TaskMenuController: NSObject, ObservableObject {
                 QuickCaptureView()
                     .environmentObject(store)
                     .environmentObject(presentation)
+                    .environmentObject(loginItems)
                     .tint(TaskMenuStyle.accent)
                     .environment(\.colorScheme, .light)
                     .background(TaskMenuStyle.background)
@@ -232,17 +236,4 @@ final class TaskMenuController: NSObject, ObservableObject {
 private final class TaskMenuPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
-}
-
-struct TaskMenuSetup: View {
-    @Environment(\.openWindow) private var openWindow
-    let controller: TaskMenuController
-    let store: TaskStore
-
-    var body: some View {
-        Color.clear.frame(width: 0, height: 0)
-            .onAppear {
-                controller.configure(store: store, openWorkbench: { openWindow(id: "main") })
-            }
-    }
 }

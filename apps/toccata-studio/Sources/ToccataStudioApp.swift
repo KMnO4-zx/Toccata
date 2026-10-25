@@ -4,30 +4,20 @@ import AppKit
 @main
 @MainActor
 struct ToccataStudioApp: App {
-    @StateObject private var refresher = LiveRefresher()
-    @StateObject private var taskStore = TaskStore()
-    @StateObject private var taskMenu = TaskMenuController()
-    @StateObject private var coreProcess = CoreProcessController()
-    @State private var requestedSection: String?
-
-    init() {
-        NSApplication.shared.setActivationPolicy(.regular)
-    }
+    @NSApplicationDelegateAdaptor(ToccataApplicationDelegate.self) private var application
 
     var body: some Scene {
-        Window("Toccata", id: "main") {
-            ContentView(requestedSection: $requestedSection)
-                .environmentObject(refresher)
-                .environmentObject(taskStore)
-                .frame(minWidth: 1040, minHeight: 650)
-                .background(TaskMenuSetup(controller: taskMenu, store: taskStore))
-                .onAppear {
-                    coreProcess.start()
-                    refresher.start()
-                }
+        Settings {
+            ApplicationSettingsView(loginItems: application.loginItems)
         }
-        .defaultSize(width: 1240, height: 780)
-
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("打开工作台") {
+                    application.openWorkbench()
+                }
+                .keyboardShortcut("1", modifiers: .command)
+            }
+        }
     }
 }
 

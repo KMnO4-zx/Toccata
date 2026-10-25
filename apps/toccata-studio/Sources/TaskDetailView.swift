@@ -29,7 +29,7 @@ struct TaskDetailView: View {
         self.task = task
         self.onSelect = onSelect
         self.focusRequest = focusRequest
-        _draft = State(initialValue: TaskDraftBuffer.shared.edits[task.id] ?? TaskDetailDraft(task: task))
+        _draft = State(initialValue: TaskDraftBuffer.shared.restoredDraft(for: task) ?? TaskDetailDraft(task: task))
         _baseline = State(initialValue: TaskDetailDraft(task: task))
     }
 
@@ -74,13 +74,17 @@ struct TaskDetailView: View {
         }
         .onChange(of: draft) { value in
             if hasChanges {
-                TaskDraftBuffer.shared.edits[task.id] = value
+                TaskDraftBuffer.shared.remember(taskID: task.id, draft: value, baseline: baseline, store: store)
             } else {
-                TaskDraftBuffer.shared.edits.removeValue(forKey: task.id)
+                TaskDraftBuffer.shared.discard(task.id)
             }
         }
         .onChange(of: task) { updatedTask in
             synchronizeUneditedFields(from: updatedTask)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toccataSavePendingEdits)) { notification in
+            saveDraft(preservingValidTitle: true)
+            if saveFailed { (notification.object as? PendingEditSaveRequest)?.failed = true }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             // Application shutdown may happen before SwiftUI removes this view.
@@ -93,9 +97,9 @@ struct TaskDetailView: View {
             // Selection changes must not lose a final keystroke before the debounce fires.
             if store.task(id: task.id) != nil {
                 if hasChanges {
-                    TaskDraftBuffer.shared.edits[task.id] = draft
+                    TaskDraftBuffer.shared.remember(taskID: task.id, draft: draft, baseline: baseline, store: store)
                 } else {
-                    TaskDraftBuffer.shared.edits.removeValue(forKey: task.id)
+                    TaskDraftBuffer.shared.discard(task.id)
                 }
             } else {
                 TaskDraftBuffer.shared.discard(task.id)
@@ -323,7 +327,16 @@ struct TaskDetailView: View {
     }
 
     private func saveDraft(preservingValidTitle: Bool = false) {
-        guard let existing = store.task(id: task.id), hasChanges else { return }
+        guard let existing = store.task(id: task.id) else {
+            TaskDraftBuffer.shared.discard(task.id)
+            saveFailed = false
+            return
+        }
+        guard hasChanges else {
+            TaskDraftBuffer.shared.discard(task.id)
+            saveFailed = false
+            return
+        }
         guard validTitle || preservingValidTitle else { return }
         let saved = store.updateTask(
             id: task.id,
@@ -343,13 +356,13 @@ struct TaskDetailView: View {
             }
             if hasChanges {
                 // An empty title remains an unsaved draft; valid content is still safe.
-                TaskDraftBuffer.shared.edits[task.id] = draft
+                TaskDraftBuffer.shared.remember(taskID: task.id, draft: draft, baseline: baseline, store: store)
             } else {
-                TaskDraftBuffer.shared.edits.removeValue(forKey: task.id)
+                TaskDraftBuffer.shared.discard(task.id)
             }
         } else {
             // Keep failed writes available after the user moves to a different task or sidebar page.
-            TaskDraftBuffer.shared.edits[task.id] = draft
+            TaskDraftBuffer.shared.remember(taskID: task.id, draft: draft, baseline: baseline, store: store)
         }
     }
 
@@ -415,11 +428,73 @@ private struct TaskDetailDraft: Equatable {
 /// Unsaved edits stay in memory while navigating, including when a database write fails.
 /// Successfully saved content continues to live exclusively in TaskStore.
 @MainActor
-private final class TaskDraftBuffer {
+private final class TaskDraftBuffer: PendingDraftSaving {
     static let shared = TaskDraftBuffer()
-    var edits: [String: TaskDetailDraft] = [:]
 
-    func discard(_ taskID: String) {
-        edits.removeValue(forKey: taskID)
+    private final class Entry {
+        var draft: TaskDetailDraft
+        var baseline: TaskDetailDraft
+        weak var store: TaskStore?
+
+        init(draft: TaskDetailDraft, baseline: TaskDetailDraft, store: TaskStore) {
+            self.draft = draft
+            self.baseline = baseline
+            self.store = store
+        }
+    }
+
+    private var entries: [String: Entry] = [:]
+
+    private init() { PendingEdits.shared.registerDraftBuffer(self) }
+
+    func remember(taskID: String, draft: TaskDetailDraft, baseline: TaskDetailDraft, store: TaskStore) {
+        entries[taskID] = Entry(draft: draft, baseline: baseline, store: store)
+    }
+
+    func restoredDraft(for task: TodoTask) -> TaskDetailDraft? {
+        guard let entry = entries[task.id] else { return nil }
+        // Keep the user's changed fields while adopting updates made elsewhere
+        // since this editor was unloaded. The restored view starts at this baseline.
+        let current = TaskDetailDraft(task: task)
+        if entry.draft.title == entry.baseline.title { entry.draft.title = current.title }
+        if entry.draft.details == entry.baseline.details { entry.draft.details = current.details }
+        if entry.draft.optionalDate == entry.baseline.optionalDate {
+            entry.draft.hasDate = current.hasDate
+            entry.draft.date = current.date
+        }
+        entry.baseline = current
+        return entry.draft
+    }
+
+    func discard(_ taskID: String) { entries.removeValue(forKey: taskID) }
+
+    func savePendingDrafts() -> Bool {
+        var succeeded = true
+        for (taskID, entry) in Array(entries) {
+            guard let store = entry.store else {
+                // No owner is available to persist this draft; retain it and veto
+                // termination instead of treating an unattempted save as success.
+                succeeded = false
+                continue
+            }
+            guard let current = store.task(id: taskID) else {
+                discard(taskID)
+                continue
+            }
+            let validTitle = !entry.draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let title = validTitle && entry.draft.title != entry.baseline.title ? entry.draft.title : current.title
+            let details = entry.draft.details != entry.baseline.details ? entry.draft.details : current.details
+            let plannedDate = entry.draft.optionalDate != entry.baseline.optionalDate
+                ? entry.draft.optionalDate : current.plannedDate
+            let needsWrite = title != current.title || details != current.details || plannedDate != current.plannedDate
+            if needsWrite && !store.updateTask(id: taskID, title: title, details: details, plannedDate: plannedDate) {
+                succeeded = false
+                continue
+            }
+            // Empty in-progress titles cannot replace a valid task title. Any
+            // valid description/date edits are now saved, so they do not block quit.
+            discard(taskID)
+        }
+        return succeeded
     }
 }

@@ -6,6 +6,7 @@ import Combine
 struct QuickCaptureView: View {
     @EnvironmentObject private var tasks: TaskStore
     @EnvironmentObject private var presentation: MenuTaskPresentation
+    @EnvironmentObject private var loginItems: LoginItemController
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var page: MenuPanelPage = .tasks
     @State private var scope: MenuTaskScope = .thisWeek
@@ -329,6 +330,17 @@ struct QuickCaptureView: View {
 
             Menu {
                 Button("打开工作台") { presentation.openWorkbench() }
+                Toggle("登录时启动", isOn: Binding(
+                    get: { loginItems.enabled }, set: { loginItems.setEnabled($0) }
+                ))
+                if loginItems.requiresApproval {
+                    Button("前往系统设置允许启动") { loginItems.openSystemSettings() }
+                    Button("取消登录启动申请") { loginItems.setEnabled(false) }
+                }
+                if let error = loginItems.errorMessage {
+                    Text(error)
+                }
+                Divider()
                 Menu("快捷键") {
                     Text("Tab：编辑所选任务的描述")
                     Text("Enter：为顶层任务添加子任务")

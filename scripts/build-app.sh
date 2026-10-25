@@ -38,6 +38,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSInputMonitoringUsageDescription</key><string>Toccata 需要监控键盘输入，以统计键盘活跃度、每个按键的使用次数和应用使用时长。键码和活动记录仅保存在本机。</string>
 <key>NSHighResolutionCapable</key><true/>
+<key>NSSupportsAutomaticTermination</key><false/>
+<key>NSSupportsSuddenTermination</key><false/>
 </dict></plist>
 PLIST
 codesign --force --sign "$SIGN_IDENTITY" --identifier com.toccata.studio --requirements "$SIGN_REQUIREMENTS" "$APP/Contents/MacOS/toccata-core"

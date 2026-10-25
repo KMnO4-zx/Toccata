@@ -42,7 +42,7 @@ private struct FloatingTaskEditorContent: View {
     init(task: TodoTask, focusRequest: MenuEditorFocusRequest?) {
         self.task = task
         self.focusRequest = focusRequest
-        _draft = State(initialValue: FloatingEditorDrafts.shared.values[task.id] ?? FloatingEditorDraft(task: task))
+        _draft = State(initialValue: FloatingEditorDrafts.shared.restoredDraft(for: task) ?? FloatingEditorDraft(task: task))
         _baseline = State(initialValue: FloatingEditorDraft(task: task))
     }
 
@@ -89,8 +89,8 @@ private struct FloatingTaskEditorContent: View {
             if field != nil { descriptionFocused = false }
         }
         .onChange(of: draft) { value in
-            if hasChanges { FloatingEditorDrafts.shared.values[task.id] = value }
-            else { FloatingEditorDrafts.shared.values.removeValue(forKey: task.id) }
+            if hasChanges { FloatingEditorDrafts.shared.remember(taskID: task.id, draft: value, baseline: baseline, store: store) }
+            else { FloatingEditorDrafts.shared.discard(task.id) }
         }
         .onChange(of: task) { latest in synchronizeUneditedFields(from: latest) }
         .task(id: draft) {
@@ -101,6 +101,10 @@ private struct FloatingTaskEditorContent: View {
             } catch { /* The following edit owns the next save. */ }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willResignActiveNotification)) { _ in saveDraft() }
+        .onReceive(NotificationCenter.default.publisher(for: .toccataSavePendingEdits)) { notification in
+            saveDraft()
+            if saveFailed { (notification.object as? PendingEditSaveRequest)?.failed = true }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in saveDraft() }
         .onDisappear { saveDraft() }
         .onExitCommand(perform: closeEditor)
@@ -442,25 +446,33 @@ private struct FloatingTaskEditorContent: View {
 
     private func saveDraft() {
         guard let current = store.task(id: task.id) else {
-            FloatingEditorDrafts.shared.values.removeValue(forKey: task.id)
+            FloatingEditorDrafts.shared.discard(task.id)
+            saveFailed = false
             return
         }
-        guard hasChanges else { return }
+        guard hasChanges else {
+            FloatingEditorDrafts.shared.discard(task.id)
+            saveFailed = false
+            return
+        }
         let editedTitle = draft.title != baseline.title && validTitle
         let title = editedTitle ? draft.title : current.title
         let details = draft.details != baseline.details ? draft.details : current.details
         let plannedDate = draft.plannedDate != baseline.plannedDate ? draft.plannedDate : current.plannedDate
         // Empty in-progress titles must not block a valid description or date save.
-        if title == current.title && details == current.details && plannedDate == current.plannedDate { return }
+        if title == current.title && details == current.details && plannedDate == current.plannedDate {
+            saveFailed = false
+            return
+        }
         let saved = store.updateTask(id: task.id, title: title, details: details, plannedDate: plannedDate)
         saveFailed = !saved
         if saved, let updated = store.task(id: task.id) {
             if editedTitle { draft.title = updated.title }
             baseline = FloatingEditorDraft(task: updated)
-            if hasChanges { FloatingEditorDrafts.shared.values[task.id] = draft }
-            else { FloatingEditorDrafts.shared.values.removeValue(forKey: task.id) }
+            if hasChanges { FloatingEditorDrafts.shared.remember(taskID: task.id, draft: draft, baseline: baseline, store: store) }
+            else { FloatingEditorDrafts.shared.discard(task.id) }
         } else {
-            FloatingEditorDrafts.shared.values[task.id] = draft
+            FloatingEditorDrafts.shared.remember(taskID: task.id, draft: draft, baseline: baseline, store: store)
         }
     }
 }
@@ -478,7 +490,64 @@ private struct FloatingEditorDraft: Equatable {
 }
 
 @MainActor
-private final class FloatingEditorDrafts {
+private final class FloatingEditorDrafts: PendingDraftSaving {
     static let shared = FloatingEditorDrafts()
-    var values: [String: FloatingEditorDraft] = [:]
+
+    private final class Entry {
+        var draft: FloatingEditorDraft
+        var baseline: FloatingEditorDraft
+        weak var store: TaskStore?
+
+        init(draft: FloatingEditorDraft, baseline: FloatingEditorDraft, store: TaskStore) {
+            self.draft = draft
+            self.baseline = baseline
+            self.store = store
+        }
+    }
+
+    private var entries: [String: Entry] = [:]
+
+    private init() { PendingEdits.shared.registerDraftBuffer(self) }
+
+    func remember(taskID: String, draft: FloatingEditorDraft, baseline: FloatingEditorDraft, store: TaskStore) {
+        entries[taskID] = Entry(draft: draft, baseline: baseline, store: store)
+    }
+
+    func restoredDraft(for task: TodoTask) -> FloatingEditorDraft? {
+        guard let entry = entries[task.id] else { return nil }
+        let current = FloatingEditorDraft(task: task)
+        if entry.draft.title == entry.baseline.title { entry.draft.title = current.title }
+        if entry.draft.details == entry.baseline.details { entry.draft.details = current.details }
+        if entry.draft.plannedDate == entry.baseline.plannedDate { entry.draft.plannedDate = current.plannedDate }
+        entry.baseline = current
+        return entry.draft
+    }
+
+    func discard(_ taskID: String) { entries.removeValue(forKey: taskID) }
+
+    func savePendingDrafts() -> Bool {
+        var succeeded = true
+        for (taskID, entry) in Array(entries) {
+            guard let store = entry.store else {
+                succeeded = false
+                continue
+            }
+            guard let current = store.task(id: taskID) else {
+                discard(taskID)
+                continue
+            }
+            let validTitle = !entry.draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let title = validTitle && entry.draft.title != entry.baseline.title ? entry.draft.title : current.title
+            let details = entry.draft.details != entry.baseline.details ? entry.draft.details : current.details
+            let plannedDate = entry.draft.plannedDate != entry.baseline.plannedDate
+                ? entry.draft.plannedDate : current.plannedDate
+            let needsWrite = title != current.title || details != current.details || plannedDate != current.plannedDate
+            if needsWrite && !store.updateTask(id: taskID, title: title, details: details, plannedDate: plannedDate) {
+                succeeded = false
+                continue
+            }
+            discard(taskID)
+        }
+        return succeeded
+    }
 }

@@ -9,7 +9,11 @@ final class CoreProcessController: ObservableObject {
     private let dataDirectory: URL
     private let socketPath: String
     private let socketIsReachable: (String) -> Bool
+    private let preflightAccess: () -> Bool
+    private let requestAccess: () -> Bool
+    private let permitsPermissionPrompt: Bool
     private var process: Process?
+    private var stopRequests = 0
 
     convenience init() {
         self.init(
@@ -21,16 +25,29 @@ final class CoreProcessController: ObservableObject {
     }
 
     init(helperURL: URL?, dataDirectory: URL, socketPath: String,
-         socketIsReachable: @escaping (String) -> Bool) {
+         socketIsReachable: @escaping (String) -> Bool,
+         preflightAccess: @escaping () -> Bool = { CGPreflightListenEventAccess() },
+         requestAccess: @escaping () -> Bool = { CGRequestListenEventAccess() },
+         permitsPermissionPrompt: Bool = Bundle.main.bundleURL.pathExtension == "app") {
         self.helperURL = helperURL
         self.dataDirectory = dataDirectory
         self.socketPath = socketPath
         self.socketIsReachable = socketIsReachable
+        self.preflightAccess = preflightAccess
+        self.requestAccess = requestAccess
+        self.permitsPermissionPrompt = permitsPermissionPrompt
     }
 
     @discardableResult
-    func start() -> Bool {
-        let allowed = CGPreflightListenEventAccess()
+    func start(requestPermission: Bool = true) -> Bool {
+        // Health checks are cheap and silent while a helper is already available.
+        guard stopRequests == 0 else { return false }
+        if let process, process.isRunning { return false }
+        process = nil
+        guard !socketIsReachable(socketPath) else { return false }
+        guard let helperURL, FileManager.default.isExecutableFile(atPath: helperURL.path) else { return false }
+
+        let allowed = preflightAccess()
         NSLog("Input monitoring preflight (studio): \(allowed)")
         try? FileManager.default.createDirectory(at: dataDirectory, withIntermediateDirectories: true)
         try? "studio preflight: \(allowed)\n".write(
@@ -38,18 +55,15 @@ final class CoreProcessController: ObservableObject {
             atomically: true,
             encoding: .utf8
         )
-        if !allowed && Bundle.main.bundleURL.pathExtension == "app" {
-            NSLog("Input monitoring request (studio): \(CGRequestListenEventAccess())")
+        if requestPermission && !allowed && permitsPermissionPrompt {
+            NSLog("Input monitoring request (studio): \(requestAccess())")
         }
-        if let process, process.isRunning { return false }
-        process = nil
-        guard !socketIsReachable(socketPath) else { return false }
-        guard let helperURL, FileManager.default.isExecutableFile(atPath: helperURL.path) else { return false }
 
         let process = Process()
         process.executableURL = helperURL
         var environment = ProcessInfo.processInfo.environment
         environment["TOCCATA_DATA_DIR"] = dataDirectory.path
+        environment["TOCCATA_REQUEST_INPUT_PERMISSION"] = requestPermission ? "1" : "0"
         process.environment = environment
         var log: FileHandle?
         do {
@@ -70,6 +84,50 @@ final class CoreProcessController: ObservableObject {
             NSLog("Unable to launch toccata-core: \(error.localizedDescription)")
             return false
         }
+    }
+
+    /// Call only after a user opens the workbench. A helper started silently at
+    /// login may already be running, so this cannot depend on start()'s guards.
+    @discardableResult
+    func requestInputMonitoringPermission() -> Bool {
+        if preflightAccess() { return true }
+        guard permitsPermissionPrompt else { return false }
+        let allowed = requestAccess()
+        NSLog("Input monitoring request (studio): \(allowed)")
+        return allowed
+    }
+
+    /// Only this controller's child receives SIGTERM. A reused external service is
+    /// never signalled. Returning false keeps ownership so quitting can be retried
+    /// without leaving an untracked helper or starting a second one.
+    @discardableResult
+    func stop(timeout: TimeInterval = 6) async -> Bool {
+        guard let ownedProcess = process else { return true }
+        guard ownedProcess.isRunning else {
+            process = nil
+            return true
+        }
+
+        stopRequests += 1
+        defer { stopRequests -= 1 }
+        // Concurrent quit requests share the same shutdown signal, but each may
+        // wait with its own timeout. start() stays disabled until they all finish.
+        if stopRequests == 1 { ownedProcess.terminate() }
+        let duration = timeout.isFinite ? max(0, timeout) : 6
+        let deadline = ProcessInfo.processInfo.systemUptime + duration
+        while ownedProcess.isRunning {
+            let remaining = deadline - ProcessInfo.processInfo.systemUptime
+            guard remaining > 0 else { return false }
+            do {
+                let nanoseconds = UInt64(max(1, min(0.05, remaining) * 1_000_000_000))
+                try await Task.sleep(nanoseconds: nanoseconds)
+            } catch {
+                // Cancellation must not turn this wait into a main-thread spin.
+                if ownedProcess.isRunning { return false }
+            }
+        }
+        if process === ownedProcess { process = nil }
+        return true
     }
 
     private static func probeSocket(_ path: String) -> Bool {
