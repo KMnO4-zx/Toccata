@@ -48,6 +48,7 @@ private enum WorkspaceSection: String, CaseIterable, Identifiable {
 struct ContentView: View {
     @EnvironmentObject private var tasks: TaskStore
     @EnvironmentObject private var refresher: LiveRefresher
+    @EnvironmentObject private var appearance: AppearanceSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection: WorkspaceSection? = .tasks
     @State private var taskPeriod: TaskReviewPeriod = .thisWeek
@@ -96,6 +97,8 @@ struct ContentView: View {
                 .listStyle(.sidebar)
 
                 VStack(alignment: .leading, spacing: 7) {
+                    appearanceMenu
+                        .padding(.bottom, 7)
                     CaptureStatusView()
                         .font(.caption)
                     Text("任务随时可用 · 数据保存在本机")
@@ -174,9 +177,42 @@ struct ContentView: View {
     private var activityPage: some View {
         switch section {
         case .activity: ActivityView()
-        case .activityCalendar, .ranking: RankingView().navigationTitle("应用与趋势")
+        case .activityCalendar, .ranking: RankingView()
         case .tasks, .inbox, .taskCalendar, .review: EmptyView()
         }
+    }
+
+    private var appearanceMenu: some View {
+        Menu {
+            Picker("外观", selection: $appearance.mode) {
+                ForEach(AppearanceMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "circle.lefthalf.filled")
+                    .foregroundStyle(.secondary)
+                Text(appearance.mode.title)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.system(size: 12))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityLabel("外观模式")
+        .accessibilityValue(appearance.mode.title)
+        .help("切换月之亮面、月之暗面或跟随系统")
     }
 
     private func openRequestedSection() {

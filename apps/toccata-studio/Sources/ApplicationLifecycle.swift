@@ -58,10 +58,12 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
             let content = ContentView()
                 .environmentObject(refresher)
                 .environmentObject(taskStore)
+                .environmentObject(appearance)
                 .frame(minWidth: 1040, minHeight: 650)
             let window = NSWindow(contentViewController: NSHostingController(rootView: content))
             window.title = "Toccata"
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+            window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.toolbarStyle = .unified
             window.setContentSize(NSSize(width: 1240, height: 780))
