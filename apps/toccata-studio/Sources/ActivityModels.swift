@@ -78,6 +78,7 @@ struct ActivityBucket: Identifiable {
     let endMs: Int64
     let activeMs: Int64
     let keyCount: Int
+    var fnMs: Int64 = 0
     var id: Int64 { startMs }
     var fraction: Double {
         guard endMs > startMs else { return 0 }
@@ -211,7 +212,8 @@ enum ActivityCalculator {
                 buckets.append(ActivityBucket(
                     startMs: bucket.startMs, endMs: bucket.endMs,
                     activeMs: dayActive.compactMap { $0.clipped(to: bucket) }.reduce(0) { $0 + $1.durationMs },
-                    keyCount: bucketKeys
+                    keyCount: bucketKeys,
+                    fnMs: dayVoice.compactMap { $0.clipped(to: bucket) }.reduce(0) { $0 + $1.durationMs }
                 ))
                 bucketStart = bucketEnd
             }

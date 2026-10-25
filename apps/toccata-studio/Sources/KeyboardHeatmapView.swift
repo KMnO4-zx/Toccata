@@ -54,7 +54,7 @@ struct KeyboardHeatmapView: View {
                 }
 
                 if let item = scaled.keys.first(where: { $0.id == hoveredKeyID }) {
-                    let width = min(180, scaled.size.width)
+                    let width = min(item.key.code == 63 ? 240 : 180, scaled.size.width)
                     let height: CGFloat = 66
                     let halfWidth = width / 2
                     let halfHeight = height / 2
@@ -94,8 +94,7 @@ struct KeyboardHeatmapView: View {
 
     private func activityDescription(for key: KeyboardLayout.Key) -> String {
         if key.code == 63 {
-            let seconds = (Double(max(0, fnMs)) / 1000).formatted(.number.precision(.fractionLength(0...1)))
-            return "今天按住 \(seconds) 秒"
+            return "今天按住 \(Formatters.duration(ms: fnMs))"
         }
         let count = max(0, counts[key.code ?? Int.min] ?? 0)
         return "今天按下 \(count.formatted()) 次"

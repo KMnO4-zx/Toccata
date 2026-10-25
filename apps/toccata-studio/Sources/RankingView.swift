@@ -18,8 +18,8 @@ struct RankingView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                appSection
                 calendarSection
+                appSection
             }
             .padding(28)
             .frame(maxWidth: 1120, alignment: .leading)
@@ -63,7 +63,7 @@ struct RankingView: View {
 
             if showsCalendar {
                 CalendarHeatmapView(embedded: true)
-                    .padding(.top, 22)
+                    .padding(.top, 18)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -100,7 +100,7 @@ struct RankingView: View {
                     ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
                         appRow(index: index, app: app, maxUsage: maxUsage)
                         if index < apps.count - 1 {
-                            Divider().opacity(0.45).padding(.leading, 46)
+                            Divider().opacity(0.45).padding(.leading, 40)
                         }
                     }
                 }
@@ -121,7 +121,7 @@ struct RankingView: View {
 
     private func appRow(index: Int, app: AppRank, maxUsage: Int64) -> some View {
         let identity = identities[app.app]
-        return HStack(spacing: 14) {
+        return HStack(spacing: 12) {
             Group {
                 if let icon = identity?.icon {
                     Image(nsImage: icon).resizable().interpolation(.high)
@@ -133,10 +133,10 @@ struct RankingView: View {
                 }
             }
             .scaledToFit()
-            .frame(width: 32, height: 32)
+            .frame(width: 28, height: 28)
             .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text(identity?.name ?? app.shortName)
                         .font(.system(.body, design: .default).weight(.medium))
@@ -146,6 +146,7 @@ struct RankingView: View {
                     Text(Formatters.duration(ms: app.usageMs))
                         .font(.system(.subheadline, design: .rounded).weight(.semibold))
                         .monospacedDigit()
+                        .fixedSize()
                     Text("\(app.keyCount.formatted()) 次按键")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -160,11 +161,11 @@ struct RankingView: View {
                             .frame(width: app.usageMs > 0 ? max(4, geo.size.width * CGFloat(app.usageMs) / CGFloat(maxUsage)) : 0)
                     }
                 }
-                .frame(height: 5)
+                .frame(height: 4)
                 .accessibilityHidden(true)
             }
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
     }
 

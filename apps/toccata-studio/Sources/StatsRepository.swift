@@ -167,14 +167,37 @@ final class StatsRepository {
 }
 
 enum Formatters {
-    /// 时长格式化为 "xh ym"；不足 1 小时只显示分钟，不足 1 分钟显示秒。
+    /// 一千次起使用 K，保留至多两位小数；较小的计数保留原数字。
+    static func keyCount(_ count: Int) -> String {
+        let count = max(0, count)
+        guard count >= 1_000 else { return String(count) }
+        // One hundredth of K is ten presses. Integer rounding avoids overflow
+        // and floating-point artifacts, including at very large counts.
+        let hundredths = count / 10 + (count % 10 >= 5 ? 1 : 0)
+        let whole = hundredths / 100
+        let fraction = hundredths % 100
+        if fraction == 0 { return "\(whole)K" }
+        if fraction % 10 == 0 { return "\(whole).\(fraction / 10)K" }
+        let decimal = fraction < 10 ? "0\(fraction)" : String(fraction)
+        return "\(whole).\(decimal)K"
+    }
+
+    /// 不足 10 分钟显示秒；之后保留分、秒，满一小时再显示小时。
     static func duration(ms: Int64) -> String {
-        let totalSeconds = max(0, ms / 1000)
+        let milliseconds = max(0, ms)
+        if milliseconds < 600_000 {
+            // Truncate to tenths so 599.99 seconds cannot round across the threshold.
+            let tenths = milliseconds / 100
+            let seconds = tenths / 10
+            let remainder = tenths % 10
+            return remainder == 0 ? "\(seconds)秒" : "\(seconds).\(remainder)秒"
+        }
+
+        let totalSeconds = milliseconds / 1000
         let h = totalSeconds / 3600
         let m = (totalSeconds % 3600) / 60
         let s = totalSeconds % 60
-        if h > 0 { return "\(h)h \(m)m" }
-        if m > 0 { return "\(m)m" }
-        return "\(s)s"
+        if h > 0 { return "\(h)小时\(m)分\(s)秒" }
+        return "\(m)分\(s)秒"
     }
 }

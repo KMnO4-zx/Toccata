@@ -63,6 +63,49 @@ final class ActivityTests: XCTestCase {
         XCTAssertEqual(result.fnMs, 120_000)
         XCTAssertEqual(result.activeMs, 125_000)
         XCTAssertEqual(result.keyCount, 0)
+        XCTAssertEqual(result.days[0].buckets[0].fnMs, 120_000)
+        XCTAssertEqual(result.days[0].buckets.reduce(0) { $0 + $1.fnMs }, result.fnMs)
+    }
+
+    func testFnTimeIsSplitAcrossBucketsWithoutCountingBoundaryPressTwice() {
+        let down = event(840_000, key: 63, kind: 0)
+        let up = event(1_980_000, key: 63, kind: 1, hold: 1_140_000)
+        let result = snapshot([
+            down, event(900_000, key: 12, kind: 0),
+            event(900_100, key: 12, kind: 1, hold: 100), up
+        ], nowOffset: 2_100_000, liveEvents: [down, up], connected: true)
+
+        let buckets = result.days[0].buckets
+        XCTAssertEqual(Array(buckets.prefix(4).map(\.fnMs)), [60_000, 900_000, 180_000, 0])
+        XCTAssertEqual(Array(buckets.prefix(3).map(\.keyCount)), [1, 1, 0])
+        XCTAssertEqual(buckets.reduce(0) { $0 + $1.fnMs }, result.fnMs)
+        XCTAssertTrue(buckets.allSatisfy { $0.fnMs <= $0.activeMs && $0.fnMs <= $0.endMs - $0.startMs })
+    }
+
+    func testFnBucketTimeAcrossMidnightReconcilesWithBothDays() {
+        let midnight = date(2026, 10, 20)
+        let events = [
+            event(-60_000, key: 63, kind: 0, day: midnight),
+            event(120_000, key: 63, kind: 1, hold: 180_000, day: midnight)
+        ]
+        let result = ActivityCalculator.snapshot(events: events, range: .thisWeek,
+            now: midnight.addingTimeInterval(180), calendar: calendar)
+
+        XCTAssertEqual(result.days.count, 2)
+        XCTAssertEqual(result.days[0].buckets.last?.fnMs, 60_000)
+        XCTAssertEqual(result.days[1].buckets.first?.fnMs, 120_000)
+        for day in result.days {
+            XCTAssertEqual(day.buckets.reduce(0) { $0 + $1.fnMs }, day.fnMs)
+        }
+        XCTAssertEqual(result.days.flatMap(\.buckets).reduce(0) { $0 + $1.fnMs }, 180_000)
+    }
+
+    func testLiveFnBucketEndsAtNowAndLeavesFutureBucketsEmpty() {
+        let result = snapshot([], nowOffset: 920_000,
+            liveEvents: [event(880_000, key: 63, kind: 0)], connected: true)
+        let buckets = result.days[0].buckets
+        XCTAssertEqual(Array(buckets.prefix(3).map(\.fnMs)), [20_000, 20_000, 0])
+        XCTAssertEqual(buckets.reduce(0) { $0 + $1.fnMs }, 40_000)
     }
 
     func testLiveFnAccumulatesWithoutAnUpOrPersistedSession() {
@@ -162,6 +205,23 @@ final class ActivityTests: XCTestCase {
         XCTAssertEqual(result.days.count, 1)
         XCTAssertEqual(result.days[0].buckets.count, 92)
         XCTAssertEqual(result.days[0].buckets.reduce(0) { $0 + ($1.endMs - $1.startMs) }, 23 * 60 * 60 * 1000)
+    }
+
+    func testFnBucketsUseElapsedTimeAcrossDaylightSavingJump() {
+        var local = calendar
+        local.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        let start = local.date(from: DateComponents(year: 2026, month: 3, day: 8, hour: 1, minute: 50))!
+        let end = local.date(from: DateComponents(year: 2026, month: 3, day: 8, hour: 3, minute: 10))!
+        let startMs = ActivityCalculator.milliseconds(start)
+        let endMs = ActivityCalculator.milliseconds(end)
+        let result = ActivityCalculator.snapshot(events: [
+            ActivityKeyEvent(timestampMs: startMs, keycode: 63, kind: 0),
+            ActivityKeyEvent(timestampMs: endMs, keycode: 63, kind: 1, holdMs: endMs - startMs)
+        ], range: .today, now: end.addingTimeInterval(60), calendar: local)
+
+        XCTAssertEqual(result.fnMs, 1_200_000)
+        XCTAssertEqual(result.days[0].buckets.filter { $0.fnMs > 0 }.map(\.fnMs), [600_000, 600_000])
+        XCTAssertEqual(result.days[0].buckets.reduce(0) { $0 + $1.fnMs }, result.fnMs)
     }
 
     func testRepositoryReadsEventsWithoutAnyAppSessionsTable() throws {

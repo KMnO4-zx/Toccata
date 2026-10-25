@@ -6,7 +6,7 @@ struct CalendarHeatmapView: View {
 
     private let repo = StatsRepository()
     private let weekCount = 26
-    private let cellSpacing: CGFloat = 4
+    private let cellSpacing: CGFloat = 3
     private let weekdayWidth: CGFloat = 28
 
     @State private var counts: [String: Int] = [:]
@@ -16,6 +16,7 @@ struct CalendarHeatmapView: View {
     @State private var totalCount = 0
     @State private var isReloading = false
     @State private var refreshPending = false
+    @State private var hoveredDate: Date?
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -28,7 +29,7 @@ struct CalendarHeatmapView: View {
     var embedded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             if !embedded {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("活跃日历").font(.headline)
@@ -43,7 +44,7 @@ struct CalendarHeatmapView: View {
                     .frame(height: 16)
                 calendarGrid
             }
-            .frame(maxWidth: 804)
+            .frame(maxWidth: 680)
             .frame(maxWidth: .infinity)
 
             footer
@@ -51,6 +52,30 @@ struct CalendarHeatmapView: View {
         .padding(embedded ? 0 : 24)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(embedded ? AnyView(EmptyView()) : AnyView(TaskScrollerStyle()))
+        .overlayPreferenceValue(CalendarDayBoundsKey.self) { bounds in
+            GeometryReader { proxy in
+                if let hoveredDate, let anchor = bounds[hoveredDate] {
+                    let cell = proxy[anchor]
+                    let width = min(200, max(0, proxy.size.width - 16))
+                    let height: CGFloat = 74
+                    let x = min(max(cell.midX, width / 2 + 8), proxy.size.width - width / 2 - 8)
+                    let above = cell.minY - height / 2 - 9
+                    let below = cell.maxY + height / 2 + 9
+                    let preferredY = above >= height / 2 + 8 ? above : below
+                    let y = min(max(preferredY, height / 2 + 8), proxy.size.height - height / 2 - 8)
+                    dayTooltip(for: hoveredDate)
+                        .frame(width: width, height: height)
+                        .position(x: x, y: y)
+                        .accessibilityHidden(true)
+                }
+                Color.clear
+                    .onValueChange(of: proxy.frame(in: .global)) { hoveredDate = nil }
+            }
+            .allowsHitTesting(false)
+        }
+        .onHover { inside in if !inside { hoveredDate = nil } }
+        .onValueChange(of: today) { hoveredDate = nil }
+        .onDisappear { hoveredDate = nil }
         .onAppear(perform: reload)
         .onReceive(refresher.$generation.dropFirst()) { _ in reload() }
     }
@@ -187,9 +212,50 @@ struct CalendarHeatmapView: View {
                             .padding(-2)
                     }
                 }
-                .help("\(key)\(isToday ? " · 今天" : "")：\(count.formatted()) 次按键")
+                .overlay {
+                    if hoveredDate == date {
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .strokeBorder(Color.indigo, lineWidth: 1.5)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onContinuousHover { phase in
+                    switch phase {
+                    case .active:
+                        hoveredDate = date
+                    case .ended:
+                        if hoveredDate == date { hoveredDate = nil }
+                    }
+                }
+                .anchorPreference(key: CalendarDayBoundsKey.self, value: .bounds) { [date: $0] }
                 .accessibilityLabel("\(key)\(isToday ? "，今天" : "")，\(count) 次按键")
         }
+    }
+
+    private func dayTooltip(for date: Date) -> some View {
+        let key = Self.dateFormatter.string(from: date)
+        let count = max(0, counts[key] ?? 0)
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text(key)
+                if date == today {
+                    Spacer(minLength: 8)
+                    Text("今天")
+                }
+            }
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.secondary)
+            Text("\(Formatters.keyCount(count)) 次按键")
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .minimumScaleFactor(0.7)
+        }
+        .monospacedDigit()
+        .lineLimit(1)
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.14), radius: 8, x: 0, y: 3)
     }
 
     private func heatColor(intensity: Double) -> Color {
@@ -227,5 +293,13 @@ struct CalendarHeatmapView: View {
                 reload()
             }
         }
+    }
+}
+
+private struct CalendarDayBoundsKey: PreferenceKey {
+    static var defaultValue: [Date: Anchor<CGRect>] = [:]
+
+    static func reduce(value: inout [Date: Anchor<CGRect>], nextValue: () -> [Date: Anchor<CGRect>]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }
