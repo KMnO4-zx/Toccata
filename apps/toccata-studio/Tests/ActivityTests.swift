@@ -86,6 +86,36 @@ final class ActivityTests: XCTestCase {
         XCTAssertEqual(result.activeMs, 15_000)
     }
 
+    func testPerKeyCountsMergeLiveAndPersistedDownsWithinToday() {
+        let sharedDown = event(10_000, key: 12, kind: 0)
+        let result = snapshot([
+            event(-1, key: 13, kind: 0),
+            event(0, key: 0, kind: 0),
+            sharedDown,
+            event(10_100, key: 12, kind: 1, hold: 100),
+            event(180_001, key: 14, kind: 0)
+        ], liveEvents: [
+            sharedDown,
+            event(10_100, key: 12, kind: 1),
+            event(20_000, key: 12, kind: 0),
+            event(30_000, key: 63, kind: 0),
+            event(180_001, key: 15, kind: 0)
+        ], connected: true)
+
+        XCTAssertEqual(result.keyCounts, [0: 1, 12: 2, 63: 1])
+        XCTAssertEqual(result.keyCount, 4)
+        XCTAssertEqual(result.keyCounts.values.reduce(0, +), result.keyCount)
+    }
+
+    func testPerKeyCountsIgnoreDisconnectedLiveEvents() {
+        let result = snapshot([event(10_000, key: 12, kind: 0)],
+            liveEvents: [event(20_000, key: 13, kind: 0)], connected: false)
+
+        XCTAssertEqual(result.keyCounts, [12: 1])
+        XCTAssertEqual(result.keyCounts.values.reduce(0, +), result.keyCount)
+        XCTAssertTrue(ActivitySnapshot().keyCounts.isEmpty)
+    }
+
     func testIncompleteLiveHoldCanBeClosedBeforePersistence() {
         let down = event(0, key: 63, kind: 0)
         let result = snapshot([], liveEvents: [down, event(120_000, key: 63, kind: 1)], connected: true)

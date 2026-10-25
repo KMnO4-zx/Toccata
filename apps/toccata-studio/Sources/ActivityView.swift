@@ -7,6 +7,8 @@ struct ActivityView: View {
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @State private var range: ActivityRange = .today
     @State private var snapshot = ActivitySnapshot()
+    @State private var todaySnapshot = ActivitySnapshot()
+    @State private var loadedDay = Calendar.current.startOfDay(for: Date())
     @State private var isReloading = false
     @State private var refreshPending = false
 
@@ -15,6 +17,7 @@ struct ActivityView: View {
             VStack(alignment: .leading, spacing: 24) {
                 header
                 summaryCards
+                keyboardSection
                 timeline
                 calculationNote
             }
@@ -27,8 +30,9 @@ struct ActivityView: View {
         .onAppear(perform: reload)
         .onValueChange(of: range) { reload() }
         .onReceive(refresher.$generation.dropFirst()) { _ in reload() }
-        .onReceive(clock) { _ in
-            if refresher.isConnected && !ActivityCalculator.openLiveKeys(refresher.liveEvents).isEmpty {
+        .onReceive(clock) { now in
+            let keyIsHeld = refresher.isConnected && !ActivityCalculator.openLiveKeys(refresher.liveEvents).isEmpty
+            if keyIsHeld || !Calendar.current.isDate(now, inSameDayAs: loadedDay) {
                 reload()
             }
         }
@@ -74,6 +78,36 @@ struct ActivityView: View {
                 .lineLimit(2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var keyboardSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("今日键盘热力图").font(.headline)
+                    Text("悬停查看今日次数 · Fn 显示按住秒数")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("\(todaySnapshot.keyCount.formatted()) 次")
+                    .font(.system(.subheadline, design: .rounded).weight(.medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            KeyboardHeatmapView(counts: todaySnapshot.keyCounts, fnMs: todaySnapshot.fnMs)
+                .frame(maxWidth: 700)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 4)
+            if todaySnapshot.keyCounts.isEmpty {
+                Text("今天还没有按键记录，开始使用键盘后，这里会显示每个按键的热度。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(22)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color(nsColor: .controlBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.055)))
     }
 
     private var timeline: some View {
@@ -212,10 +246,16 @@ struct ActivityView: View {
         let now = Date()
         let repository = repository
         Task {
-            let result = await Task.detached(priority: .utility) {
-                repository.snapshot(range: selectedRange, now: now, liveEvents: events, liveConnected: connected)
+            let (result, today) = await Task.detached(priority: .utility) {
+                let selected = repository.snapshot(range: selectedRange, now: now, liveEvents: events, liveConnected: connected)
+                let today = selectedRange == .today ? selected : repository.snapshot(
+                    range: .today, now: now, liveEvents: events, liveConnected: connected
+                )
+                return (selected, today)
             }.value
             if range == selectedRange { snapshot = result }
+            todaySnapshot = today
+            loadedDay = Calendar.current.startOfDay(for: now)
             isReloading = false
             if refreshPending {
                 refreshPending = false

@@ -39,7 +39,7 @@ private enum WorkspaceSection: String, CaseIterable, Identifiable {
     case review = "完成回顾"
     case activity = "键盘活跃"
     case activityCalendar = "活跃日历"
-    case ranking = "按键与应用"
+    case ranking = "应用与趋势"
 
     var id: String { rawValue }
     var symbol: String {
@@ -117,7 +117,9 @@ struct ContentView: View {
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 205, max: 240)
         } detail: {
-            Group {
+            // Keep a concrete host for both activity pages while their identities
+            // change, so NavigationSplitView can render the outgoing transition.
+            ZStack(alignment: .topLeading) {
                 if showsTaskWorkspace {
                     WorkspaceSplitView {
                         workspacePage
@@ -135,6 +137,8 @@ struct ContentView: View {
                         .transition(WorkspaceMotion.pageTransition)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
             .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: section)
         }
         .font(.system(size: 13))
@@ -183,13 +187,17 @@ struct ContentView: View {
     private var activityPage: some View {
         switch section {
         case .activity: ActivityView()
-        case .activityCalendar, .ranking: RankingView().navigationTitle("键盘与应用")
+        case .activityCalendar, .ranking: RankingView().navigationTitle("应用与趋势")
         case .thisWeek, .lastSevenDays, .inbox, .taskCalendar, .review: EmptyView()
         }
     }
 
     private func openRequestedSection() {
-        guard let name = requestedSection, let destination = WorkspaceSection(rawValue: name) else { return }
+        guard let name = requestedSection else { return }
+        // Keep earlier navigation requests working after consolidating the pages.
+        let destination = ["按键与应用", "键盘与应用", "活跃日历"].contains(name)
+            ? WorkspaceSection.ranking : WorkspaceSection(rawValue: name)
+        guard let destination else { return }
         selection = destination
         requestedSection = nil
     }

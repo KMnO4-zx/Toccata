@@ -1,19 +1,21 @@
 import SwiftUI
 
-/// GitHub 风格日历热力图：最近 26 周，列=周、行=周一~周日，
-/// 颜色按当日总按键 log 归一化在主题 heatLow→heatHigh 间插值。
+/// 最近 26 周的逐日按键热度；所有日期与统计均按本地自然日对齐。
 struct CalendarHeatmapView: View {
-    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var refresher: LiveRefresher
 
     private let repo = StatsRepository()
     private let weekCount = 26
-    private let cellSize: CGFloat = 14
-    private let cellSpacing: CGFloat = 3
+    private let cellSpacing: CGFloat = 4
+    private let weekdayWidth: CGFloat = 28
 
     @State private var counts: [String: Int] = [:]
+    @State private var today = Calendar.current.startOfDay(for: Date())
     @State private var maxCount = 0
-    @State private var empty = false
+    @State private var activeDays = 0
+    @State private var totalCount = 0
+    @State private var isReloading = false
+    @State private var refreshPending = false
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -26,151 +28,204 @@ struct CalendarHeatmapView: View {
     var embedded = false
 
     var body: some View {
-        Group {
-            if empty {
-                if embedded {
-                    Text("还没有键盘活动")
-                        .font(.callout)
+        VStack(alignment: .leading, spacing: 20) {
+            if !embedded {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("活跃日历").font(.headline)
+                    Text("最近 26 周 · 每一格记录一天的输入")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .padding(.vertical, 8)
-                } else {
-                    EmptyStateView()
                 }
-            } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    if !embedded {
-                        header
-                            .padding(.horizontal, 24)
-                            .padding(.top, 20)
-                            .padding(.bottom, 12)
-                    }
-                    ScrollView(.horizontal) {
-                        HStack(alignment: .top, spacing: cellSpacing) {
-                            weekdayColumn
-                            ForEach(0..<weekCount, id: \.self) { week in
-                                weekColumn(week)
-                            }
-                            if embedded { legend.padding(.leading, 8) }
-                        }
-                        .padding(.horizontal, embedded ? 0 : 24)
-                        .padding(.bottom, embedded ? 0 : 24)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: embedded ? nil : .infinity, alignment: .topLeading)
             }
+
+            VStack(spacing: 9) {
+                monthLabels
+                    .frame(height: 16)
+                calendarGrid
+            }
+            .frame(maxWidth: 804)
+            .frame(maxWidth: .infinity)
+
+            footer
         }
+        .padding(embedded ? 0 : 24)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(embedded ? AnyView(EmptyView()) : AnyView(TaskScrollerStyle()))
         .onAppear(perform: reload)
         .onReceive(refresher.$generation.dropFirst()) { _ in reload() }
     }
 
-    private var header: some View {
-        HStack {
-            Text("最近 26 周")
-                .font(.headline)
-            Spacer()
+    private var calendarGrid: some View {
+        HStack(alignment: .top, spacing: cellSpacing) {
+            ForEach(0..<weekCount, id: \.self) { week in
+                VStack(spacing: cellSpacing) {
+                    ForEach(0..<7, id: \.self) { day in
+                        dayCell(date: date(week: week, day: day))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.leading, weekdayWidth)
+        .overlay(alignment: .leading) {
+            GeometryReader { proxy in
+                let cellHeight = (proxy.size.height - cellSpacing * 6) / 7
+                ForEach([0, 2, 4, 6], id: \.self) { day in
+                    Text(["一", "二", "三", "四", "五", "六", "日"][day])
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 18, height: cellHeight)
+                        .position(x: 9, y: cellHeight / 2 + CGFloat(day) * (cellHeight + cellSpacing))
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("最近 26 周的每日按键次数")
+    }
+
+    private var monthLabels: some View {
+        GeometryReader { proxy in
+            let columnWidth = (proxy.size.width - weekdayWidth - cellSpacing * CGFloat(weekCount - 1)) / CGFloat(weekCount)
+            ForEach(monthStarts, id: \.week) { month in
+                Text("\(month.month)月")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+                    .frame(width: 34, alignment: .leading)
+                    .offset(x: weekdayWidth + CGFloat(month.week) * (columnWidth + cellSpacing))
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// Labels need two columns of breathing room, including a clipped first month.
+    private var monthStarts: [(week: Int, month: Int)] {
+        let calendar = Calendar.current
+        var starts: [(week: Int, month: Int)] = []
+        for week in 0..<weekCount {
+            let month = calendar.component(.month, from: date(week: week, day: 0))
+            if week == 0 || month != calendar.component(.month, from: date(week: week - 1, day: 0)) {
+                starts.append((week, month))
+            }
+        }
+        if starts.count > 1, starts[1].week < 2 {
+            starts.removeFirst()
+        }
+        // A label at the final column would extend beyond the chart's trailing edge.
+        return starts.filter { $0.week < weekCount - 1 }
+    }
+
+    private var footer: some View {
+        HStack(alignment: .center, spacing: 16) {
+            if activeDays == 0 {
+                Text("还没有键盘活动，开始输入后会在这里留下记录。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                HStack(spacing: 14) {
+                    Text("\(activeDays) 天有输入")
+                    Text("共 \(totalCount.formatted()) 次按键")
+                        .foregroundStyle(.tertiary)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            }
+            Spacer(minLength: 8)
             legend
         }
     }
 
     private var legend: some View {
-        HStack(spacing: 3) {
-            Text("少")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            ForEach(0..<5, id: \.self) { i in
+        HStack(spacing: 4) {
+            Text("少").padding(.trailing, 2)
+            ForEach(0..<5, id: \.self) { level in
                 RoundedRectangle(cornerRadius: 3)
-                    .fill(palette.heatColor(t: Double(i) / 4))
-                    .frame(width: 12, height: 12)
+                    .fill(heatColor(intensity: Double(level) / 4))
+                    .frame(width: 11, height: 11)
             }
-            Text("多")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text("多").padding(.leading, 2)
         }
+        .font(.system(size: 10))
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("颜色越深，表示当天按键次数越多")
     }
 
-    private var palette: ThemePalette {
-        ThemeStore.shared.palette(for: colorScheme)
-    }
+    private var firstMonday: Date { firstMonday(for: today) }
 
-    /// 最近 26 周中第一周（最旧）的周一。
-    private var firstMonday: Date {
+    private func firstMonday(for day: Date) -> Date {
         let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let weekday = calendar.component(.weekday, from: today)
-        let mondayOfThisWeek = calendar.date(byAdding: .day, value: -((weekday + 5) % 7), to: today) ?? today
+        let weekday = calendar.component(.weekday, from: day)
+        let mondayOfThisWeek = calendar.date(byAdding: .day, value: -((weekday + 5) % 7), to: day) ?? day
         return calendar.date(byAdding: .day, value: -(weekCount - 1) * 7, to: mondayOfThisWeek) ?? mondayOfThisWeek
     }
 
-    private var weekdayColumn: some View {
-        VStack(spacing: cellSpacing) {
-            Text(" ")
-                .font(.caption)
-                .frame(width: 16, height: cellSize)
-            ForEach(0..<7, id: \.self) { day in
-                Text([0: "一", 2: "三", 4: "五"][day] ?? " ")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 16, height: cellSize)
-            }
-        }
+    private func date(week: Int, day: Int) -> Date {
+        Calendar.current.date(byAdding: .day, value: week * 7 + day, to: firstMonday) ?? firstMonday
     }
 
-    private func weekColumn(_ week: Int) -> some View {
-        let calendar = Calendar.current
-        let monday = calendar.date(byAdding: .day, value: week * 7, to: firstMonday) ?? firstMonday
-        return VStack(spacing: cellSpacing) {
-            monthLabel(week: week, monday: monday)
-            ForEach(0..<7, id: \.self) { day in
-                dayCell(monday: monday, offset: day)
-            }
-        }
-    }
-
-    private func monthLabel(week: Int, monday: Date) -> some View {
-        let calendar = Calendar.current
-        let month = calendar.component(.month, from: monday)
-        var show = week == 0
-        if !show, let prev = calendar.date(byAdding: .day, value: -7, to: monday) {
-            show = calendar.component(.month, from: prev) != month
-        }
-        return Text(show ? "\(month)月" : " ")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize()
-            .frame(width: cellSize, height: cellSize, alignment: .leading)
-    }
-
-    private func dayCell(monday: Date, offset: Int) -> some View {
-        let calendar = Calendar.current
-        let date = calendar.date(byAdding: .day, value: offset, to: monday) ?? monday
-        if date > Date() {
-            return AnyView(Color.clear.frame(width: cellSize, height: cellSize))
-        }
-        let key = Self.dateFormatter.string(from: date)
-        let n = counts[key] ?? 0
-        let color: Color
-        if n <= 0 || maxCount <= 0 {
-            color = Color.primary.opacity(0.08)
+    @ViewBuilder
+    private func dayCell(date: Date) -> some View {
+        if date > today {
+            Color.clear.aspectRatio(1, contentMode: .fit)
+                .accessibilityHidden(true)
         } else {
-            let t = log(1 + Double(n)) / log(1 + Double(maxCount))
-            color = palette.heatColor(t: t)
+            let key = Self.dateFormatter.string(from: date)
+            let count = max(0, counts[key] ?? 0)
+            let intensity = count > 0 && maxCount > 0 ? log1p(Double(count)) / log1p(Double(maxCount)) : 0
+            let isToday = date == today
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(heatColor(intensity: intensity))
+                .aspectRatio(1, contentMode: .fit)
+                .overlay {
+                    if isToday {
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .strokeBorder(Color.indigo.opacity(0.75), lineWidth: 1.5)
+                            .padding(-2)
+                    }
+                }
+                .help("\(key)\(isToday ? " · 今天" : "")：\(count.formatted()) 次按键")
+                .accessibilityLabel("\(key)\(isToday ? "，今天" : "")，\(count) 次按键")
         }
-        return AnyView(
-            RoundedRectangle(cornerRadius: 3)
-                .fill(color)
-                .frame(width: cellSize, height: cellSize)
-                .help("\(key)：\(n) 次按键")
-        )
+    }
+
+    private func heatColor(intensity: Double) -> Color {
+        intensity > 0 ? Color.indigo.opacity(0.18 + intensity * 0.72) : Color.primary.opacity(0.055)
     }
 
     private func reload() {
-        guard repo.hasAnyEvents() else {
-            empty = true
+        guard !isReloading else {
+            refreshPending = true
             return
         }
-        empty = false
-        counts = repo.dailyCounts()
-        maxCount = counts.values.max() ?? 0
+        isReloading = true
+        let selectedToday = Calendar.current.startOfDay(for: Date())
+        let first = Self.dateFormatter.string(from: firstMonday(for: selectedToday))
+        let last = Self.dateFormatter.string(from: selectedToday)
+        let repo = repo
+        Task {
+            let result = await Task.detached(priority: .utility) {
+                let visible = repo.dailyCounts().filter { $0.key >= first && $0.key <= last }
+                return (
+                    counts: visible,
+                    maxCount: visible.values.max() ?? 0,
+                    activeDays: visible.values.filter { $0 > 0 }.count,
+                    totalCount: visible.values.reduce(0, +)
+                )
+            }.value
+            today = selectedToday
+            counts = result.counts
+            maxCount = result.maxCount
+            activeDays = result.activeDays
+            totalCount = result.totalCount
+            isReloading = false
+            if refreshPending {
+                refreshPending = false
+                reload()
+            }
+        }
     }
 }

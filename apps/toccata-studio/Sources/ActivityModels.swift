@@ -99,6 +99,7 @@ struct ActivitySnapshot {
     var activeMs: Int64 = 0
     var fnMs: Int64 = 0
     var keyCount = 0
+    var keyCounts: [Int: Int] = [:]
     var errorMessage: String?
 }
 
@@ -184,6 +185,9 @@ enum ActivityCalculator {
         active = merge(active.compactMap { $0.clipped(to: window) })
         voice = merge(voice.compactMap { $0.clipped(to: window) })
         let downs = ordered.filter { $0.kind == 0 && $0.timestampMs >= window.startMs && $0.timestampMs < window.endMs }
+        let keyCounts = downs.reduce(into: [Int: Int]()) { counts, event in
+            counts[event.keycode, default: 0] += 1
+        }
 
         var days: [ActivityDay] = []
         var dayStart = interval.start
@@ -218,7 +222,7 @@ enum ActivityCalculator {
             dayStart = dayEnd
         }
         return ActivitySnapshot(days: days, activeMs: active.reduce(0) { $0 + $1.durationMs },
-            fnMs: voice.reduce(0) { $0 + $1.durationMs }, keyCount: downs.count)
+            fnMs: voice.reduce(0) { $0 + $1.durationMs }, keyCount: downs.count, keyCounts: keyCounts)
     }
 
     static func milliseconds(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded()) }

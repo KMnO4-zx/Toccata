@@ -1,12 +1,17 @@
 import SwiftUI
 
 struct KeyboardHeatmapView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private let layout: KeyboardLayout
     private let counts: [Int: Int]
+    private let fnMs: Int64
+    @State private var hoveredKeyID: String?
 
-    init(layout: KeyboardLayout = .magicKeyboard, counts: [Int: Int] = [:]) {
+    init(layout: KeyboardLayout = .magicKeyboard, counts: [Int: Int] = [:], fnMs: Int64 = 0) {
         self.layout = layout
         self.counts = counts
+        self.fnMs = fnMs
     }
 
     var body: some View {
@@ -39,19 +44,61 @@ struct KeyboardHeatmapView: View {
                     KeyboardKeyCap(
                         label: item.key.displayLabel,
                         name: keyName(for: item.key),
-                        count: count,
+                        activity: activityDescription(for: item.key),
                         intensity: intensity,
-                        size: item.frame.size
+                        size: item.frame.size,
+                        hovering: hoveredKeyID == item.id
                     )
                     .frame(width: item.frame.width, height: item.frame.height)
                     .position(x: item.frame.midX, y: item.frame.midY)
                 }
+
+                if let item = scaled.keys.first(where: { $0.id == hoveredKeyID }) {
+                    let width = min(180, scaled.size.width)
+                    let height: CGFloat = 66
+                    let halfWidth = width / 2
+                    let halfHeight = height / 2
+                    let x = min(max(item.frame.midX, halfWidth), scaled.size.width - halfWidth)
+                    let above = item.frame.minY - halfHeight - 10
+                    let y = above >= halfHeight ? above : item.frame.maxY + halfHeight + 10
+
+                    KeyboardKeyTooltip(
+                        name: keyName(for: item.key),
+                        activity: activityDescription(for: item.key)
+                    )
+                    .frame(width: width, height: height)
+                    .position(x: x, y: min(max(y, halfHeight), max(halfHeight, scaled.size.height - halfHeight)))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+                    .zIndex(1)
+                }
             }
             .frame(width: scaled.size.width, height: scaled.size.height, alignment: .topLeading)
+            .contentShape(Rectangle())
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let location):
+                    hoveredKeyID = scaled.keys.first { $0.frame.contains(location) }?.id
+                case .ended:
+                    hoveredKeyID = nil
+                }
+            }
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.1), value: hoveredKeyID != nil)
         }
         .aspectRatio(layout.aspectRatio, contentMode: .fit)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("今日逐键键盘热度"))
+        .onDisappear { hoveredKeyID = nil }
+    }
+
+    private func activityDescription(for key: KeyboardLayout.Key) -> String {
+        if key.code == 63 {
+            let seconds = (Double(max(0, fnMs)) / 1000).formatted(.number.precision(.fractionLength(0...1)))
+            return "今天按住 \(seconds) 秒"
+        }
+        let count = max(0, counts[key.code ?? Int.min] ?? 0)
+        return "今天按下 \(count.formatted()) 次"
     }
 
     private func keyName(for key: KeyboardLayout.Key) -> String {
@@ -63,8 +110,18 @@ struct KeyboardHeatmapView: View {
         case 61: return "右 Option"
         case 55: return "左 Command"
         case 54: return "右 Command"
-        case 63: return "globe / Fn"
+        case 63: return "Fn / 地球键"
         case 105: return "锁定"
+        case 49: return "空格"
+        case 53: return "Esc"
+        case 48: return "Tab"
+        case 51: return "退格"
+        case 36: return "回车"
+        case 57: return "大写锁定"
+        case 123: return "左方向键"
+        case 124: return "右方向键"
+        case 125: return "下方向键"
+        case 126: return "上方向键"
         default: return key.displayLabel
         }
     }
@@ -96,13 +153,14 @@ enum KeyboardHeatmap {
 }
 
 private struct KeyboardKeyCap: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     let label: String
     let name: String
-    let count: Int
+    let activity: String
     let intensity: Double
     let size: CGSize
-
-    @State private var hovering = false
+    let hovering: Bool
 
     private var cornerRadius: CGFloat {
         min(7, min(size.width, size.height) * 0.18)
@@ -162,10 +220,35 @@ private struct KeyboardKeyCap: View {
                     .minimumScaleFactor(0.55)
                     .padding(2)
             }
-            .onHover { hovering = $0 }
-            .animation(.easeOut(duration: 0.12), value: hovering)
-            .help("\(name)：今天 \(count) 次")
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hovering)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text("\(name)，今天 \(count) 次"))
+            .accessibilityLabel(Text(name))
+            .accessibilityValue(Text(activity))
+    }
+}
+
+private struct KeyboardKeyTooltip: View {
+    let name: String
+    let activity: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(name)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(activity)
+                .font(.system(size: 13, weight: .medium))
+                .monospacedDigit()
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+        }
+        .shadow(color: .black.opacity(0.14), radius: 8, x: 0, y: 3)
     }
 }
