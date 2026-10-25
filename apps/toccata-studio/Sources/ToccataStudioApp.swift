@@ -32,11 +32,10 @@ struct ToccataStudioApp: App {
 }
 
 private enum WorkspaceSection: String, CaseIterable, Identifiable {
-    case thisWeek = "本周任务"
-    case lastSevenDays = "最近 7 天"
+    case tasks = "任务"
     case inbox = "收集箱"
     case taskCalendar = "任务日历"
-    case review = "完成回顾"
+    case review = "任务回顾"
     case activity = "键盘活跃"
     case activityCalendar = "活跃日历"
     case ranking = "应用与趋势"
@@ -44,8 +43,7 @@ private enum WorkspaceSection: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var symbol: String {
         switch self {
-        case .thisWeek: return "calendar.badge.clock"
-        case .lastSevenDays: return "clock.arrow.circlepath"
+        case .tasks: return "checklist"
         case .inbox: return "tray"
         case .taskCalendar: return "calendar"
         case .review: return "checkmark.circle"
@@ -61,7 +59,8 @@ struct ContentView: View {
     @EnvironmentObject private var tasks: TaskStore
     @EnvironmentObject private var refresher: LiveRefresher
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var selection: WorkspaceSection? = .thisWeek
+    @State private var selection: WorkspaceSection? = .tasks
+    @State private var taskPeriod: TaskReviewPeriod = .thisWeek
     @State private var selectedTaskID: String?
     @Binding var requestedSection: String?
 
@@ -69,11 +68,11 @@ struct ContentView: View {
         _requestedSection = requestedSection
     }
 
-    private var section: WorkspaceSection { selection ?? .thisWeek }
+    private var section: WorkspaceSection { selection ?? .tasks }
     private var openCount: Int { tasks.tasks.filter { $0.parentID == nil && !$0.isCompleted }.count }
     private var showsTaskWorkspace: Bool {
         switch section {
-        case .thisWeek, .lastSevenDays, .inbox, .taskCalendar, .review: return true
+        case .tasks, .inbox, .taskCalendar, .review: return true
         case .activity, .activityCalendar, .ranking: return false
         }
     }
@@ -94,8 +93,7 @@ struct ContentView: View {
 
                 List(selection: $selection) {
                     Section("任务") {
-                        sidebarRow(.thisWeek)
-                        sidebarRow(.lastSevenDays)
+                        sidebarRow(.tasks)
                         sidebarRow(.inbox, count: openCount)
                         sidebarRow(.taskCalendar)
                         sidebarRow(.review)
@@ -154,8 +152,7 @@ struct ContentView: View {
     @ViewBuilder
     private var workspacePage: some View {
         switch section {
-        case .thisWeek: TasksView(mode: .thisWeek, selection: $selectedTaskID)
-        case .lastSevenDays: TasksView(mode: .lastSevenDays, selection: $selectedTaskID)
+        case .tasks: TasksView(mode: .tasks, selection: $selectedTaskID, taskPeriod: $taskPeriod)
         case .inbox: TasksView(mode: .inbox, selection: $selectedTaskID)
         case .taskCalendar: TaskCalendarView(selection: $selectedTaskID)
         case .review: TasksView(mode: .review, selection: $selectedTaskID)
@@ -188,15 +185,28 @@ struct ContentView: View {
         switch section {
         case .activity: ActivityView()
         case .activityCalendar, .ranking: RankingView().navigationTitle("应用与趋势")
-        case .thisWeek, .lastSevenDays, .inbox, .taskCalendar, .review: EmptyView()
+        case .tasks, .inbox, .taskCalendar, .review: EmptyView()
         }
     }
 
     private func openRequestedSection() {
         guard let name = requestedSection else { return }
         // Keep earlier navigation requests working after consolidating the pages.
-        let destination = ["按键与应用", "键盘与应用", "活跃日历"].contains(name)
-            ? WorkspaceSection.ranking : WorkspaceSection(rawValue: name)
+        let destination: WorkspaceSection?
+        switch name {
+        case "本周任务", "本周":
+            taskPeriod = .thisWeek
+            destination = .tasks
+        case "最近 7 天", "最近7天":
+            taskPeriod = .lastSevenDays
+            destination = .tasks
+        case "完成回顾":
+            destination = .review
+        case "按键与应用", "键盘与应用", "活跃日历":
+            destination = .ranking
+        default:
+            destination = WorkspaceSection(rawValue: name)
+        }
         guard let destination else { return }
         selection = destination
         requestedSection = nil
