@@ -184,27 +184,14 @@ struct TaskDetailView: View {
 
     private var planDateSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("计划日期", systemImage: "calendar")
-                    .font(.system(size: 13, weight: .medium))
-                Spacer()
-                Toggle("设置日期", isOn: $draft.hasDate)
-                    .toggleStyle(.switch)
-                    .controlSize(.mini)
-            }
-            if draft.hasDate {
-                DatePicker("计划在", selection: $draft.date, displayedComponents: .date)
-                    .datePickerStyle(.field)
-                    .font(.system(size: 13))
-                    .accessibilityLabel("计划日期")
-            } else {
-                Text("暂不安排时间，继续留在收集箱。")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+            Text("计划日期")
+                .font(.system(size: 13, weight: .medium))
+            TaskPlannedDateField(date: draft.optionalDate) { date in
+                draft.hasDate = date != nil
+                if let date { draft.date = date }
+                saveDraft(preservingValidTitle: true)
             }
         }
-        .padding(13)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.75), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var detailsSection: some View {

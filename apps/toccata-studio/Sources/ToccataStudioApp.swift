@@ -53,6 +53,8 @@ struct ContentView: View {
     @State private var selection: WorkspaceSection? = .tasks
     @State private var taskPeriod: TaskReviewPeriod = .thisWeek
     @State private var selectedTaskID: String?
+    @State private var isOpeningTasks = false
+    @State private var homeNavigationFailed = false
     @Binding var requestedSection: String?
 
     init(requestedSection: Binding<String?> = .constant(nil)) {
@@ -71,16 +73,23 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 10) {
-                    Image(systemName: "square.stack.3d.up.fill")
-                        .font(.title2)
-                        .foregroundStyle(Color.accentColor)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Toccata").font(.title3.weight(.semibold))
-                        Text("记下想法，看见投入").font(.caption).foregroundStyle(.secondary)
+                Button(action: openTasks) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "square.stack.3d.up.fill")
+                            .font(.title2)
+                            .foregroundStyle(Color.accentColor)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Toccata").font(.title3.weight(.semibold))
+                            Text("记下想法，看见投入").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
                     }
+                    .padding(20)
+                    .contentShape(Rectangle())
                 }
-                .padding(20)
+                .buttonStyle(.plain)
+                .help("回到任务")
+                .accessibilityLabel("Toccata，回到任务")
 
                 List(selection: $selection) {
                     Section("任务") {
@@ -139,6 +148,11 @@ struct ContentView: View {
         .onChange(of: requestedSection) { _ in openRequestedSection() }
         .onChange(of: tasks.tasks.map(\.id)) { ids in
             if let selectedTaskID, !ids.contains(selectedTaskID) { self.selectedTaskID = nil }
+        }
+        .alert("任务修改尚未保存", isPresented: $homeNavigationFailed) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text("请先重试保存，再返回任务页面。")
         }
     }
 
@@ -236,6 +250,25 @@ struct ContentView: View {
         guard let destination else { return }
         selection = destination
         requestedSection = nil
+    }
+
+    private func openTasks() {
+        guard section != .tasks, !isOpeningTasks else { return }
+        let originalSection = section
+        isOpeningTasks = true
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        Task { @MainActor in
+            defer { isOpeningTasks = false }
+            guard await PendingEdits.shared.flushAll() else {
+                homeNavigationFailed = true
+                return
+            }
+            // A later sidebar choice takes precedence over an in-flight save.
+            guard section == originalSection else { return }
+            withAnimation(reduceMotion ? nil : WorkspaceMotion.pageChange) {
+                selection = .tasks
+            }
+        }
     }
 
     private func sidebarRow(_ item: WorkspaceSection, count: Int? = nil) -> some View {

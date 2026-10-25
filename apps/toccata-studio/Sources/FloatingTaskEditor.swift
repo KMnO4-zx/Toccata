@@ -31,7 +31,8 @@ private struct FloatingTaskEditorContent: View {
     @State private var childTitle = ""
     @State private var showsChildComposer = false
     @State private var isChoosingDate = false
-    @State private var dateChoice = Date()
+    @State private var dateChoice: Date?
+    @State private var dateReference = Date()
     @State private var confirmsDeletion = false
     @State private var saveFailed = false
     @State private var descriptionFocused = false
@@ -107,7 +108,10 @@ private struct FloatingTaskEditorContent: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in saveDraft() }
         .onDisappear { saveDraft() }
-        .onExitCommand(perform: closeEditor)
+        .onExitCommand {
+            if isChoosingDate { isChoosingDate = false }
+            else { closeEditor() }
+        }
         .alert("删除这个任务？", isPresented: $confirmsDeletion) {
             Button("取消", role: .cancel) {}
             Button("删除任务", role: .destructive) {
@@ -130,7 +134,8 @@ private struct FloatingTaskEditorContent: View {
             .accessibilityLabel(task.isCompleted ? "恢复任务" : "完成任务")
             Rectangle().fill(TaskMenuStyle.muted).frame(width: 0.5, height: 16)
             Button {
-                dateChoice = draft.plannedDate ?? Date()
+                dateChoice = draft.plannedDate
+                dateReference = Date()
                 isChoosingDate.toggle()
             } label: {
                 HStack(spacing: 6) {
@@ -189,32 +194,21 @@ private struct FloatingTaskEditorContent: View {
     }
 
     private var dateChooser: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            Text("计划日期").font(.system(size: 12, weight: .medium))
-            DatePicker("计划日期", selection: $dateChoice, displayedComponents: .date)
-                .labelsHidden()
-                .datePickerStyle(.field)
-                .accessibilityLabel("计划日期")
-            HStack {
-                if draft.plannedDate != nil {
-                    Button("清除日期") {
-                        draft.plannedDate = nil
-                        isChoosingDate = false
-                        saveDraft()
-                    }
-                    .buttonStyle(.borderless)
-                }
-                Spacer()
-                Button("设置日期") {
-                    draft.plannedDate = Calendar.current.startOfDay(for: dateChoice)
-                    isChoosingDate = false
-                    saveDraft()
-                }
+        TaskPlannedDatePicker(
+            initialDate: dateChoice,
+            referenceDate: dateReference,
+            onCancel: { isChoosingDate = false },
+            onApply: { date in
+                draft.plannedDate = date
+                isChoosingDate = false
+                saveDraft()
+            },
+            onClear: draft.plannedDate == nil ? nil : {
+                draft.plannedDate = nil
+                isChoosingDate = false
+                saveDraft()
             }
-        }
-        .font(.system(size: 12))
-        .padding(16)
-        .frame(width: 250)
+        )
     }
 
     @ViewBuilder

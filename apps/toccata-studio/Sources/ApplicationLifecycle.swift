@@ -60,7 +60,7 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
                 .environmentObject(taskStore)
                 .environmentObject(appearance)
                 .frame(minWidth: 1040, minHeight: 650)
-            let window = NSWindow(contentViewController: NSHostingController(rootView: content))
+            let window = WorkbenchWindow(contentViewController: NSHostingController(rootView: content))
             window.title = "Toccata"
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
             window.titleVisibility = .hidden
@@ -155,6 +155,16 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
         alert.informativeText = taskStore.errorMessage ?? "请重试保存，再关闭窗口或退出 Toccata。"
         alert.addButton(withTitle: "返回任务")
         alert.runModal()
+    }
+}
+
+/// NavigationSplitView may restore the native title while updating its toolbar.
+/// Keep its window identity for menus and accessibility without drawing the title.
+@MainActor
+private final class WorkbenchWindow: NSWindow {
+    override var titleVisibility: NSWindow.TitleVisibility {
+        get { super.titleVisibility }
+        set { super.titleVisibility = .hidden }
     }
 }
 
