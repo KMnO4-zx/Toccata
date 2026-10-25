@@ -49,7 +49,7 @@ struct RankingView: View {
                     .cornerRadius(3)
                     .annotation(position: .trailing) {
                         Text("\(item.rank.count)")
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -88,11 +88,11 @@ struct RankingView: View {
     private func appRow(index: Int, app: AppRank, maxUsage: Int64) -> some View {
         HStack(spacing: 12) {
             Text("\(index + 1)")
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .frame(width: 20, alignment: .trailing)
             Text(app.shortName)
-                .font(.callout)
+                .font(.body)
                 .frame(width: 160, alignment: .leading)
                 .lineLimit(1)
                 .help(app.app)
@@ -104,10 +104,10 @@ struct RankingView: View {
             }
             .frame(height: 12)
             Text(Formatters.duration(ms: app.usageMs))
-                .font(.caption)
+                .font(.subheadline)
                 .frame(width: 72, alignment: .trailing)
             Text("\(app.keyCount) 键")
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .frame(width: 80, alignment: .trailing)
         }

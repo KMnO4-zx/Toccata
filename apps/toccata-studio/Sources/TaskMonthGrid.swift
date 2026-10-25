@@ -18,7 +18,7 @@ struct TaskMonthGrid: View {
         VStack(spacing: compact ? 9 : 14) {
             HStack(spacing: compact ? 5 : 9) {
                 Text(monthLabel)
-                    .font(.system(size: compact ? 14 : 17, weight: .semibold, design: .rounded))
+                    .font(.system(size: compact ? 14 : 18, weight: .semibold, design: .rounded))
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
                 Button("今天", action: showToday)
@@ -37,7 +37,7 @@ struct TaskMonthGrid: View {
             LazyVGrid(columns: columns, spacing: 4) {
                 ForEach(Array(weekdayLabels.enumerated()), id: \.offset) { index, label in
                     Text(label)
-                        .font(.system(size: compact ? 9 : 10, weight: .medium))
+                        .font(.system(size: compact ? 9 : 11, weight: .medium))
                         .foregroundStyle(index >= 5 ? Color.secondary.opacity(0.6) : Color.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.bottom, 3)
@@ -76,7 +76,7 @@ struct TaskMonthGrid: View {
         } label: {
             VStack(spacing: compact ? 2 : 5) {
                 Text("\(calendar.component(.day, from: cell.date))")
-                    .font(.system(size: compact ? 11 : 12,
+                    .font(.system(size: compact ? 11 : 13,
                                   weight: today || selected ? .semibold : .regular, design: .rounded))
                     .foregroundStyle(selected ? Color.white : (today ? Color.accentColor : Color.primary))
                     .frame(width: compact ? 22 : 24, height: compact ? 22 : 24)
@@ -104,7 +104,7 @@ struct TaskMonthGrid: View {
     private func eventLegend(_ title: String, color: Color) -> some View {
         HStack(spacing: 5) {
             Circle().fill(color).frame(width: 5, height: 5)
-            Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
+            Text(title).font(.system(size: 11)).foregroundStyle(.secondary)
         }
     }
 

@@ -102,7 +102,7 @@ struct TasksView: View {
                         Text(mode.title)
                             .font(.system(size: 25, weight: .bold, design: .rounded))
                         Text(mode.explanation)
-                            .font(.system(size: 12))
+                            .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -132,7 +132,7 @@ struct TasksView: View {
                         Spacer()
                         Text("\(reviewTasks.count) 项完成")
                     }
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                 }
 
@@ -148,7 +148,7 @@ struct TasksView: View {
                         .help("清除搜索")
                     }
                 }
-                .font(.system(size: 12))
+                .font(.system(size: 13))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
@@ -169,7 +169,7 @@ struct TasksView: View {
                 Spacer(minLength: 0)
                 if copied { Text("已复制").foregroundStyle(Color.accentColor) }
             }
-            .font(.system(size: 10))
+            .font(.system(size: 11))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 22)
             .padding(.vertical, 12)
@@ -342,14 +342,14 @@ private struct TaskListRow: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(task.title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(task.isCompleted ? .secondary : .primary)
                     .strikethrough(task.isCompleted, color: .secondary.opacity(0.5))
                     .lineLimit(2)
                 if let parentTitle {
                     Label(parentTitle, systemImage: "arrow.turn.down.right")
                         .lineLimit(1)
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
                 if !children.isEmpty || task.plannedDate != nil || !task.details.isEmpty {
@@ -362,11 +362,11 @@ private struct TaskListRow: View {
                         }
                         if !task.details.isEmpty { Image(systemName: "text.alignleft") }
                     }
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                 }
                 Text("创建于 \(task.createdAt.formatted(.dateTime.month().day()))\(task.completedAt.map { " · 完成于 \($0.formatted(.dateTime.month().day()))" } ?? "")")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -387,9 +387,9 @@ struct TaskPlaceholder: View {
                 .font(.system(size: 32, weight: .light))
                 .foregroundStyle(Color.accentColor.opacity(0.65))
                 .padding(.bottom, 3)
-            Text(title).font(.system(size: 15, weight: .semibold))
+            Text(title).font(.system(size: 16, weight: .semibold))
             Text(message)
-                .font(.system(size: 12))
+                .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(5)
@@ -412,7 +412,7 @@ private struct TaskErrorBanner: View {
                 .buttonStyle(.plain)
                 .help("关闭错误提示")
         }
-        .font(.system(size: 12))
+        .font(.system(size: 13))
         .padding(12)
         .background(Color.orange.opacity(0.09))
     }

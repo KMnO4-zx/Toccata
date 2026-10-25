@@ -64,7 +64,7 @@ struct CalendarHeatmapView: View {
     private var legend: some View {
         HStack(spacing: 3) {
             Text("少")
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
             ForEach(0..<5, id: \.self) { i in
                 RoundedRectangle(cornerRadius: 3)
@@ -72,7 +72,7 @@ struct CalendarHeatmapView: View {
                     .frame(width: 12, height: 12)
             }
             Text("多")
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
@@ -93,11 +93,11 @@ struct CalendarHeatmapView: View {
     private var weekdayColumn: some View {
         VStack(spacing: cellSpacing) {
             Text(" ")
-                .font(.caption2)
+                .font(.caption)
                 .frame(width: 16, height: cellSize)
             ForEach(0..<7, id: \.self) { day in
                 Text([0: "一", 2: "三", 4: "五"][day] ?? " ")
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(width: 16, height: cellSize)
             }
@@ -123,7 +123,7 @@ struct CalendarHeatmapView: View {
             show = calendar.component(.month, from: prev) != month
         }
         return Text(show ? "\(month)月" : " ")
-            .font(.caption2)
+            .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize()
             .frame(width: cellSize, height: cellSize, alignment: .leading)

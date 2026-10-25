@@ -40,7 +40,7 @@ struct ActivityView: View {
                 Text("键盘活跃")
                     .font(.system(size: 28, weight: .bold))
                 Text("看看专注发生在什么时候。")
-                    .font(.subheadline)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 20)
@@ -51,7 +51,7 @@ struct ActivityView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 265)
                 Label(refresher.isConnected ? "正在记录键盘活动" : "采集服务未连接", systemImage: refresher.isConnected ? "circle.fill" : "circle")
-                    .font(.caption)
+                    .font(.subheadline)
                     .foregroundStyle(refresher.isConnected ? Color.accentColor : .secondary)
             }
         }
@@ -69,7 +69,7 @@ struct ActivityView: View {
         VStack(alignment: .leading, spacing: 8) {
             StatCard(title: title, value: value)
             Text(hint)
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .padding(.leading, 5)
                 .lineLimit(2)
@@ -84,7 +84,7 @@ struct ActivityView: View {
                     Text("活跃时间线")
                         .font(.headline)
                     Text("每格 15 分钟，颜色越深表示活跃时间越长")
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -97,7 +97,7 @@ struct ActivityView: View {
                     }
                     Text("多")
                 }
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("图例：颜色由浅到深表示活跃时间由少到多")
             }
@@ -108,16 +108,16 @@ struct ActivityView: View {
                     hourLabels
                     Text("活跃 / Fn").frame(width: 108, alignment: .trailing)
                 }
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
 
                 ForEach(snapshot.days) { day in
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(day.date, format: .dateTime.month(.twoDigits).day(.twoDigits))
-                                .font(.system(.subheadline, design: .rounded).weight(.medium))
+                                .font(.system(.callout, design: .rounded).weight(.medium))
                             Text(Calendar.current.isDateInToday(day.date) ? "今天" : weekday(day.date))
-                                .font(.caption2)
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         .frame(width: 70, alignment: .leading)
@@ -136,9 +136,9 @@ struct ActivityView: View {
 
                         VStack(alignment: .trailing, spacing: 4) {
                             Text(Formatters.duration(ms: day.activeMs))
-                                .font(.system(.subheadline, design: .rounded).weight(.semibold))
+                                .font(.system(.callout, design: .rounded).weight(.semibold))
                             Text("Fn \(Formatters.duration(ms: day.fnMs))")
-                                .font(.caption2)
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         .frame(width: 96, alignment: .trailing)
@@ -148,7 +148,7 @@ struct ActivityView: View {
 
             if snapshot.keyCount == 0 && snapshot.activeMs == 0 {
                 Label(snapshot.errorMessage == nil ? "这段时间还没有键盘活动。任务可以照常记在收集箱。" : "暂无可读取的键盘记录。采集服务运行后，这里会自动更新。", systemImage: "keyboard")
-                    .font(.subheadline)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             }
@@ -176,11 +176,11 @@ struct ActivityView: View {
         let policy = repository.calculationPolicy
         return VStack(alignment: .leading, spacing: 8) {
             Label("关于这些数字", systemImage: "info.circle")
-                .font(.subheadline.weight(.medium))
+                .font(.callout.weight(.medium))
             Text("相邻输入间隔小于 \(policy.idleGapMs / 1000) 秒计为连续活跃，末次输入后补 \(policy.trailingGraceMs / 1000) 秒；持续按住按键的时间也计入，重叠区间只计算一次。")
             Text("键盘活跃时间是一种使用时间估算，阅读、看视频或仅用鼠标时可能没有记录。Fn 时长用于估算你的语音输出，也可能包含快捷键操作；Toccata 不检测录音。")
         }
-        .font(.caption)
+        .font(.subheadline)
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
         .padding(.horizontal, 3)

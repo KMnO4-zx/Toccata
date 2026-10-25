@@ -22,7 +22,7 @@ struct StatCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.subheadline)
+                .font(.callout)
                 .foregroundStyle(.secondary)
             Text(value)
                 .font(.system(size: 28, weight: .semibold, design: .rounded))

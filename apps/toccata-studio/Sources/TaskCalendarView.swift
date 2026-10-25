@@ -42,7 +42,7 @@ struct TaskCalendarView: View {
                         .buttonStyle(.plain)
                         .help("关闭错误提示")
                 }
-                .font(.system(size: 12))
+                .font(.system(size: 13))
                 .padding(12)
                 .background(Color.orange.opacity(0.09))
             }
@@ -88,7 +88,7 @@ struct TaskCalendarView: View {
             Text("任务日历")
                 .font(.system(size: 25, weight: .bold, design: .rounded))
             Text("创建、安排、完成，各自保留真实日期。")
-                .font(.system(size: 12))
+                .font(.system(size: 13))
                 .foregroundStyle(.secondary)
         }
     }
@@ -97,11 +97,11 @@ struct TaskCalendarView: View {
         VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .firstTextBaseline) {
                 Text(dateLabel(selectedDay, includesWeekday: true))
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Text("\(dayTasks.count) 项任务")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
 
@@ -118,9 +118,9 @@ struct TaskCalendarView: View {
             if dayTasks.isEmpty {
                 VStack(spacing: 7) {
                     Text(emptyDayTitle)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
                     Text("没有指定计划日期的任务，会留在下方“未安排日期”。")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -151,7 +151,7 @@ struct TaskCalendarView: View {
             }
             HStack {
                 Text("会明确设置计划日期")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 2)
                 Button("安排到 \(dateLabel(selectedDay))", action: addPlannedTask)
@@ -159,7 +159,7 @@ struct TaskCalendarView: View {
                     .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
-        .font(.system(size: 12))
+        .font(.system(size: 13))
         .padding(12)
         .background(Color.accentColor.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
     }
@@ -170,13 +170,13 @@ struct TaskCalendarView: View {
             DisclosureGroup(isExpanded: $showsUnscheduled) {
                 LazyVStack(alignment: .leading, spacing: 7) {
                     Text("这些任务未设计划日期，不会自动安排到今天。点击任务可设置日期；已完成记录仍保留。")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.vertical, 6)
                     if unscheduledTasks.isEmpty {
                         Text("当前没有未安排日期的任务。")
-                            .font(.system(size: 12))
+                            .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                             .padding(.vertical, 8)
                     } else {
@@ -188,10 +188,10 @@ struct TaskCalendarView: View {
             } label: {
                 HStack(spacing: 7) {
                     Label("未安排日期", systemImage: "tray")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
                     Spacer(minLength: 0)
                     Text("\(pendingUnscheduledCount) 项待办 · \(unscheduledTasks.count) 项共计")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -217,13 +217,13 @@ struct TaskCalendarView: View {
             } label: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(task.title)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
                         .strikethrough(task.isCompleted)
                         .foregroundStyle(task.isCompleted ? .secondary : .primary)
                         .lineLimit(2)
                     if let parentID = task.parentID, let parent = store.task(id: parentID) {
                         Label(parent.title, systemImage: "arrow.turn.down.right")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -242,7 +242,7 @@ struct TaskCalendarView: View {
                         }
                     } else {
                         Text(task.isCompleted ? "已完成 · 未设置计划日期" : "待办 · 未设置计划日期")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -268,7 +268,7 @@ struct TaskCalendarView: View {
 
     private func eventBadge(_ title: String, color: Color) -> some View {
         Text(title)
-            .font(.system(size: 9, weight: .medium))
+            .font(.system(size: 10, weight: .medium))
             .foregroundStyle(color)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)

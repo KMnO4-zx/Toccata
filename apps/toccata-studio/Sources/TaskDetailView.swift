@@ -129,7 +129,7 @@ struct TaskDetailView: View {
             }
             Spacer(minLength: 5)
             Text(hasChanges ? (validTitle ? (saveFailed ? "保存失败，请重试" : "正在保存…") : "标题不能为空") : "已保存")
-                .font(.system(size: 10))
+                .font(.system(size: 11))
                 .foregroundStyle(validTitle && !saveFailed ? Color.secondary : Color.orange)
             Button {
                 saveDraft()
@@ -144,7 +144,7 @@ struct TaskDetailView: View {
             }
             .help("删除任务")
         }
-        .font(.system(size: 11))
+        .font(.system(size: 12))
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
     }
@@ -163,15 +163,15 @@ struct TaskDetailView: View {
                 if let completedAt = task.completedAt {
                     Spacer(minLength: 0)
                     Text(completedAt.formatted(.dateTime.month().day().hour().minute()))
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
             }
-            .font(.system(size: 11))
+            .font(.system(size: 12))
 
             TextField("任务名称", text: $draft.title, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(.system(size: 21, weight: .semibold))
+                .font(.system(size: 22, weight: .semibold))
                 .lineLimit(1...5)
                 .focused($focusedField, equals: .title)
                 .accessibilityLabel("任务名称")
@@ -182,7 +182,7 @@ struct TaskDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("计划日期", systemImage: "calendar")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                 Spacer()
                 Toggle("设置日期", isOn: $draft.hasDate)
                     .toggleStyle(.switch)
@@ -191,11 +191,11 @@ struct TaskDetailView: View {
             if draft.hasDate {
                 DatePicker("计划在", selection: $draft.date, displayedComponents: .date)
                     .datePickerStyle(.field)
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .accessibilityLabel("计划日期")
             } else {
                 Text("暂不安排时间，继续留在收集箱。")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
         }
@@ -215,7 +215,8 @@ struct TaskDetailView: View {
                         if focused { focusedField = nil }
                         detailsFocused = focused
                     }
-                )
+                ),
+                fontSize: 13
             )
             .frame(minHeight: 120)
             .accessibilityLabel("任务详情")
@@ -230,7 +231,7 @@ struct TaskDetailView: View {
                 Spacer()
                 if !children.isEmpty {
                     Text("\(children.filter(\.isCompleted).count) / \(children.count)")
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -259,7 +260,7 @@ struct TaskDetailView: View {
                                     if !child.details.isEmpty {
                                         Text(child.details)
                                             .foregroundStyle(.secondary)
-                                            .font(.system(size: 10))
+                                            .font(.system(size: 11))
                                             .lineLimit(1)
                                     }
                                 }
@@ -271,7 +272,7 @@ struct TaskDetailView: View {
                                 .font(.system(size: 9))
                                 .foregroundStyle(.tertiary)
                         }
-                        .font(.system(size: 12))
+                        .font(.system(size: 13))
                         .padding(.vertical, 10)
                         .padding(.horizontal, 11)
                         if child.id != children.last?.id { Divider().padding(.leading, 35) }
@@ -293,12 +294,12 @@ struct TaskDetailView: View {
                         .disabled(childTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .help("添加子任务")
                 }
-                .font(.system(size: 12))
+                .font(.system(size: 13))
                 .padding(11)
                 .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 9))
             } else if children.isEmpty {
                 Text("这是一个子任务，可在这里独立编辑详情。")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
         }
@@ -312,13 +313,13 @@ struct TaskDetailView: View {
                 Text("完成于 \(completedAt.formatted(.dateTime.year().month().day().hour().minute()))")
             }
         }
-        .font(.system(size: 10))
+        .font(.system(size: 11))
         .foregroundStyle(.tertiary)
     }
 
     private func sectionHeading(_ title: String, symbol: String) -> some View {
         Label(title, systemImage: symbol)
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: 13, weight: .semibold))
     }
 
     private func saveDraft(preservingValidTitle: Bool = false) {
