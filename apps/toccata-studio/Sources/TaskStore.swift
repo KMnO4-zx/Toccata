@@ -15,13 +15,13 @@ final class TaskStore: ObservableObject {
     private var database: TaskDatabase?
     private let calendar: Calendar
     private let now: () -> Date
-    private let completionFeedback: () -> Void
+    private let completionFeedback: @MainActor () -> Void
 
     init(databaseURL: URL = TaskStore.defaultURL,
          calendar: Calendar = .current,
          now: @escaping () -> Date = Date.init,
-         completionFeedback: @escaping () -> Void = {
-             NSSound(named: "Glass")?.play()
+         completionFeedback: @escaping @MainActor () -> Void = {
+             TaskCompletionSound.play()
          }) {
         self.calendar = calendar
         self.now = now
