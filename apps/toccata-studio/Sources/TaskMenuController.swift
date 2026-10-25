@@ -150,14 +150,22 @@ final class TaskMenuController: NSObject, ObservableObject {
         }
         guard let editorPanel else { return }
         if editorPanel.contentView == nil {
-            editorPanel.contentView = NSHostingView(rootView:
+            MenuEditorHostingView.install(in: editorPanel, rootView:
                 FloatingTaskEditor()
                     .environmentObject(store)
                     .environmentObject(presentation)
                     .tint(TaskMenuStyle.accent)
                     .background(TaskMenuStyle.background)
                     .clipShape(RoundedRectangle(cornerRadius: TaskMenuStyle.cornerRadius))
-            )
+            ) { [weak self] in
+                self?.presentation.dismissEditor()
+                self?.presentation.requestListFocus()
+            }
+        }
+        if focus == nil {
+            // A row click only previews the task. Explicit Tab / Return requests
+            // below still activate the editor and focus their requested field.
+            editorPanel.makeFirstResponder(editorPanel.contentView)
         }
         let targetFrame = isEditorRevealing ? nil : positionEditor()
         let shouldAnimate = !editorPanel.isVisible && targetFrame != nil
@@ -194,6 +202,8 @@ final class TaskMenuController: NSObject, ObservableObject {
         isEditorRevealing = false
         guard let editorPanel else { return }
         if let parent = editorPanel.parent { parent.removeChildWindow(editorPanel) }
+        editorPanel.makeFirstResponder(nil)
+        editorPanel.initialFirstResponder = nil
         // Releasing the hosted editor flushes its final draft through onDisappear.
         editorPanel.contentView = nil
         editorPanel.orderOut(nil)
