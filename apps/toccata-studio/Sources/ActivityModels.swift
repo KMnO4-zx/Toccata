@@ -10,24 +10,43 @@ struct ActivityKeyEvent: Equatable, Hashable {
     var holdMs: Int64? = nil
 }
 
-enum ActivityRange: String, CaseIterable, Identifiable {
-    case today = "今日"
-    case lastSevenDays = "最近 7 天"
-    case thisWeek = "本周"
+enum ActivityRange: Hashable, CaseIterable, Identifiable {
+    case today
+    case yesterday
+    case lastSevenDays
+    case thisWeek
+    case custom(CalendarDateRange)
 
-    var id: String { rawValue }
+    static let allCases: [ActivityRange] = [.today, .yesterday, .lastSevenDays, .thisWeek]
+
+    var id: Self { self }
+
+    var rawValue: String {
+        switch self {
+        case .today: return "今日"
+        case .yesterday: return "昨日"
+        case .lastSevenDays: return "最近 7 天"
+        case .thisWeek: return "本周"
+        case .custom: return "自定义时段"
+        }
+    }
 
     func interval(now: Date, calendar: Calendar) -> DateInterval {
         let today = calendar.startOfDay(for: now)
         let start: Date
         switch self {
         case .today: start = today
+        case .yesterday:
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+            return DateInterval(start: yesterday, end: today)
         case .lastSevenDays: start = calendar.date(byAdding: .day, value: -6, to: today) ?? today
         case .thisWeek:
             // Weekly reporting uses Monday through Sunday, independent of the
             // locale's display preference for the first weekday.
             let weekday = calendar.component(.weekday, from: today)
             start = calendar.date(byAdding: .day, value: -((weekday + 5) % 7), to: today) ?? today
+        case .custom(let dates):
+            return dates.interval(calendar: calendar)
         }
         let end = calendar.date(byAdding: .day, value: 1, to: today) ?? now
         return DateInterval(start: start, end: end)

@@ -2,12 +2,18 @@ import SwiftUI
 
 struct ActivityView: View {
     @EnvironmentObject private var refresher: LiveRefresher
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let repository = ActivityRepository()
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @State private var range: ActivityRange = .today
+    @State private var displayedRange: ActivityRange = .today
     @State private var snapshot = ActivitySnapshot()
-    @State private var todaySnapshot = ActivitySnapshot()
+    @State private var timelineSelection: ActivityTimelineSelection = .followRange
+    @State private var displayedTimelineRange: ActivityRange = .today
+    @State private var timelineSnapshot = ActivitySnapshot()
+    @State private var showsRangeCalendar = false
+    @State private var showsTimelineCalendar = false
     @State private var loadedDay = Calendar.current.startOfDay(for: Date())
     @State private var isReloading = false
     @State private var refreshPending = false
@@ -18,7 +24,11 @@ struct ActivityView: View {
             VStack(alignment: .leading, spacing: 24) {
                 header
                 summaryCards
+                    .id(displayedRange)
+                    .transition(contentTransition)
                 keyboardSection
+                    .id(displayedRange)
+                    .transition(contentTransition)
                 timeline
                 calculationNote
             }
@@ -33,7 +43,11 @@ struct ActivityView: View {
             hoveredBucketID = nil
             reload()
         }
-        .onValueChange(of: snapshot.days.map(\.id)) { hoveredBucketID = nil }
+        .onValueChange(of: timelineSelection) {
+            hoveredBucketID = nil
+            reload()
+        }
+        .onValueChange(of: timelineSnapshot.days.map(\.id)) { hoveredBucketID = nil }
         .onDisappear { hoveredBucketID = nil }
         .onReceive(refresher.$generation.dropFirst()) { _ in reload() }
         .onReceive(clock) { now in
@@ -45,25 +59,91 @@ struct ActivityView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 7) {
-                Text("键盘活跃")
-                    .font(.system(size: 28, weight: .bold))
-                Text("看看专注发生在什么时候。")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 20)
-            VStack(alignment: .trailing, spacing: 10) {
-                Picker("时间范围", selection: $range) {
-                    ForEach(ActivityRange.allCases) { Text($0.rawValue).tag($0) }
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("键盘活跃")
+                        .font(.system(size: 28, weight: .bold))
+                    Text("看看专注发生在什么时候。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 265)
+                Spacer(minLength: 20)
                 CaptureStatusView(connectedText: "正在记录键盘活动")
                     .font(.subheadline)
+                    .padding(.top, 7)
             }
+            HStack(spacing: 12) {
+                Text("时间范围").font(.subheadline).foregroundStyle(.secondary)
+                HStack(spacing: 2) {
+                    ForEach(ActivityRange.allCases) { option in
+                        rangeButton(option.rawValue, selected: range == option) { range = option }
+                    }
+                    rangeButton("自定义时段", selected: isCustomRange) { showsRangeCalendar = true }
+                        .popover(isPresented: $showsRangeCalendar, arrowEdge: .bottom) {
+                            CalendarDateRangePicker(
+                                initialRange: calendarDates(for: range, relativeTo: Date()),
+                                referenceDate: Date(),
+                                onCancel: { showsRangeCalendar = false },
+                                onApply: { dates in
+                                    range = .custom(dates)
+                                    showsRangeCalendar = false
+                                }
+                            )
+                        }
+                }
+                .padding(3)
+                .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
+                .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: range)
+                ProgressView()
+                    .controlSize(.small)
+                    .opacity(isChangingRange ? 1 : 0)
+                    .accessibilityHidden(!isChangingRange)
+                    .accessibilityLabel("正在更新所选时段")
+                Spacer(minLength: 0)
+            }
+            Text(dateDescription(for: displayedRange))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
         }
+    }
+
+    private var contentTransition: AnyTransition {
+        reduceMotion ? .identity : WorkspaceMotion.pageTransition
+    }
+
+    private var isCustomRange: Bool {
+        if case .custom = range { return true }
+        return false
+    }
+
+    private var requestedTimelineRange: ActivityRange {
+        switch timelineSelection {
+        case .followRange: return range
+        case .today: return .today
+        case .yesterday: return .yesterday
+        case .day(let dates): return .custom(dates)
+        }
+    }
+
+    private var isChangingRange: Bool {
+        isReloading && (range != displayedRange || requestedTimelineRange != displayedTimelineRange || snapshot.days.isEmpty)
+    }
+
+    private func rangeButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: selected ? .semibold : .medium))
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .foregroundStyle(selected ? Color.white : Color.primary)
+                .background(selected ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     private var summaryCards: some View {
@@ -90,23 +170,23 @@ struct ActivityView: View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("今日键盘热力图").font(.headline)
-                    Text("悬停查看今日次数 · Fn 显示按住时长")
+                    Text(keyboardTitle).font(.headline)
+                    Text("悬停查看按键次数 · Fn 显示按住时长")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text("\(todaySnapshot.keyCount.formatted()) 次")
+                Text("\(snapshot.keyCount.formatted()) 次")
                     .font(.system(.subheadline, design: .rounded).weight(.medium))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
-            KeyboardHeatmapView(counts: todaySnapshot.keyCounts, fnMs: todaySnapshot.fnMs)
+            KeyboardHeatmapView(counts: snapshot.keyCounts, fnMs: snapshot.fnMs, periodDescription: keyboardPeriodDescription)
                 .frame(maxWidth: 700)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 4)
-            if todaySnapshot.keyCounts.isEmpty {
-                Text("今天还没有按键记录，开始使用键盘后，这里会显示每个按键的热度。")
+            if snapshot.keyCounts.isEmpty {
+                Text(snapshot.errorMessage == nil ? "\(keyboardPeriodDescription)没有按键记录。" : "暂无可读取的键盘记录。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -141,6 +221,85 @@ struct ActivityView: View {
                 .accessibilityLabel("图例：颜色由浅到深表示活跃时间由少到多")
             }
 
+            timelineControls
+            timelineRows
+                .id(displayedTimelineRange)
+                .transition(contentTransition)
+        }
+        .padding(22)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color(nsColor: .controlBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.055)))
+        .overlayPreferenceValue(ActivityTimelineBoundsKey.self) { bounds in
+            GeometryReader { proxy in
+                if let day = timelineSnapshot.days.first(where: { $0.buckets.contains { $0.id == hoveredBucketID } }),
+                   let index = day.buckets.firstIndex(where: { $0.id == hoveredBucketID }),
+                   let anchor = bounds[day.id] {
+                    let strip = proxy[anchor]
+                    let width = min(240, max(0, proxy.size.width - 24))
+                    let height: CGFloat = 132
+                    let pitch = (strip.width + 2) / CGFloat(day.buckets.count)
+                    let midpoint = strip.minX + pitch * (CGFloat(index) + 0.5) - 1
+                    let x = min(max(midpoint, width / 2 + 12), proxy.size.width - width / 2 - 12)
+                    let above = strip.minY - height / 2 - 10
+                    let below = strip.maxY + height / 2 + 10
+                    let preferredY = above >= height / 2 + 12 || below > proxy.size.height - height / 2 - 12 ? above : below
+                    let y = min(max(preferredY, height / 2 + 12), proxy.size.height - height / 2 - 12)
+                    bucketTooltip(day.buckets[index], day: day.date)
+                        .frame(width: width, height: height)
+                        .position(x: x, y: y)
+                        .accessibilityHidden(true)
+                }
+                // A stationary pointer must not leave a stale tooltip behind
+                // when the chart moves during scrolling or window resizing.
+                Color.clear
+                    .onValueChange(of: proxy.frame(in: .global)) { hoveredBucketID = nil }
+            }
+            .allowsHitTesting(false)
+        }
+        .onHover { inside in if !inside { hoveredBucketID = nil } }
+    }
+
+    private var timelineControls: some View {
+        HStack(spacing: 2) {
+            rangeButton("跟随范围", selected: timelineSelection == .followRange) { timelineSelection = .followRange }
+            rangeButton("今日", selected: timelineSelection == .today) { timelineSelection = .today }
+            rangeButton("昨日", selected: timelineSelection == .yesterday) { timelineSelection = .yesterday }
+            rangeButton("指定日", selected: isTimelineSpecificDay) { showsTimelineCalendar = true }
+                .popover(isPresented: $showsTimelineCalendar, arrowEdge: .bottom) {
+                    CalendarDateRangePicker(
+                        initialRange: timelineCalendarDates,
+                        referenceDate: Date(),
+                        selectionMode: .singleDay,
+                        onCancel: { showsTimelineCalendar = false },
+                        onApply: { dates in
+                            timelineSelection = .day(dates)
+                            showsTimelineCalendar = false
+                        }
+                    )
+                }
+        }
+        .padding(3)
+        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
+        .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: timelineSelection)
+    }
+
+    private var isTimelineSpecificDay: Bool {
+        if case .day = timelineSelection { return true }
+        return false
+    }
+
+    private var timelineCalendarDates: CalendarDateRange {
+        if case .day(let dates) = timelineSelection { return dates }
+        let dates = calendarDates(for: requestedTimelineRange, relativeTo: Date())
+        return CalendarDateRange(start: dates.end, end: dates.end)
+    }
+
+    private var timelineRows: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(dateDescription(for: displayedTimelineRange))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
             VStack(spacing: 14) {
                 HStack(spacing: 12) {
                     Text("日期").frame(width: 70, alignment: .leading)
@@ -150,7 +309,7 @@ struct ActivityView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-                ForEach(snapshot.days) { day in
+                ForEach(timelineSnapshot.days) { day in
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(day.date, format: .dateTime.month(.twoDigits).day(.twoDigits))
@@ -178,44 +337,13 @@ struct ActivityView: View {
                 }
             }
 
-            if snapshot.keyCount == 0 && snapshot.activeMs == 0 {
-                Label(snapshot.errorMessage == nil ? "这段时间还没有键盘活动。任务可以照常记在收集箱。" : "暂无可读取的键盘记录。采集服务运行后，这里会自动更新。", systemImage: "keyboard")
+            if timelineSnapshot.keyCount == 0 && timelineSnapshot.activeMs == 0 {
+                Label(timelineSnapshot.errorMessage == nil ? "这段时间还没有键盘活动。任务可以照常记在收集箱。" : "暂无可读取的键盘记录。采集服务运行后，这里会自动更新。", systemImage: "keyboard")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
             }
         }
-        .padding(22)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(nsColor: .controlBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.055)))
-        .overlayPreferenceValue(ActivityTimelineBoundsKey.self) { bounds in
-            GeometryReader { proxy in
-                if let day = snapshot.days.first(where: { $0.buckets.contains { $0.id == hoveredBucketID } }),
-                   let index = day.buckets.firstIndex(where: { $0.id == hoveredBucketID }),
-                   let anchor = bounds[day.id] {
-                    let strip = proxy[anchor]
-                    let width = min(240, max(0, proxy.size.width - 24))
-                    let height: CGFloat = 132
-                    let pitch = (strip.width + 2) / CGFloat(day.buckets.count)
-                    let midpoint = strip.minX + pitch * (CGFloat(index) + 0.5) - 1
-                    let x = min(max(midpoint, width / 2 + 12), proxy.size.width - width / 2 - 12)
-                    let above = strip.minY - height / 2 - 10
-                    let below = strip.maxY + height / 2 + 10
-                    let preferredY = above >= height / 2 + 12 || below > proxy.size.height - height / 2 - 12 ? above : below
-                    let y = min(max(preferredY, height / 2 + 12), proxy.size.height - height / 2 - 12)
-                    bucketTooltip(day.buckets[index], day: day.date)
-                        .frame(width: width, height: height)
-                        .position(x: x, y: y)
-                        .accessibilityHidden(true)
-                }
-                // A stationary pointer must not leave a stale tooltip behind
-                // when the chart moves during scrolling or window resizing.
-                Color.clear
-                    .onValueChange(of: proxy.frame(in: .global)) { hoveredBucketID = nil }
-            }
-            .allowsHitTesting(false)
-        }
-        .onHover { inside in if !inside { hoveredBucketID = nil } }
     }
 
     private func timelineBuckets(for day: ActivityDay) -> some View {
@@ -255,7 +383,7 @@ struct ActivityView: View {
                 }
             }
         }
-        .frame(height: range == .today ? 68 : 30)
+        .frame(height: timelineSnapshot.days.count == 1 ? 68 : 30)
         .anchorPreference(key: ActivityTimelineBoundsKey.self, value: .bounds) { [day.id: $0] }
         .accessibilityElement(children: .contain)
     }
@@ -337,6 +465,39 @@ struct ActivityView: View {
         return "\(start.formatted(clock))–\(endLabel)"
     }
 
+    private var keyboardTitle: String {
+        switch displayedRange {
+        case .today: return "今日键盘热力图"
+        case .yesterday: return "昨日键盘热力图"
+        case .lastSevenDays: return "最近 7 天键盘热力图"
+        case .thisWeek: return "本周键盘热力图"
+        case .custom: return "自定义时段键盘热力图"
+        }
+    }
+
+    private var keyboardPeriodDescription: String {
+        switch displayedRange {
+        case .today: return "今天"
+        case .yesterday: return "昨天"
+        default: return "所选时段"
+        }
+    }
+
+    private func calendarDates(for selectedRange: ActivityRange, relativeTo date: Date) -> CalendarDateRange {
+        let interval = selectedRange.interval(now: date, calendar: .current)
+        let end = Calendar.current.date(byAdding: .day, value: -1, to: interval.end) ?? interval.start
+        return CalendarDateRange(start: interval.start, end: end)
+    }
+
+    private func dateDescription(for selectedRange: ActivityRange) -> String {
+        let dates = calendarDates(for: selectedRange, relativeTo: loadedDay)
+        let style = Date.FormatStyle.dateTime.year().month(.twoDigits).day(.twoDigits)
+            .locale(Locale(identifier: "zh_CN"))
+        let start = dates.start.formatted(style)
+        if dates.start == dates.end { return start }
+        return "\(start) — \(dates.end.formatted(style))"
+    }
+
     private func reload() {
         guard !isReloading else {
             refreshPending = true
@@ -344,21 +505,34 @@ struct ActivityView: View {
         }
         isReloading = true
         let selectedRange = range
+        let selectedTimelineRange = requestedTimelineRange
+        let selectedTimelineSelection = timelineSelection
         let events = refresher.liveEvents
         let connected = refresher.isConnected
         let now = Date()
         let repository = repository
         Task {
-            let (result, today) = await Task.detached(priority: .utility) {
+            let (result, timelineResult) = await Task.detached(priority: .utility) {
                 let selected = repository.snapshot(range: selectedRange, now: now, liveEvents: events, liveConnected: connected)
-                let today = selectedRange == .today ? selected : repository.snapshot(
-                    range: .today, now: now, liveEvents: events, liveConnected: connected
+                let timeline = selectedRange == selectedTimelineRange ? selected : repository.snapshot(
+                    range: selectedTimelineRange, now: now, liveEvents: events, liveConnected: connected
                 )
-                return (selected, today)
+                return (selected, timeline)
             }.value
-            if range == selectedRange { snapshot = result }
-            todaySnapshot = today
-            loadedDay = Calendar.current.startOfDay(for: now)
+            // Keep the previous labelled data visible until this request is
+            // ready. A faster subsequent selection must never show old data
+            // beneath its new heading.
+            if range == selectedRange && timelineSelection == selectedTimelineSelection {
+                let rangeChanged = displayedRange != selectedRange || displayedTimelineRange != selectedTimelineRange
+                if rangeChanged { hoveredBucketID = nil }
+                withAnimation(rangeChanged && !reduceMotion ? WorkspaceMotion.pageChange : nil) {
+                    displayedRange = selectedRange
+                    displayedTimelineRange = selectedTimelineRange
+                    snapshot = result
+                    timelineSnapshot = timelineResult
+                    loadedDay = Calendar.current.startOfDay(for: now)
+                }
+            }
             isReloading = false
             if refreshPending {
                 refreshPending = false
@@ -366,6 +540,13 @@ struct ActivityView: View {
             }
         }
     }
+}
+
+private enum ActivityTimelineSelection: Hashable {
+    case followRange
+    case today
+    case yesterday
+    case day(CalendarDateRange)
 }
 
 private struct ActivityTimelineBoundsKey: PreferenceKey {

@@ -1,7 +1,7 @@
 import Foundation
 
 /// One immutable, read-only selection drives both the visible review and its export.
-/// Pending tasks remain in either review period until they are completed, regardless
+/// Pending tasks remain in every review range until they are completed, regardless
 /// of their creation or planned date; completed tasks use the actual completion time.
 struct TaskReviewSnapshot {
     let completed: [TodoTask]
@@ -24,12 +24,19 @@ struct TaskReviewSnapshot {
 
     init(tasks sourceTasks: [TodoTask], period: TaskReviewPeriod,
          referenceDate: Date = Date(), calendar: Calendar = .current, query: String = "") {
-        let interval = period.interval(relativeTo: referenceDate, calendar: calendar)
+        self.init(tasks: sourceTasks, range: .preset(period), referenceDate: referenceDate,
+                  calendar: calendar, query: query)
+    }
+
+    init(tasks sourceTasks: [TodoTask], range: TaskReviewRange,
+         referenceDate: Date = Date(), calendar: Calendar = .current, query: String = "") {
+        let dates = range.dateRange(relativeTo: referenceDate, calendar: calendar)
+        let interval = dates.interval(calendar: calendar)
         let knownTasks = sourceTasks.filter { $0.createdAt <= referenceDate }
         let byID = Dictionary(knownTasks.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
         let eligible = byID.values.filter { task in
             guard let completedAt = task.completedAt else { return true }
-            return completedAt >= interval.start && completedAt <= interval.end
+            return completedAt >= interval.start && completedAt < interval.end && completedAt <= referenceDate
         }
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let directlyMatches: (TodoTask) -> Bool = { task in
@@ -50,9 +57,9 @@ struct TaskReviewSnapshot {
             if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
             return $0.id < $1.id
         }
-        let title = period == .thisWeek ? "本周任务回顾" : "最近 7 天任务回顾"
+        let title = range.title
         let dateFormatter = Self.formatter("yyyy-MM-dd", calendar: calendar)
-        let dateLabel = "\(dateFormatter.string(from: interval.start)) — \(dateFormatter.string(from: interval.end))"
+        let dateLabel = "\(dateFormatter.string(from: dates.start)) — \(dateFormatter.string(from: dates.end))"
         let parentTitles = byID.mapValues(\.title)
 
         self.completed = completed

@@ -1,5 +1,6 @@
 import SwiftUI
 
+@MainActor
 struct RankingView: View {
     @EnvironmentObject private var refresher: LiveRefresher
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -7,9 +8,11 @@ struct RankingView: View {
     private let repo = StatsRepository()
     private let clock = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
-    @State private var range: TimeRange = .today
-    @State private var apps: [AppRank] = []
-    @State private var identities: [String: ApplicationIdentityCache.Identity] = [:]
+    @State private var requestedRange: TimeRange = .today
+    @State private var snapshot = AppRankingSnapshot.empty()
+    @State private var hasLoaded = false
+    @State private var showsDayPicker = false
+    @State private var pickerReferenceDate = Date()
     @State private var isReloading = false
     @State private var refreshPending = false
     @State private var loadedDay = Calendar.current.startOfDay(for: Date())
@@ -28,7 +31,6 @@ struct RankingView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .background(TaskScrollerStyle())
         .onAppear(perform: reload)
-        .onValueChange(of: range) { reload() }
         .onReceive(refresher.$generation.dropFirst()) { _ in reload() }
         .onReceive(clock) { now in
             if !Calendar.current.isDate(now, inSameDayAs: loadedDay) { reload() }
@@ -73,7 +75,7 @@ struct RankingView: View {
 
     private var appSection: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .center, spacing: 20) {
+            HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("应用活跃度").font(.headline)
                     Text("按键盘活动估算使用时间")
@@ -81,33 +83,131 @@ struct RankingView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
-                Picker("应用统计范围", selection: $range) {
-                    ForEach(TimeRange.allCases) { Text($0.rawValue).tag($0) }
+                if isReloading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .accessibilityLabel("正在更新应用活跃度")
                 }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 240)
             }
-            if apps.isEmpty {
+
+            appRangeControls
+
+            ZStack(alignment: .topLeading) {
+                appResults(snapshot)
+                    .id(snapshot.range)
+                    .transition(reduceMotion ? .identity : WorkspaceMotion.pageTransition)
+            }
+        }
+        .padding(22)
+        .background(sectionBackground)
+    }
+
+    private var appRangeControls: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 2) {
+                ForEach(TimeRange.allCases) { option in
+                    Button {
+                        selectRange(option)
+                    } label: {
+                        Text(option.rawValue)
+                            .font(.subheadline.weight(.medium))
+                            .fixedSize()
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 6)
+                            .foregroundStyle(snapshot.range == option ? Color.white : Color.primary)
+                            .background {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(snapshot.range == option ? Color.accentColor : Color.clear)
+                            }
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(snapshot.range == option ? [.isSelected] : [])
+                }
+            }
+            .padding(2)
+            .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+
+            Button {
+                pickerReferenceDate = Date()
+                showsDayPicker = true
+            } label: {
+                Label("指定日", systemImage: "calendar")
+                    .font(.subheadline.weight(.medium))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .foregroundStyle(isSpecificDay ? Color.white : Color.accentColor)
+                    .background {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(isSpecificDay ? Color.accentColor : Color.accentColor.opacity(0.08))
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(isSpecificDay ? [.isSelected] : [])
+            .popover(isPresented: $showsDayPicker, arrowEdge: .bottom) {
+                CalendarDateRangePicker(
+                    initialRange: pickerInitialRange,
+                    referenceDate: pickerReferenceDate,
+                    selectionMode: .singleDay,
+                    onCancel: { showsDayPicker = false },
+                    onApply: { dates in
+                        showsDayPicker = false
+                        selectRange(.day(dates.start))
+                    }
+                )
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("应用统计范围")
+    }
+
+    private var isSpecificDay: Bool {
+        if case .day = snapshot.range { return true }
+        return false
+    }
+
+    private var pickerInitialRange: CalendarDateRange {
+        let day: Date
+        switch requestedRange {
+        case .day(let date): day = date
+        case .yesterday: day = requestedRange.interval(now: pickerReferenceDate).start
+        default: day = pickerReferenceDate
+        }
+        return CalendarDateRange(start: day, end: day)
+    }
+
+    private func appResults(_ result: AppRankingSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(result.dateLabel)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+
+            if !hasLoaded {
+                Text("正在读取应用使用记录…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 18)
+            } else if result.apps.isEmpty {
                 Label("暂无应用使用记录", systemImage: "app.dashed")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 18)
             } else {
-                let maxUsage = max(1, apps.map(\.usageMs).max() ?? 1)
+                let maxUsage = max(1, result.apps.map(\.usageMs).max() ?? 1)
                 VStack(spacing: 0) {
-                    ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
-                        appRow(index: index, app: app, maxUsage: maxUsage)
-                        if index < apps.count - 1 {
+                    ForEach(Array(result.apps.enumerated()), id: \.element.id) { index, app in
+                        appRow(index: index, app: app, maxUsage: maxUsage, identity: result.identities[app.app])
+                        if index < result.apps.count - 1 {
                             Divider().opacity(0.45).padding(.leading, 40)
                         }
                     }
                 }
             }
         }
-        .padding(22)
-        .background(sectionBackground)
     }
 
     private var sectionBackground: some View {
@@ -119,9 +219,8 @@ struct RankingView: View {
             }
     }
 
-    private func appRow(index: Int, app: AppRank, maxUsage: Int64) -> some View {
-        let identity = identities[app.app]
-        return HStack(spacing: 12) {
+    private func appRow(index: Int, app: AppRank, maxUsage: Int64, identity: ApplicationIdentityCache.Identity?) -> some View {
+        HStack(spacing: 12) {
             Group {
                 if let icon = identity?.icon {
                     Image(nsImage: icon).resizable().interpolation(.high)
@@ -169,25 +268,44 @@ struct RankingView: View {
         .accessibilityElement(children: .combine)
     }
 
+    private func selectRange(_ range: TimeRange) {
+        requestedRange = range
+        reload()
+    }
+
     private func reload() {
         guard !isReloading else {
             refreshPending = true
             return
         }
         isReloading = true
-        let selectedRange = range
+        let selectedRange = requestedRange
         let now = Date()
+        let calendar = Calendar.current
         let repo = repo
         Task {
             let rankings = await Task.detached(priority: .utility) {
-                repo.topApps(range: selectedRange)
+                repo.topApps(range: selectedRange, now: now, calendar: calendar)
             }.value
-            loadedDay = Calendar.current.startOfDay(for: now)
-            if range == selectedRange {
-                identities = Dictionary(uniqueKeysWithValues: rankings.map {
+            loadedDay = calendar.startOfDay(for: now)
+            if requestedRange == selectedRange {
+                let identities = Dictionary(uniqueKeysWithValues: rankings.map {
                     ($0.app, ApplicationIdentityCache.shared.identity(for: $0.app))
                 })
-                apps = rankings
+                let result = AppRankingSnapshot(
+                    range: selectedRange,
+                    interval: selectedRange.interval(now: now, calendar: calendar),
+                    apps: rankings,
+                    identities: identities
+                )
+                // Keep the date label, selected control and data in one transaction.
+                // Live recording updates the current range without replaying a transition.
+                let animation = hasLoaded && snapshot.range != selectedRange && !reduceMotion
+                    ? WorkspaceMotion.pageChange : nil
+                withAnimation(animation) {
+                    snapshot = result
+                    hasLoaded = true
+                }
             }
             isReloading = false
             if refreshPending {
@@ -195,5 +313,30 @@ struct RankingView: View {
                 reload()
             }
         }
+    }
+}
+
+private struct AppRankingSnapshot {
+    let range: TimeRange
+    let interval: DateInterval
+    let apps: [AppRank]
+    let identities: [String: ApplicationIdentityCache.Identity]
+
+    static func empty() -> Self {
+        Self(range: .today, interval: TimeRange.today.interval(), apps: [], identities: [:])
+    }
+
+    var dateLabel: String {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        let start = formatter.string(from: interval.start)
+        let lastDay = calendar.date(byAdding: .day, value: -1, to: interval.end) ?? interval.start
+        if calendar.isDate(interval.start, inSameDayAs: lastDay) {
+            return "\(range.rawValue) · \(start)"
+        }
+        return "\(range.rawValue) · \(start) — \(formatter.string(from: lastDay))"
     }
 }

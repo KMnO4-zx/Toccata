@@ -26,7 +26,8 @@ struct TasksView: View {
     @State private var query = ""
     @Binding private var selection: String?
     @Binding private var taskPeriod: TaskReviewPeriod
-    @State private var reviewPeriod: TaskReviewPeriod = .thisWeek
+    @State private var reviewRange: TaskReviewRange = .preset(.thisWeek)
+    @State private var showsCustomReviewRange = false
     @State private var showsCompleted = true
     @State private var copied = false
     @State private var referenceDate = Date()
@@ -58,7 +59,7 @@ struct TasksView: View {
             .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
     }
     private var reviewSnapshot: TaskReviewSnapshot {
-        TaskReviewSnapshot(tasks: store.tasks, period: reviewPeriod, referenceDate: referenceDate, query: query)
+        TaskReviewSnapshot(tasks: store.tasks, range: reviewRange, referenceDate: referenceDate, query: query)
     }
 
     var body: some View {
@@ -81,9 +82,10 @@ struct TasksView: View {
             query = ""
             selection = nil
             copied = false
+            showsCustomReviewRange = false
         }
         .onChange(of: taskPeriod) { _ in selection = nil }
-        .onChange(of: reviewPeriod) { _ in selection = nil; copied = false }
+        .onChange(of: reviewRange) { _ in selection = nil; copied = false }
         .onChange(of: query) { _ in copied = false }
         .onChange(of: store.tasks.map(\.id)) { ids in
             if let selection, !ids.contains(selection) { self.selection = nil }
@@ -122,7 +124,7 @@ struct TasksView: View {
                 } else if mode == .inbox {
                     quickAdd
                 } else if let review {
-                    periodPicker("回顾范围", selection: $reviewPeriod)
+                    reviewRangeControl
                     VStack(alignment: .leading, spacing: 5) {
                         Text(review.dateLabel)
                         Text("已完成 \(review.completed.count) 项 · 未完成 \(review.pending.count) 项")
@@ -155,7 +157,7 @@ struct TasksView: View {
             ZStack {
                 if let review {
                     reviewList(review)
-                        .id(reviewPeriod)
+                        .id(reviewRange)
                         .transition(WorkspaceMotion.pageTransition)
                 } else {
                     inboxList
@@ -166,7 +168,7 @@ struct TasksView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
             .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: taskPeriod)
-            .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: reviewPeriod)
+            .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: reviewRange)
 
             Divider()
             HStack(spacing: 5) {
@@ -190,6 +192,63 @@ struct TasksView: View {
         }
         .labelsHidden()
         .pickerStyle(.segmented)
+    }
+
+    private var reviewRangeControl: some View {
+        HStack(spacing: 2) {
+            ForEach(TaskReviewPeriod.allCases) { period in
+                Button {
+                    reviewRange = .preset(period)
+                } label: {
+                    reviewRangeLabel(period == .thisWeek ? "本周" : "最近 7 天",
+                                     selected: reviewRange == .preset(period))
+                }
+                .accessibilityValue(reviewRange == .preset(period) ? "已选择" : "未选择")
+            }
+            Button {
+                referenceDate = Date()
+                showsCustomReviewRange = true
+            } label: {
+                reviewRangeLabel("自定义时段", selected: isCustomReviewRange, symbol: "calendar")
+            }
+            .accessibilityValue(isCustomReviewRange ? "已选择" : "未选择")
+            .help("在日历中选择开始和结束日期")
+            .popover(isPresented: $showsCustomReviewRange, arrowEdge: .bottom) {
+                CalendarDateRangePicker(
+                    initialRange: reviewRange.dateRange(relativeTo: referenceDate),
+                    referenceDate: referenceDate,
+                    onCancel: { showsCustomReviewRange = false },
+                    onApply: { selected in
+                        reviewRange = .custom(selected)
+                        showsCustomReviewRange = false
+                    }
+                )
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(3)
+        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("回顾范围")
+    }
+
+    private var isCustomReviewRange: Bool {
+        if case .custom = reviewRange { return true }
+        return false
+    }
+
+    private func reviewRangeLabel(_ title: String, selected: Bool, symbol: String? = nil) -> some View {
+        HStack(spacing: 5) {
+            if let symbol { Image(systemName: symbol) }
+            Text(title)
+        }
+        .font(.system(size: 12, weight: selected ? .semibold : .medium))
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .foregroundStyle(selected ? Color.white : Color.primary)
+        .background(selected ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+        .contentShape(Rectangle())
     }
 
     private var quickAdd: some View {

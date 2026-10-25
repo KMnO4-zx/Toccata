@@ -6,12 +6,15 @@ struct KeyboardHeatmapView: View {
     private let layout: KeyboardLayout
     private let counts: [Int: Int]
     private let fnMs: Int64
+    private let periodDescription: String
     @State private var hoveredKeyID: String?
 
-    init(layout: KeyboardLayout = .magicKeyboard, counts: [Int: Int] = [:], fnMs: Int64 = 0) {
+    init(layout: KeyboardLayout = .magicKeyboard, counts: [Int: Int] = [:], fnMs: Int64 = 0,
+         periodDescription: String = "今天") {
         self.layout = layout
         self.counts = counts
         self.fnMs = fnMs
+        self.periodDescription = periodDescription
     }
 
     var body: some View {
@@ -88,16 +91,16 @@ struct KeyboardHeatmapView: View {
         }
         .aspectRatio(layout.aspectRatio, contentMode: .fit)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("今日逐键键盘热度"))
+        .accessibilityLabel(Text("\(periodDescription)逐键键盘热度"))
         .onDisappear { hoveredKeyID = nil }
     }
 
     private func activityDescription(for key: KeyboardLayout.Key) -> String {
         if key.code == 63 {
-            return "今天按住 \(Formatters.duration(ms: fnMs))"
+            return "\(periodDescription)按住 \(Formatters.duration(ms: fnMs))"
         }
         let count = max(0, counts[key.code ?? Int.min] ?? 0)
-        return "今天按下 \(count.formatted()) 次"
+        return "\(periodDescription)按下 \(count.formatted()) 次"
     }
 
     private func keyName(for key: KeyboardLayout.Key) -> String {

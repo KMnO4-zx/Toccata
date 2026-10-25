@@ -24,6 +24,8 @@ final class ActivityRepository {
         // Look behind the selection so a session crossing midnight is clipped
         // at midnight rather than starting at its first event in the new day.
         let start = ActivityCalculator.milliseconds(interval.start) - max(policy.idleGapMs, policy.trailingGraceMs)
+        // A key released after a historical selection can carry a hold that
+        // overlaps it. Read through now, then clip reconstructed spans below.
         let end = ActivityCalculator.milliseconds(now)
         var events: [ActivityKeyEvent] = []
         var error: String?

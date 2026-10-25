@@ -1,22 +1,48 @@
 import Foundation
 
-enum TimeRange: String, CaseIterable, Identifiable {
-    case today = "今日"
-    case week = "近 7 日"
-    case month = "近 30 日"
+enum TimeRange: Hashable, CaseIterable, Identifiable {
+    case today
+    case yesterday
+    case week
+    case month
+    case day(Date)
 
-    var id: String { rawValue }
+    static let allCases: [TimeRange] = [.today, .yesterday, .week, .month]
+
+    var id: Self { self }
+
+    var rawValue: String {
+        switch self {
+        case .today: return "今日"
+        case .yesterday: return "昨日"
+        case .week: return "近 7 日"
+        case .month: return "近 30 日"
+        case .day: return "指定日"
+        }
+    }
 
     func interval(now: Date = Date(), calendar: Calendar = .current) -> DateInterval {
         let startOfToday = calendar.startOfDay(for: now)
-        let daysBack: Int
+        let start: Date
+        let lastDay: Date
         switch self {
-        case .today: daysBack = 0
-        case .week: daysBack = 6
-        case .month: daysBack = 29
+        case .today:
+            start = startOfToday
+            lastDay = startOfToday
+        case .yesterday:
+            start = calendar.date(byAdding: .day, value: -1, to: startOfToday) ?? startOfToday
+            lastDay = start
+        case .week:
+            start = calendar.date(byAdding: .day, value: -6, to: startOfToday) ?? startOfToday
+            lastDay = startOfToday
+        case .month:
+            start = calendar.date(byAdding: .day, value: -29, to: startOfToday) ?? startOfToday
+            lastDay = startOfToday
+        case .day(let date):
+            start = calendar.startOfDay(for: date)
+            lastDay = start
         }
-        let start = calendar.date(byAdding: .day, value: -daysBack, to: startOfToday) ?? startOfToday
-        let end = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
+        let end = calendar.date(byAdding: .day, value: 1, to: lastDay) ?? lastDay
         return DateInterval(start: start, end: end)
     }
 
@@ -151,16 +177,29 @@ final class StatsRepository {
         }
     }
 
-    func topApps(range: TimeRange, limit: Int = 20) -> [AppRank] {
-        let (rangeStart, rangeEnd) = range.intervalMs
+    func topApps(range: TimeRange, limit: Int = 20, now: Date = Date(), calendar: Calendar = .current) -> [AppRank] {
+        let interval = range.interval(now: now, calendar: calendar)
+        let rangeStart = Int64(interval.start.timeIntervalSince1970 * 1000)
+        let rangeEnd = Int64(interval.end.timeIntervalSince1970 * 1000)
         return withDatabase([]) { db in
+            // Session counts can span midnight. Count dated key-down events
+            // separately so clipping usage never imports an adjacent day's keys.
             try db.query(
                 """
-                SELECT app, SUM(MIN(end_ms, ?)-MAX(start_ms, ?)) u, SUM(key_count) \
-                FROM app_sessions WHERE start_ms<? AND end_ms>? \
-                GROUP BY app ORDER BY u DESC LIMIT ?
+                WITH app_usage AS (
+                    SELECT app, SUM(MIN(end_ms, ?)-MAX(start_ms, ?)) usage_ms
+                    FROM app_sessions WHERE start_ms<? AND end_ms>?
+                    GROUP BY app
+                ), app_keys AS (
+                    SELECT app, COUNT(*) key_count FROM key_events
+                    WHERE kind=0 AND ts_ms>=? AND ts_ms<? AND app IS NOT NULL
+                    GROUP BY app
+                )
+                SELECT app_usage.app, app_usage.usage_ms, COALESCE(app_keys.key_count, 0)
+                FROM app_usage LEFT JOIN app_keys ON app_keys.app=app_usage.app
+                ORDER BY app_usage.usage_ms DESC, app_usage.app ASC LIMIT ?
                 """,
-                params: [rangeEnd, rangeStart, rangeEnd, rangeStart, Int64(limit)]
+                params: [rangeEnd, rangeStart, rangeEnd, rangeStart, rangeStart, rangeEnd, Int64(limit)]
             ) { AppRank(app: columnText($0, 0), usageMs: columnInt64($0, 1), keyCount: columnInt64($0, 2)) }
         }
     }

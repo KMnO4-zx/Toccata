@@ -197,6 +197,101 @@ final class ActivityTests: XCTestCase {
         XCTAssertEqual(recent.end, week.end)
     }
 
+    func testYesterdayIncludesItsLastMillisecondButNotTodaysMidnight() {
+        let now = date(2026, 10, 20, hour: 12)
+        let interval = ActivityRange.yesterday.interval(now: now, calendar: calendar)
+        XCTAssertEqual(interval.start, date())
+        XCTAssertEqual(interval.end, date(2026, 10, 20))
+
+        let result = ActivityCalculator.snapshot(events: [
+            event(0, key: 0, kind: 0),
+            event(-1, key: 1, kind: 0, day: interval.end),
+            event(0, key: 2, kind: 0, day: interval.end)
+        ], range: .yesterday, now: now, calendar: calendar)
+
+        XCTAssertEqual(result.days.map(\.date), [interval.start])
+        XCTAssertEqual(result.keyCounts, [0: 1, 1: 1])
+        XCTAssertEqual(result.keyCount, 2)
+        XCTAssertEqual(result.days[0].buckets.last?.keyCount, 1)
+        XCTAssertEqual(result.days[0].keyCount, result.keyCount)
+    }
+
+    func testCustomRangeAggregatesDailyKeysAndFnWithoutDuplicatingLiveEvents() {
+        let secondDay = date(2026, 10, 20)
+        let afterRange = date(2026, 10, 21)
+        let persisted = [
+            event(-10_000, key: 8, kind: 0),
+            event(1_000, key: 0, kind: 0), event(1_100, key: 0, kind: 1, hold: 100),
+            event(-60_000, key: 63, kind: 0, day: secondDay),
+            event(60_000, key: 63, kind: 1, hold: 120_000, day: secondDay),
+            event(120_000, key: 0, kind: 0, day: secondDay),
+            event(120_100, key: 0, kind: 1, hold: 100, day: secondDay),
+            event(121_000, key: 12, kind: 0, day: secondDay),
+            event(121_100, key: 12, kind: 1, hold: 100, day: secondDay),
+            event(0, key: 9, kind: 0, day: afterRange)
+        ]
+        let live = [
+            event(120_000, key: 0, kind: 0, day: secondDay),
+            event(120_100, key: 0, kind: 1, day: secondDay),
+            event(122_000, key: 12, kind: 0, day: secondDay),
+            event(122_100, key: 12, kind: 1, day: secondDay),
+            event(1_000, key: 9, kind: 0, day: afterRange)
+        ]
+        let range = ActivityRange.custom(CalendarDateRange(start: date(), end: secondDay, calendar: calendar))
+        let result = ActivityCalculator.snapshot(events: persisted, range: range,
+            now: afterRange.addingTimeInterval(10), calendar: calendar,
+            liveEvents: live, liveConnected: true)
+
+        XCTAssertEqual(result.days.map(\.date), [date(), secondDay])
+        XCTAssertEqual(result.days.map(\.keyCount), [2, 3])
+        XCTAssertEqual(result.keyCounts, [0: 2, 12: 2, 63: 1])
+        XCTAssertEqual(result.keyCount, 5)
+        XCTAssertEqual(result.fnMs, 120_000)
+        XCTAssertEqual(result.days.map(\.fnMs), [60_000, 60_000])
+        XCTAssertEqual(result.keyCounts.values.reduce(0, +), result.keyCount)
+        XCTAssertEqual(result.days.flatMap(\.buckets).reduce(0) { $0 + $1.keyCount }, result.keyCount)
+        XCTAssertEqual(result.days.flatMap(\.buckets).reduce(0) { $0 + $1.fnMs }, result.fnMs)
+        XCTAssertEqual(result.days.reduce(0) { $0 + $1.activeMs }, result.activeMs)
+    }
+
+    func testCustomRangeIncludingTodayClipsLiveHoldAndFutureEventsAtNow() {
+        let today = date(2026, 10, 20)
+        let range = ActivityRange.custom(CalendarDateRange(start: date(), end: today, calendar: calendar))
+        let result = ActivityCalculator.snapshot(events: [
+            event(1_000, key: 0, kind: 0),
+            event(11_000, key: 12, kind: 0, day: today)
+        ], range: range, now: today.addingTimeInterval(10), calendar: calendar,
+            liveEvents: [event(5_000, key: 63, kind: 0, day: today)], liveConnected: true)
+
+        XCTAssertEqual(result.keyCounts, [0: 1, 63: 1])
+        XCTAssertEqual(result.fnMs, 5_000)
+        XCTAssertEqual(result.days.last?.activeMs, 5_000)
+        XCTAssertEqual(result.days.last?.buckets.first?.fnMs, 5_000)
+        XCTAssertTrue(result.days.last!.buckets.dropFirst().allSatisfy { $0.activeMs == 0 && $0.keyCount == 0 })
+    }
+
+    func testYesterdayAndCustomRangesUseLocalDaysAcrossDaylightSavingChanges() {
+        var local = calendar
+        local.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        for (month, day, hours) in [(3, 8, 23), (11, 1, 25)] {
+            let selected = local.date(from: DateComponents(year: 2026, month: month, day: day))!
+            let nextDay = local.date(byAdding: .day, value: 1, to: selected)!
+            let now = nextDay.addingTimeInterval(12 * 60 * 60)
+            let yesterday = ActivityRange.yesterday.interval(now: now, calendar: local)
+            XCTAssertEqual(yesterday.start, selected)
+            XCTAssertEqual(yesterday.end, nextDay)
+            XCTAssertEqual(yesterday.duration, Double(hours * 60 * 60))
+            let singleDay = ActivityRange.custom(CalendarDateRange(start: selected, end: selected, calendar: local))
+            XCTAssertEqual(singleDay.interval(now: now, calendar: local), yesterday)
+
+            let previousDay = local.date(byAdding: .day, value: -1, to: selected)!
+            let custom = ActivityRange.custom(CalendarDateRange(start: previousDay, end: nextDay, calendar: local))
+            let result = ActivityCalculator.snapshot(events: [], range: custom, now: now, calendar: local)
+            XCTAssertEqual(result.days.map { $0.buckets.count }, [96, hours * 4, 96])
+            XCTAssertEqual(custom.interval(now: now, calendar: local).duration, Double((48 + hours) * 60 * 60))
+        }
+    }
+
     func testBucketsFollowLocalDayOnDaylightSavingTransition() {
         var local = calendar
         local.timeZone = TimeZone(identifier: "America/Los_Angeles")!
@@ -248,6 +343,36 @@ final class ActivityTests: XCTestCase {
         XCTAssertEqual(result.fnMs, 30_000)
         XCTAssertEqual(result.keyCount, 1)
         XCTAssertEqual(result.activeMs, 40_100, "The cross-day hold and two separate input intervals should be clipped and unioned")
+    }
+
+    func testRepositoryKeepsReleaseAfterHistoricalRangeToRecoverCrossBoundaryHold() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("historical-activity-test.db")
+        var handle: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(url.path, &handle), SQLITE_OK)
+        let database = try XCTUnwrap(handle)
+        defer { sqlite3_close(database) }
+        let nextDay = date(2026, 10, 20)
+        let midnight = ActivityCalculator.milliseconds(nextDay)
+        let sql = """
+            CREATE TABLE key_events(ts_ms INTEGER NOT NULL, keycode INTEGER NOT NULL, kind INTEGER NOT NULL, hold_ms INTEGER);
+            INSERT INTO key_events VALUES(\(midnight - 180_000),63,0,NULL);
+            INSERT INTO key_events VALUES(\(midnight + 120_000),63,1,300000);
+            INSERT INTO key_events VALUES(\(midnight),12,0,NULL);
+            """
+        XCTAssertEqual(sqlite3_exec(database, sql, nil, nil, nil), SQLITE_OK)
+        let repository = ActivityRepository(url: url, policy: ActivityPolicy(), calendar: calendar)
+        let range = ActivityRange.custom(CalendarDateRange(start: date(), end: date(), calendar: calendar))
+        for selection in [ActivityRange.yesterday, range] {
+            let result = repository.snapshot(range: selection, now: nextDay.addingTimeInterval(180))
+            XCTAssertNil(result.errorMessage)
+            XCTAssertEqual(result.fnMs, 180_000)
+            XCTAssertEqual(result.activeMs, 180_000)
+            XCTAssertEqual(result.keyCounts, [63: 1])
+            XCTAssertEqual(result.days[0].buckets.last?.fnMs, 180_000)
+        }
     }
 
     func testMissingDatabaseCanStillRenderLiveEvents() {

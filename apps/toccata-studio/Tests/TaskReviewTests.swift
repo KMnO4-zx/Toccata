@@ -171,4 +171,103 @@ final class TaskReviewTests: XCTestCase {
         XCTAssertTrue(review.markdown.contains("  **保留格式**"))
         XCTAssertEqual(review.markdown.components(separatedBy: "\n").filter { $0.hasPrefix("- [") }.count, 1)
     }
+
+    func testCustomSingleDayIncludesItsLastMillisecondButNotTheNextMidnight() {
+        let start = date(20, hour: 0)
+        let nextDay = date(21, hour: 0)
+        let selected = CalendarDateRange(start: date(20, hour: 10), end: date(20, hour: 16), calendar: calendar)
+        let review = TaskReviewSnapshot(tasks: [
+            task("before", completed: start.addingTimeInterval(-0.001)),
+            task("start", completed: start),
+            task("last", completed: nextDay.addingTimeInterval(-0.001)),
+            task("next", completed: nextDay)
+        ], range: .custom(selected), referenceDate: date(26), calendar: calendar)
+
+        XCTAssertEqual(review.completed.map(\.id), ["last", "start"])
+        XCTAssertEqual(review.dateLabel, "2026-10-20 — 2026-10-20")
+        XCTAssertEqual(review.title, "自定义时段任务回顾")
+        XCTAssertTrue(review.markdown.contains("完成于 2026-10-20 23:59"))
+        XCTAssertFalse(review.markdown.contains("- [x] next"))
+    }
+
+    func testCustomReversedCrossYearRangeAndExportAgree() {
+        let first = calendar.date(from: DateComponents(year: 2026, month: 12, day: 31))!
+        let nextDay = calendar.date(from: DateComponents(year: 2027, month: 1, day: 3))!
+        let selectedEnd = calendar.date(from: DateComponents(year: 2027, month: 1, day: 2, hour: 18))!
+        let review = TaskReviewSnapshot(tasks: [
+            task("before", completed: first.addingTimeInterval(-1)),
+            task("start", completed: first),
+            task("last", completed: nextDay.addingTimeInterval(-0.001)),
+            task("after", completed: nextDay)
+        ], range: .custom(CalendarDateRange(start: selectedEnd, end: first, calendar: calendar)),
+            referenceDate: nextDay.addingTimeInterval(3600), calendar: calendar)
+
+        XCTAssertEqual(review.completed.map(\.id), ["last", "start"])
+        XCTAssertEqual(review.dateLabel, "2026-12-31 — 2027-01-02")
+        XCTAssertTrue(review.markdown.hasPrefix("# 自定义时段任务回顾\n\n2026-12-31 — 2027-01-02"))
+        XCTAssertTrue(review.markdown.contains("已完成 2 项 · 未完成 0 项"))
+    }
+
+    func testCustomPastRangeStillIncludesCurrentPendingAndExcludesOutsideCompletions() {
+        let selected = CalendarDateRange(start: date(10), end: date(12), calendar: calendar)
+        let review = TaskReviewSnapshot(tasks: [
+            task("carryover"), task("planned-future", planned: date(30)),
+            task("created-after-range", created: date(25)),
+            task("created-in-future", created: date(27)),
+            task("done-in-range", completed: date(11)),
+            task("done-after-range", completed: date(20)), task("done-before-range", completed: date(9))
+        ], range: .custom(selected), referenceDate: date(26), calendar: calendar)
+
+        XCTAssertEqual(review.pending.map(\.id), ["created-after-range", "carryover", "planned-future"])
+        XCTAssertEqual(review.completed.map(\.id), ["done-in-range"])
+        XCTAssertEqual(review.tasks.count, 4)
+        XCTAssertTrue(review.markdown.contains("已完成 1 项 · 未完成 3 项"))
+    }
+
+    func testCustomRangeNeverIncludesFutureCompletionsEvenIfTheSelectedEndIsFuture() {
+        let now = date(21, hour: 15)
+        let selected = CalendarDateRange(start: date(19), end: date(25), calendar: calendar)
+        let review = TaskReviewSnapshot(tasks: [
+            task("now", completed: now), task("future", completed: now.addingTimeInterval(0.001))
+        ], range: .custom(selected), referenceDate: now, calendar: calendar)
+
+        XCTAssertEqual(review.completed.map(\.id), ["now"])
+        XCTAssertEqual(review.dateLabel, "2026-10-19 — 2026-10-25")
+    }
+
+    func testCustomDSTEndDatesDoNotLoseOrAddAnHourOfCompletions() {
+        var local = calendar
+        local.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        for (month, day) in [(3, 8), (11, 1)] {
+            let start = date(day, month: month, hour: 0, calendar: local)
+            let nextDay = date(day + 1, month: month, hour: 0, calendar: local)
+            let review = TaskReviewSnapshot(tasks: [
+                task("start", created: start, completed: start),
+                task("last", created: start, completed: nextDay.addingTimeInterval(-0.001)),
+                task("next", created: start, completed: nextDay),
+                task("next-half-hour", created: start, completed: nextDay.addingTimeInterval(1800))
+            ], range: .custom(CalendarDateRange(start: start, end: start, calendar: local)),
+                referenceDate: nextDay.addingTimeInterval(3600), calendar: local)
+
+            XCTAssertEqual(review.completed.map(\.id), ["last", "start"])
+            XCTAssertEqual(review.dateLabel, month == 3 ? "2026-03-08 — 2026-03-08" : "2026-11-01 — 2026-11-01")
+        }
+    }
+
+    func testCustomSearchAndExportKeepParentContextOutsideTheSelectedRange() {
+        let selected = CalendarDateRange(start: date(20), end: date(20), calendar: calendar)
+        let review = TaskReviewSnapshot(tasks: [
+            task("parent", title: "Project Alpha", completed: date(5)),
+            task("matching-child", title: "整理资料", parent: "parent", details: "**结论**\n保留说明", completed: date(20)),
+            task("outside-child", title: "部署", parent: "parent", completed: date(22)),
+            task("unrelated", title: "Project Beta")
+        ], range: .custom(selected), referenceDate: date(26), calendar: calendar, query: "alpha")
+
+        XCTAssertEqual(review.tasks.map(\.id), ["matching-child"])
+        XCTAssertTrue(review.markdown.contains("- [x] Project Alpha / 整理资料"))
+        XCTAssertTrue(review.markdown.contains("  **结论**\n  保留说明"))
+        XCTAssertFalse(review.markdown.contains("部署"))
+        XCTAssertFalse(review.markdown.contains("Project Beta"))
+        XCTAssertEqual(review.markdown.components(separatedBy: "\n").filter { $0.hasPrefix("- [") }.count, 1)
+    }
 }
