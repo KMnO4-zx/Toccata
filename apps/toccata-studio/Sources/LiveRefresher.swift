@@ -7,6 +7,8 @@ final class LiveRefresher: ObservableObject {
     @Published private(set) var generation = 0
     @Published private(set) var liveEvents: [ActivityKeyEvent] = []
     @Published private(set) var isConnected = false
+    @Published private(set) var captureEnabled = false
+    @Published private(set) var permissionRequired = false
 
     private let lock = NSLock()
     private var stopFlag = false
@@ -47,6 +49,10 @@ final class LiveRefresher: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.isConnected = connected
+            if !connected {
+                self.captureEnabled = false
+                self.permissionRequired = false
+            }
             self.liveEvents.removeAll()
             self.liveBuffer.reset()
             self.generation += 1
@@ -59,7 +65,6 @@ final class LiveRefresher: ObservableObject {
             let fd = openSocket()
             if fd >= 0 {
                 backoff = 0.5
-                connectionChanged(true)
                 readLoop(fd: fd)
                 lock.lock()
                 currentFD = -1
@@ -131,7 +136,24 @@ final class LiveRefresher: ObservableObject {
     private func receive(_ data: Data) {
         guard let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = payload["type"] as? String else { return }
-        if type == "updated" {
+        if type == "hello" {
+            let enabled = payload["capture_enabled"] as? Bool ?? false
+            let permissionRequired = payload["permission_required"] as? Bool ?? false
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.captureEnabled = enabled
+                self.permissionRequired = permissionRequired
+                self.connectionChanged(true)
+            }
+        } else if type == "capture", let enabled = payload["enabled"] as? Bool {
+            let permissionRequired = payload["permission_required"] as? Bool ?? false
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.captureEnabled = enabled
+                self.permissionRequired = permissionRequired
+                self.generation += 1
+            }
+        } else if type == "updated" {
             DispatchQueue.main.async { [weak self] in self?.generation += 1 }
         } else if type == "key",
                   let timestamp = payload["ts"] as? NSNumber,
@@ -142,6 +164,8 @@ final class LiveRefresher: ObservableObject {
                                          keycode: keycode.intValue, kind: kind == "down" ? 0 : 1)
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
+                self.captureEnabled = true
+                self.permissionRequired = false
                 self.liveBuffer.append(event)
                 self.liveEvents = self.liveBuffer.events
                 // Throttle rather than debounce, so continuous typing still refreshes.

@@ -30,6 +30,7 @@ use tracker::{KeyKind, Tracker};
 
 enum WriterMsg {
     Event(RawKeyEvent),
+    Capture(bool),
     Shutdown,
 }
 
@@ -64,6 +65,12 @@ impl FlushSchedule {
 
 static SHUTDOWN: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 static TIMER_TICKS: AtomicU64 = AtomicU64::new(0);
+static WRITER_READY: AtomicBool = AtomicBool::new(false);
+static WRITER_SENDER: OnceLock<Sender<WriterMsg>> = OnceLock::new();
+
+pub(crate) fn writer_ready() -> bool {
+    WRITER_READY.load(Ordering::SeqCst)
+}
 
 fn is_shutdown() -> bool {
     SHUTDOWN
@@ -72,7 +79,7 @@ fn is_shutdown() -> bool {
         .unwrap_or(false)
 }
 
-/// 主线程 CFRunLoop 1s 周期 timer：检查退出标志；每 10s 做一次 tap 看门狗检查。
+/// 主线程 CFRunLoop 1s 周期 timer：检查退出标志；每 10s 检查 tap 并上报采集状态。
 extern "C" fn runloop_tick(_timer: CFRunLoopTimerRef, _info: *mut std::ffi::c_void) {
     if is_shutdown() {
         CFRunLoop::get_current().stop();
@@ -81,6 +88,9 @@ extern "C" fn runloop_tick(_timer: CFRunLoopTimerRef, _info: *mut std::ffi::c_vo
     let tick = TIMER_TICKS.fetch_add(1, Ordering::Relaxed) + 1;
     if tick % 10 == 0 {
         tap::watchdog_check();
+        if let Some(sender) = WRITER_SENDER.get() {
+            let _ = sender.send(WriterMsg::Capture(tap::capture_enabled()));
+        }
     }
 }
 
@@ -105,6 +115,7 @@ fn main() {
     };
 
     let (tx, rx) = mpsc::channel::<WriterMsg>();
+    let _ = WRITER_SENDER.set(tx.clone());
     let writer_cfg = cfg.clone();
     let writer_broadcaster = broadcaster.clone();
     let writer = std::thread::Builder::new()
@@ -198,6 +209,7 @@ fn acquire_instance_lock(data_dir: &std::path::Path) -> std::fs::File {
 
 /// writer 线程主循环：所有事件在此统一处理（配对计时、会话、落盘缓冲、广播），保证顺序。
 fn writer_main(rx: Receiver<WriterMsg>, cfg: Config, broadcaster: Broadcaster) {
+    WRITER_READY.store(false, Ordering::SeqCst);
     let mut store = match Store::open(&cfg.db_path(), cfg.flush_batch_size) {
         Ok(s) => s,
         Err(e) => {
@@ -205,6 +217,7 @@ fn writer_main(rx: Receiver<WriterMsg>, cfg: Config, broadcaster: Broadcaster) {
             return;
         }
     };
+    WRITER_READY.store(true, Ordering::SeqCst);
     let mut tracker = Tracker::new();
     let mut sessions = SessionTracker::new(cfg.idle_gap_secs, cfg.trailing_grace_secs);
     let mut flush_schedule = FlushSchedule::new(
@@ -219,6 +232,10 @@ fn writer_main(rx: Receiver<WriterMsg>, cfg: Config, broadcaster: Broadcaster) {
                 if store.pending() >= cfg.flush_batch_size {
                     flush_store(&mut store, &broadcaster);
                 }
+            }
+            Ok(WriterMsg::Capture(active)) => {
+                let line = capture_json(active, writer_ready(), tap::permission_required());
+                broadcaster.broadcast(&line);
             }
             Ok(WriterMsg::Shutdown) => {
                 settle_open_session(&mut sessions, &mut store);
@@ -236,6 +253,15 @@ fn writer_main(rx: Receiver<WriterMsg>, cfg: Config, broadcaster: Broadcaster) {
             flush_store(&mut store, &broadcaster);
         }
     }
+}
+
+fn capture_json(capture_active: bool, ready: bool, permission_required: bool) -> String {
+    serde_json::json!({
+        "type": "capture",
+        "enabled": capture_active && ready,
+        "permission_required": permission_required,
+    })
+    .to_string()
 }
 
 fn handle_event(
@@ -297,6 +323,21 @@ fn flush_store(store: &mut Store, broadcaster: &Broadcaster) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capture_json_reports_permission_and_writer_readiness() {
+        let waiting: serde_json::Value =
+            serde_json::from_str(&capture_json(true, false, true)).unwrap();
+        assert_eq!(waiting["type"], "capture");
+        assert_eq!(waiting["enabled"], false);
+        assert_eq!(waiting["permission_required"], true);
+
+        let active: serde_json::Value =
+            serde_json::from_str(&capture_json(true, true, false)).unwrap();
+        assert_eq!(active["type"], "capture");
+        assert_eq!(active["enabled"], true);
+        assert_eq!(active["permission_required"], false);
+    }
 
     #[test]
     fn duplicate_fn_down_does_not_persist_or_extend_the_session() {

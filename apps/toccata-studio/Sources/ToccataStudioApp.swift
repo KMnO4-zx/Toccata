@@ -102,17 +102,14 @@ struct ContentView: View {
                     }
                     Section("时间与活动") {
                         sidebarRow(.activity)
-                        sidebarRow(.activityCalendar)
                         sidebarRow(.ranking)
                     }
                 }
                 .listStyle(.sidebar)
 
                 VStack(alignment: .leading, spacing: 7) {
-                    Label(refresher.isConnected ? "键盘记录已连接" : "键盘记录未连接",
-                          systemImage: refresher.isConnected ? "circle.fill" : "circle")
+                    CaptureStatusView()
                         .font(.caption)
-                        .foregroundStyle(refresher.isConnected ? Color.green : Color.secondary)
                     Text("任务随时可用 · 数据保存在本机")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
@@ -134,6 +131,7 @@ struct ContentView: View {
                     .transition(WorkspaceMotion.pageTransition)
                 } else {
                     activityPage
+                        .id(section)
                         .transition(WorkspaceMotion.pageTransition)
                 }
             }
@@ -185,8 +183,7 @@ struct ContentView: View {
     private var activityPage: some View {
         switch section {
         case .activity: ActivityView()
-        case .activityCalendar: CalendarHeatmapView().navigationTitle("活跃日历")
-        case .ranking: RankingView().navigationTitle("按键与应用")
+        case .activityCalendar, .ranking: RankingView().navigationTitle("键盘与应用")
         case .thisWeek, .lastSevenDays, .inbox, .taskCalendar, .review: EmptyView()
         }
     }

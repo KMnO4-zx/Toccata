@@ -5,6 +5,7 @@
 //! - 回调只做微秒级内存操作 + mpsc send，任何阻塞都会导致系统超时禁用 tap
 
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -28,11 +29,29 @@ extern "C" {
     fn CGEventTapIsEnabled(tap: CFMachPortRef) -> bool;
 }
 
+static CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
+
 thread_local! {
     // 回调需要访问 tap 本身以便在被系统禁用后重新 enable；
     // tap 只在主线程（runloop 线程）创建与访问，thread_local 足够。
     static TAP: RefCell<Option<CGEventTap<'static>>> = const { RefCell::new(None) };
     static SOURCE: RefCell<Option<CFRunLoopSource>> = const { RefCell::new(None) };
+}
+
+pub fn capture_enabled() -> bool {
+    CAPTURE_ACTIVE.load(Ordering::SeqCst)
+}
+
+pub fn permission_required() -> bool {
+    !preflight()
+}
+
+fn set_capture_active(active: bool, sender: Option<&Sender<WriterMsg>>) {
+    if CAPTURE_ACTIVE.swap(active, Ordering::SeqCst) != active {
+        if let Some(sender) = sender {
+            let _ = sender.send(WriterMsg::Capture(active));
+        }
+    }
 }
 
 /// 采集层产出、发往 writer 线程的原始按键事件。
@@ -116,9 +135,11 @@ fn callback(
         }
         CGEventType::TapDisabledByTimeout | CGEventType::TapDisabledByUserInput => {
             // tap 被系统禁用（回调过慢超时 / 用户撤销）：立即重新启用
+            set_capture_active(false, Some(sender));
             TAP.with(|t| {
                 if let Some(tap) = t.borrow().as_ref() {
                     tap.enable();
+                    set_capture_active(true, Some(sender));
                     eprintln!("[toccata-core] 事件监听被系统禁用（{ty:?}），已自动重新启用");
                 }
             });
@@ -138,24 +159,25 @@ fn send(sender: &Sender<WriterMsg>, keycode: i64, kind: KeyKind) {
     }));
 }
 
+fn key_event_types() -> [CGEventType; 3] {
+    [CGEventType::KeyDown, CGEventType::KeyUp, CGEventType::FlagsChanged]
+}
+
 /// 创建 tap 并挂到当前线程（必须是主线程）的 CFRunLoop 上。
 pub fn create_tap(sender: Sender<WriterMsg>) -> Result<(), ()> {
+    let capture_sender = sender.clone();
+    // Disabled-tap notifications are delivered by CoreGraphics, not valid event-mask bits.
     let tap = CGEventTap::new(
         CGEventTapLocation::HID,
         CGEventTapPlacement::HeadInsertEventTap,
         CGEventTapOptions::ListenOnly,
-        vec![
-            CGEventType::KeyDown,
-            CGEventType::KeyUp,
-            CGEventType::FlagsChanged,
-            CGEventType::TapDisabledByTimeout,
-            CGEventType::TapDisabledByUserInput,
-        ],
+        key_event_types().to_vec(),
         move |proxy, ty, event| callback(proxy, ty, event, &sender),
     )?;
     let source = tap.mach_port().create_runloop_source(0)?;
     CFRunLoop::get_current().add_source(&source, unsafe { kCFRunLoopCommonModes });
     tap.enable();
+    set_capture_active(true, Some(&capture_sender));
     SOURCE.with(|s| *s.borrow_mut() = Some(source));
     TAP.with(|t| *t.borrow_mut() = Some(tap));
     Ok(())
@@ -167,8 +189,10 @@ pub fn watchdog_check() {
     TAP.with(|t| {
         if let Some(tap) = t.borrow().as_ref() {
             let enabled = unsafe { CGEventTapIsEnabled(tap.mach_port().as_concrete_TypeRef()) };
+            set_capture_active(enabled, None);
             if !enabled {
                 tap.enable();
+                set_capture_active(true, None);
                 eprintln!("[toccata-core] 看门狗检测到 tap 被禁用，已重新启用");
             }
         }
@@ -179,6 +203,14 @@ pub fn watchdog_check() {
 mod tests {
     use super::*;
     use core_graphics::event::CGEventFlags as F;
+
+    #[test]
+    fn event_mask_only_contains_keyboard_events() {
+        let types = key_event_types();
+        assert!(types.iter().all(|kind| (*kind as u32) < 32));
+        let mask = types.iter().fold(0_u64, |mask, kind| mask | (1_u64 << (*kind as u32)));
+        assert_eq!(mask, (1 << 10) | (1 << 11) | (1 << 12));
+    }
 
     #[test]
     fn releasing_one_modifier_side_does_not_use_other_sides_flag() {

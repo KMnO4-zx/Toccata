@@ -34,11 +34,11 @@
 | `code` | 整数或 `null` | macOS CGKeyCode；`null` 项不进入键名映射 |
 | `label` | 字符串 | 按键排行中的名称；空字符串显示为 `Space` |
 | `id` / `name` | 字符串 | 布局标识与名称，当前 Studio 不读取 |
-| `unit` / `keyGap` | 数字 | 布局几何元数据，当前 Studio 不读取 |
-| `w` / `h` / `x` / `y` | 数字 | 按键大小与偏移元数据，当前 Studio 不读取 |
+| `unit` / `keyGap` | 数字 | 妙控键盘的缩放单位与键帽间距 |
+| `w` / `h` / `x` / `y` | 数字 | 妙控键盘键帽的大小与偏移 |
 | `decor` | 布尔值 | 装饰项元数据，当前 Studio 不读取 |
 
-当前使用 `macbook-air-ansi.json`。读取失败或键码未在表内时，Studio 显示 `Key<code>`。
+`macbook-air-ansi.json` 用于按键名称映射，读取失败或键码未在表内时显示 `Key<code>`。`magic-keyboard-ansi.json` 用于“键盘与应用”页面的逐键热度，按真实 keycode 和几何位置绘制，保留左右修饰键及半高方向键。
 
 ## 主题 JSON
 

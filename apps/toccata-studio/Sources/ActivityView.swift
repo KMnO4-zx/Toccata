@@ -50,9 +50,8 @@ struct ActivityView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 265)
-                Label(refresher.isConnected ? "正在记录键盘活动" : "采集服务未连接", systemImage: refresher.isConnected ? "circle.fill" : "circle")
+                CaptureStatusView(connectedText: "正在记录键盘活动")
                     .font(.subheadline)
-                    .foregroundStyle(refresher.isConnected ? Color.accentColor : .secondary)
             }
         }
     }

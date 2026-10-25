@@ -28,6 +28,7 @@ final class CoreProcessControllerTests: XCTestCase {
         try await waitForFile(markerURL(in: directory))
         XCTAssertEqual(try String(contentsOf: markerURL(in: directory), encoding: .utf8), "x")
         XCTAssertEqual(try String(contentsOf: environmentURL(in: directory), encoding: .utf8), directory.path)
+        XCTAssertEqual(try String(contentsOf: directory.appendingPathComponent("core.log"), encoding: .utf8), "helper-ready\n")
         try await Task.sleep(nanoseconds: 1_100_000_000)
     }
 
@@ -54,6 +55,7 @@ final class CoreProcessControllerTests: XCTestCase {
         let helper = directory.appendingPathComponent("helper.sh")
         let script = """
         #!/bin/sh
+        echo helper-ready
         printf x >> '\(markerURL(in: directory).path)'
         printf '%s' "$TOCCATA_DATA_DIR" > '\(environmentURL(in: directory).path)'
         sleep 1

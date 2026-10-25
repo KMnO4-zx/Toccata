@@ -1,6 +1,6 @@
 //! Unix socket IPC：JSON Lines 协议。
-//! 客户端发 {"cmd":"subscribe"}，daemon 回 {"type":"hello","version":1}，
-//! 此后每个有效事件广播一行 {"type":"key",...}。
+//! 客户端发 {"cmd":"subscribe"}，daemon 回包含采集与权限状态的 hello，
+//! 此后广播按键、落盘更新与 capture 状态消息。
 
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -8,7 +8,23 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-const HELLO: &str = r#"{"type":"hello","version":1}"#;
+pub fn hello() -> String {
+    hello_json(
+        crate::tap::capture_enabled(),
+        crate::writer_ready(),
+        crate::tap::permission_required(),
+    )
+}
+
+fn hello_json(capture_active: bool, ready: bool, permission_required: bool) -> String {
+    serde_json::json!({
+        "type": "hello",
+        "version": 1,
+        "capture_enabled": capture_active && ready,
+        "permission_required": permission_required,
+    })
+    .to_string()
+}
 
 struct Client {
     id: u64,
@@ -108,11 +124,14 @@ fn client_loop(id: u64, stream: UnixStream, broadcaster: Broadcaster) {
         return;
     }
     {
-        let mut hello = match stream.try_clone() {
+        let hello = hello();
+        let mut hello_stream = match stream.try_clone() {
             Ok(s) => s,
             Err(_) => return,
         };
-        if hello.write_all(HELLO.as_bytes()).is_err() || hello.write_all(b"\n").is_err() {
+        if hello_stream.write_all(hello.as_bytes()).is_err()
+            || hello_stream.write_all(b"\n").is_err()
+        {
             return;
         }
     }
@@ -127,4 +146,26 @@ fn client_loop(id: u64, stream: UnixStream, broadcaster: Broadcaster) {
         }
     }
     broadcaster.remove(id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hello_keeps_version_and_reports_capture_status() {
+        let waiting: serde_json::Value =
+            serde_json::from_str(&hello_json(true, false, true)).unwrap();
+        assert_eq!(waiting["type"], "hello");
+        assert_eq!(waiting["version"], 1);
+        assert_eq!(waiting["capture_enabled"], false);
+        assert_eq!(waiting["permission_required"], true);
+
+        let active: serde_json::Value =
+            serde_json::from_str(&hello_json(true, true, false)).unwrap();
+        assert_eq!(active["type"], "hello");
+        assert_eq!(active["version"], 1);
+        assert_eq!(active["capture_enabled"], true);
+        assert_eq!(active["permission_required"], false);
+    }
 }

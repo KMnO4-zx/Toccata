@@ -15,6 +15,7 @@
 | `toccata.sock` | Unix socket，受非空 `socket_path` 配置覆盖 |
 | `tasks.sqlite` | Studio 任务 SQLite 数据库 |
 | `toccata.lock` | 后台服务的排他实例锁 |
+| `core.log` | 由 App 启动的 helper 的启动、权限与写入错误日志，不记录键名或文本 |
 
 `db_path` / `socket_path` 建议填写非空绝对路径；省略或设为 `null` 时使用默认文件。它们不改变任务库的位置。布局标签和日历主题从 Studio 资源包读取，见 [README.md](README.md)。
 
@@ -35,7 +36,13 @@
 订阅成功后立即回复：
 
 ```json
-{"type":"hello","version":1}
+{"type":"hello","version":1,"capture_enabled":false,"permission_required":true}
+```
+
+`capture_enabled` 仅在键盘 tap 已创建并启用、数据库 writer 已就绪时为 `true`；`permission_required` 表示仍缺少输入监控权限。socket 连接本身不代表正在采集。采集状态变化时还会广播：
+
+```json
+{"type":"capture","enabled":true,"permission_required":false}
 ```
 
 此后每次键盘事件广播：

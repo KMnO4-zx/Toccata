@@ -7,10 +7,8 @@ enum TimeRange: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// 本地时区按自然日对齐的 [startMs, endMs) 区间。
-    var intervalMs: (Int64, Int64) {
-        let calendar = Calendar.current
-        let startOfToday = calendar.startOfDay(for: Date())
+    func interval(now: Date = Date(), calendar: Calendar = .current) -> DateInterval {
+        let startOfToday = calendar.startOfDay(for: now)
         let daysBack: Int
         switch self {
         case .today: daysBack = 0
@@ -19,7 +17,13 @@ enum TimeRange: String, CaseIterable, Identifiable {
         }
         let start = calendar.date(byAdding: .day, value: -daysBack, to: startOfToday) ?? startOfToday
         let end = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? startOfToday
-        return (Int64(start.timeIntervalSince1970 * 1000), Int64(end.timeIntervalSince1970 * 1000))
+        return DateInterval(start: start, end: end)
+    }
+
+    /// 本地时区按自然日对齐的 [startMs, endMs) 区间。
+    var intervalMs: (Int64, Int64) {
+        let interval = interval()
+        return (Int64(interval.start.timeIntervalSince1970 * 1000), Int64(interval.end.timeIntervalSince1970 * 1000))
     }
 }
 
@@ -131,15 +135,32 @@ final class StatsRepository {
         }
     }
 
-    func topApps(range: TimeRange, limit: Int = 20) -> [AppRank] {
-        let (start, _) = range.intervalMs
+    func keyCounts(range: TimeRange = .today, now: Date = Date(), calendar: Calendar = .current) -> [KeyRank] {
+        let interval = range.interval(now: now, calendar: calendar)
+        let start = Int64(interval.start.timeIntervalSince1970 * 1000)
+        let end = Int64(interval.end.timeIntervalSince1970 * 1000)
         return withDatabase([]) { db in
             try db.query(
                 """
-                SELECT app, SUM(end_ms-start_ms) u, SUM(key_count) \
-                FROM app_sessions WHERE start_ms>=? GROUP BY app ORDER BY u DESC LIMIT ?
+                SELECT keycode, COUNT(*) n FROM key_events \
+                WHERE kind=0 AND ts_ms>=? AND ts_ms<? \
+                GROUP BY keycode ORDER BY n DESC, keycode ASC
                 """,
-                params: [start, Int64(limit)]
+                params: [start, end]
+            ) { KeyRank(keycode: columnInt($0, 0), count: columnInt($0, 1)) }
+        }
+    }
+
+    func topApps(range: TimeRange, limit: Int = 20) -> [AppRank] {
+        let (rangeStart, rangeEnd) = range.intervalMs
+        return withDatabase([]) { db in
+            try db.query(
+                """
+                SELECT app, SUM(MIN(end_ms, ?)-MAX(start_ms, ?)) u, SUM(key_count) \
+                FROM app_sessions WHERE start_ms<? AND end_ms>? \
+                GROUP BY app ORDER BY u DESC LIMIT ?
+                """,
+                params: [rangeEnd, rangeStart, rangeEnd, rangeStart, Int64(limit)]
             ) { AppRank(app: columnText($0, 0), usageMs: columnInt64($0, 1), keyCount: columnInt64($0, 2)) }
         }
     }

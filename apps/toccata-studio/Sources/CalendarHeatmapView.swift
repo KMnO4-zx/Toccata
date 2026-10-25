@@ -23,31 +23,43 @@ struct CalendarHeatmapView: View {
         return formatter
     }()
 
+    var embedded = false
+
     var body: some View {
         Group {
             if empty {
-                EmptyStateView()
+                if embedded {
+                    Text("还没有键盘活动")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 8)
+                } else {
+                    EmptyStateView()
+                }
             } else {
                 VStack(alignment: .leading, spacing: 0) {
-                    header
-                        .padding(.horizontal, 24)
-                        .padding(.top, 20)
-                        .padding(.bottom, 12)
+                    if !embedded {
+                        header
+                            .padding(.horizontal, 24)
+                            .padding(.top, 20)
+                            .padding(.bottom, 12)
+                    }
                     ScrollView(.horizontal) {
                         HStack(alignment: .top, spacing: cellSpacing) {
                             weekdayColumn
                             ForEach(0..<weekCount, id: \.self) { week in
                                 weekColumn(week)
                             }
+                            if embedded { legend.padding(.leading, 8) }
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 24)
+                        .padding(.horizontal, embedded ? 0 : 24)
+                        .padding(.bottom, embedded ? 0 : 24)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .frame(maxWidth: .infinity, maxHeight: embedded ? nil : .infinity, alignment: .topLeading)
             }
         }
-        .background(TaskScrollerStyle())
+        .background(embedded ? AnyView(EmptyView()) : AnyView(TaskScrollerStyle()))
         .onAppear(perform: reload)
         .onReceive(refresher.$generation.dropFirst()) { _ in reload() }
     }

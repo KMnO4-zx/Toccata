@@ -1,4 +1,5 @@
 import Combine
+import CoreGraphics
 import Darwin
 import Foundation
 
@@ -12,7 +13,7 @@ final class CoreProcessController: ObservableObject {
 
     convenience init() {
         self.init(
-            helperURL: Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/toccata-core"),
+            helperURL: Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/toccata-core"),
             dataDirectory: AppPaths.supportDirectory,
             socketPath: AppPaths.socketPath,
             socketIsReachable: Self.probeSocket
@@ -29,6 +30,17 @@ final class CoreProcessController: ObservableObject {
 
     @discardableResult
     func start() -> Bool {
+        let allowed = CGPreflightListenEventAccess()
+        NSLog("Input monitoring preflight (studio): \(allowed)")
+        try? FileManager.default.createDirectory(at: dataDirectory, withIntermediateDirectories: true)
+        try? "studio preflight: \(allowed)\n".write(
+            to: dataDirectory.appendingPathComponent("studio-preflight.log"),
+            atomically: true,
+            encoding: .utf8
+        )
+        if !allowed && Bundle.main.bundleURL.pathExtension == "app" {
+            NSLog("Input monitoring request (studio): \(CGRequestListenEventAccess())")
+        }
         if let process, process.isRunning { return false }
         process = nil
         guard !socketIsReachable(socketPath) else { return false }
@@ -39,11 +51,22 @@ final class CoreProcessController: ObservableObject {
         var environment = ProcessInfo.processInfo.environment
         environment["TOCCATA_DATA_DIR"] = dataDirectory.path
         process.environment = environment
+        var log: FileHandle?
         do {
+            try FileManager.default.createDirectory(at: dataDirectory, withIntermediateDirectories: true)
+            let logURL = dataDirectory.appendingPathComponent("core.log")
+            if !FileManager.default.fileExists(atPath: logURL.path) { try Data().write(to: logURL) }
+            let handle = try FileHandle(forWritingTo: logURL)
+            log = handle
+            try handle.seekToEnd()
+            process.standardOutput = handle
+            process.standardError = handle
+            process.terminationHandler = { _ in try? handle.close() }
             try process.run()
             self.process = process
             return true
         } catch {
+            try? log?.close()
             NSLog("Unable to launch toccata-core: \(error.localizedDescription)")
             return false
         }

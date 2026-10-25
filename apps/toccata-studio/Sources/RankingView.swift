@@ -1,30 +1,25 @@
 import SwiftUI
-import Charts
 
 struct RankingView: View {
     @EnvironmentObject private var refresher: LiveRefresher
 
     private let repo = StatsRepository()
+    private let keyboardLayout = KeyboardLayout.magicKeyboard
 
     @State private var range: TimeRange = .today
-    @State private var keys: [(rank: KeyRank, category: String)] = []
+    @State private var counts: [Int: Int] = [:]
     @State private var apps: [AppRank] = []
-    @State private var empty = false
+    @AppStorage("activity.showCalendar") private var showsCalendar = false
 
     var body: some View {
-        Group {
-            if empty {
-                EmptyStateView()
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        keySection
-                        appSection
-                        Spacer(minLength: 0)
-                    }
-                    .padding(24)
-                }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                keyboardSection
+                appSection
+                calendarSection
+                Spacer(minLength: 0)
             }
+            .padding(24)
         }
         .background(TaskScrollerStyle())
         .onAppear(perform: reload)
@@ -32,37 +27,45 @@ struct RankingView: View {
         .onReceive(refresher.$generation.dropFirst()) { _ in reload() }
     }
 
-    private var keySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("按键 Top 20（全部时间）")
-                .font(.headline)
-            if keys.isEmpty {
-                Text("暂无按键记录")
-                    .foregroundStyle(.secondary)
-            } else {
-                Chart(keys, id: \.category) { item in
-                    BarMark(
-                        x: .value("次数", item.rank.count),
-                        y: .value("按键", item.category)
-                    )
-                    .foregroundStyle(Color.accentColor)
-                    .cornerRadius(3)
-                    .annotation(position: .trailing) {
-                        Text("\(item.rank.count)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+    private var keyboardSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("键盘活跃度").font(.headline)
+                    Text("今天每个按键的使用次数")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-                .chartYScale(domain: keys.map(\.category))
-                .frame(height: CGFloat(keys.count) * 26 + 20)
+                Spacer()
+                Text("\(counts.values.reduce(0, +)) 次")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
+            KeyboardHeatmapView(layout: keyboardLayout, counts: counts)
+                .frame(maxWidth: 720)
+                .frame(maxWidth: .infinity, alignment: .center)
+            if counts.isEmpty {
+                Text("今天还没有按键记录，开始使用键盘后，这里会显示每个按键的热度。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var calendarSection: some View {
+        DisclosureGroup(isExpanded: $showsCalendar) {
+            CalendarHeatmapView(embedded: true)
+                .padding(.top, 12)
+        } label: {
+            Label("活跃日历 · 最近 26 周", systemImage: "calendar")
+                .font(.headline)
         }
     }
 
     private var appSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("应用使用时长排行")
+                Text("应用活跃度")
                     .font(.headline)
                 Spacer()
                 Picker("范围", selection: $range) {
@@ -114,22 +117,7 @@ struct RankingView: View {
     }
 
     private func reload() {
-        guard repo.hasAnyEvents() else {
-            empty = true
-            return
-        }
-        empty = false
-
-        // label 可能重复（左右 ⇧/⌘ 等），追加零宽空格保证图表分类唯一。
-        var seen: [String: Int] = [:]
-        keys = repo.topKeys().map { rank in
-            let label = KeyLabels.shared.label(for: rank.keycode)
-            let duplicate = seen[label, default: 0]
-            seen[label] = duplicate + 1
-            let category = label + String(repeating: "\u{200B}", count: duplicate)
-            return (rank, category)
-        }.sorted { $0.rank.count < $1.rank.count } // 升序喂给图表，使最大者显示在最上方
-
+        counts = Dictionary(uniqueKeysWithValues: repo.keyCounts().map { ($0.keycode, $0.count) })
         apps = repo.topApps(range: range)
     }
 }
