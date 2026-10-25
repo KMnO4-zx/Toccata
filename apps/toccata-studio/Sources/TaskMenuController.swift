@@ -25,7 +25,8 @@ final class TaskMenuController: NSObject, ObservableObject {
         self.store = store
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            button.image = NSImage(systemSymbolName: "checkmark.circle", accessibilityDescription: "Toccata 任务")
+            button.image = NSImage(systemSymbolName: "square.stack.3d.up.fill", accessibilityDescription: "Toccata 任务")
+            button.image?.isTemplate = true
             button.imagePosition = .imageLeading
             button.font = .systemFont(ofSize: 13)
             button.toolTip = "Toccata 任务"

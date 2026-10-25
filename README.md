@@ -1,4 +1,4 @@
-<img src="shared/branding/toccata-app-icon.svg" alt="Toccata Logo" width="96">
+<img src="shared/branding/toccata-app-icon.png" alt="Toccata Logo" width="96">
 
 # Toccata
 
@@ -37,6 +37,8 @@
 ## 构建与运行
 
 需要 macOS 13 或更新版本、Rust 工具链和支持 Swift 5.9 的 Xcode Command Line Tools。
+
+项目 Logo 使用侧栏同款蓝色叠层标志。运行 `swift scripts/generate-branding.swift` 可重新生成 `shared/branding/` 下的 PNG 和打包用的 `AppIcon.icns`。
 
 ```bash
 # 在项目根目录：构建工作台及内嵌采集服务，产物为 dist/Toccata.app
