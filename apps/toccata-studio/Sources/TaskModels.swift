@@ -46,13 +46,6 @@ struct TodoTask: Identifiable, Equatable {
     var isCompleted: Bool { completedAt != nil }
 }
 
-struct TaskProgressEntry: Identifiable, Equatable {
-    let id: String
-    let taskID: String
-    let text: String
-    let createdAt: Date
-}
-
 enum TaskReviewPeriod: String, CaseIterable, Identifiable {
     case thisWeek = "本周"
     case lastSevenDays = "最近7天"

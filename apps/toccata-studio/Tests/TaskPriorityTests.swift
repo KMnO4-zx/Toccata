@@ -49,12 +49,12 @@ final class TaskPriorityTests: XCTestCase {
         XCTAssertEqual(original.completedAt, Date(timeIntervalSince1970: 1_792_432_800))
         XCTAssertEqual(store.task(id: "legacy-child")?.parentID, original.id)
         XCTAssertNil(store.task(id: "legacy-child")?.plannedDate)
-        XCTAssertEqual(store.progress(for: original.id).map(\.text), ["原有进展"])
+        XCTAssertEqual(try legacyProgressText(at: url), ["原有进展"])
 
         let reopened = TaskStore(databaseURL: url)
         XCTAssertNil(reopened.errorMessage)
         XCTAssertEqual(reopened.tasks, store.tasks)
-        XCTAssertEqual(reopened.progressEntries, store.progressEntries)
+        XCTAssertEqual(try legacyProgressText(at: url), ["原有进展"])
         XCTAssertTrue(reopened.setPriority(id: original.id, priority: .high))
         let reopenedAgain = TaskStore(databaseURL: url)
         XCTAssertNil(reopenedAgain.errorMessage)
@@ -97,6 +97,29 @@ final class TaskPriorityTests: XCTestCase {
         XCTAssertFalse(restored.setPriority(id: "missing", priority: .high))
         XCTAssertNotNil(restored.errorMessage)
         XCTAssertEqual(restored.task(id: id)?.priority, TaskPriority.none)
+    }
+
+    private func legacyProgressText(at url: URL) throws -> [String] {
+        var handle: OpaquePointer?
+        guard sqlite3_open(url.path, &handle) == SQLITE_OK, let handle else {
+            throw NSError(domain: "TaskPriorityTests", code: 1)
+        }
+        defer { sqlite3_close(handle) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(handle, "SELECT text FROM task_progress ORDER BY created_at", -1, &statement, nil) == SQLITE_OK,
+              let statement else {
+            throw NSError(domain: "TaskPriorityTests", code: 2)
+        }
+        defer { sqlite3_finalize(statement) }
+        var values: [String] = []
+        while true {
+            let result = sqlite3_step(statement)
+            if result == SQLITE_DONE { return values }
+            guard result == SQLITE_ROW else { throw NSError(domain: "TaskPriorityTests", code: Int(result)) }
+            if let text = sqlite3_column_text(statement, 0) {
+                values.append(String(cString: text))
+            }
+        }
     }
 
     private func executeSQL(_ sql: String, at url: URL) throws {

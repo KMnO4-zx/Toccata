@@ -149,22 +149,14 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertFalse(store.task(id: parent)!.isCompleted)
     }
 
-    func testDetailsAndTimestampedProgressPreserveSQLSensitiveTextAndPersist() async throws {
-        let (store, clock, url) = try fixture(at: date(19, hour: 9))
+    func testMarkdownAndSQLSensitiveDetailsPersistVerbatim() async throws {
+        let (store, _, url) = try fixture(at: date(19, hour: 9))
         let title = "读 'paper'; DROP TABLE tasks; --"
-        let details = "第一段\n第二段：先复现，再判断。"
+        let details = "## 目标\n- **保持原始 Markdown**\n```swift\nlet sql = \"SELECT ';'\"\n```"
         let id = try XCTUnwrap(store.addTask(title: title, details: details))
-        XCTAssertTrue(store.addProgress(taskID: id, text: "  今天卡在 'tokenizer' 😅  "))
-        clock.date = date(19, hour: 11)
-        XCTAssertTrue(store.addProgress(taskID: id, text: "找到原因\n先记下来"))
         let restored = TaskStore(databaseURL: url)
         XCTAssertEqual(restored.task(id: id)?.title, title)
         XCTAssertEqual(restored.task(id: id)?.details, details)
-        let entries = restored.progress(for: id)
-        XCTAssertEqual(entries.map(\.text), ["找到原因\n先记下来", "今天卡在 'tokenizer' 😅"])
-        XCTAssertEqual(entries.map(\.createdAt), [date(19, hour: 11), date(19, hour: 9)])
-        XCTAssertTrue(restored.deleteProgress(id: entries[0].id))
-        XCTAssertEqual(restored.progress(for: id).count, 1)
     }
 
     func testReviewUsesRealCompletionTimeIncludesSubtasksAndExcludesFutureDates() async throws {
@@ -207,7 +199,7 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertEqual(TaskReviewPeriod.thisWeek.interval(relativeTo: monday, calendar: calendar).start, monday)
     }
 
-    func testDeleteParentRemovesAllDescendantsAndProgressWithoutAffectingOtherTasks() async throws {
+    func testDeleteParentRemovesAllDescendantsWithoutAffectingOtherTasks() async throws {
         let (store, _, url) = try fixture(at: date(19))
         let parent = try XCTUnwrap(store.addTask(title: "要删除的项目"))
         let child = try XCTUnwrap(store.addTask(title: "子任务", parentID: parent))
@@ -215,13 +207,10 @@ final class TaskStoreTests: XCTestCase {
         try insertLegacyTask(id: grandchild, parentID: child, title: "孙任务", createdAt: date(19), at: url)
         XCTAssertTrue(store.reload())
         let other = try XCTUnwrap(store.addTask(title: "另一个想法"))
-        XCTAssertTrue(store.addProgress(taskID: grandchild, text: "记录"))
         XCTAssertTrue(store.deleteTask(id: parent))
         XCTAssertEqual(store.tasks.map(\.id), [other])
-        XCTAssertTrue(store.progressEntries.isEmpty)
         let restored = TaskStore(databaseURL: url)
         XCTAssertEqual(restored.tasks.map(\.id), [other])
-        XCTAssertTrue(restored.progressEntries.isEmpty)
     }
 
     func testFailedInsertRollsBackAncestorReopeningAndPublishedState() async throws {
@@ -243,9 +232,7 @@ final class TaskStoreTests: XCTestCase {
         XCTAssertNotNil(store.errorMessage)
         XCTAssertNil(store.addTask(title: "孤立任务", parentID: "missing"))
         XCTAssertNotNil(store.errorMessage)
-        XCTAssertFalse(store.addProgress(taskID: "missing", text: "进展"))
         XCTAssertTrue(store.tasks.isEmpty)
-        XCTAssertTrue(store.progressEntries.isEmpty)
         // The database URL is a directory: opening must fail visibly, without touching real user data.
         let unavailable = TaskStore(databaseURL: url.deletingLastPathComponent())
         XCTAssertNotNil(unavailable.errorMessage)

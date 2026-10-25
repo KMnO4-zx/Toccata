@@ -10,7 +10,6 @@ final class TaskStore: ObservableObject {
     nonisolated static let defaultURL = AppPaths.supportDirectory.appendingPathComponent("tasks.sqlite", isDirectory: false)
 
     @Published private(set) var tasks: [TodoTask] = []
-    @Published private(set) var progressEntries: [TaskProgressEntry] = []
     @Published var errorMessage: String?
 
     private var database: TaskDatabase?
@@ -39,9 +38,7 @@ final class TaskStore: ObservableObject {
     func reload() -> Bool {
         do {
             guard let database else { throw TaskStoreError.unavailable }
-            let snapshot = try database.snapshot()
-            tasks = snapshot.tasks
-            progressEntries = snapshot.entries
+            tasks = try database.snapshot()
             errorMessage = nil
             return true
         } catch {
@@ -56,10 +53,6 @@ final class TaskStore: ObservableObject {
 
     func children(of parentID: String?) -> [TodoTask] {
         tasks.filter { $0.parentID == parentID }
-    }
-
-    func progress(for taskID: String) -> [TaskProgressEntry] {
-        progressEntries.filter { $0.taskID == taskID }
     }
 
     func completedTasks(in period: TaskReviewPeriod, relativeTo referenceDate: Date? = nil) -> [TodoTask] {
@@ -153,27 +146,6 @@ final class TaskStore: ObservableObject {
         }
     }
 
-    @discardableResult
-    func addProgress(taskID: String, text: String) -> Bool {
-        guard let text = validatedText(text, error: "请先写下进展或感受。") else { return false }
-        let timestamp = now()
-        return write { database in
-            guard try database.taskExists(id: taskID) else { throw TaskStoreError.taskMissing }
-            try database.run("""
-                INSERT INTO task_progress (id, task_id, text, created_at) VALUES (?, ?, ?, ?)
-                """, [.text(UUID().uuidString), .text(taskID), .text(text), .date(timestamp)])
-            try database.run("UPDATE tasks SET updated_at = ? WHERE id = ?", [.date(timestamp), .text(taskID)])
-        }
-    }
-
-    @discardableResult
-    func deleteProgress(id: String) -> Bool {
-        write { database in
-            guard try database.progressExists(id: id) else { throw TaskStoreError.progressMissing }
-            try database.run("DELETE FROM task_progress WHERE id = ?", [.text(id)])
-        }
-    }
-
     private func validatedText(_ text: String, error: String) -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -186,12 +158,11 @@ final class TaskStore: ObservableObject {
     private func write(_ operation: (TaskDatabase) throws -> Void) -> Bool {
         do {
             guard let database else { throw TaskStoreError.unavailable }
-            let snapshot = try database.transaction {
+            let tasks = try database.transaction {
                 try operation(database)
                 return try database.snapshot()
             }
-            tasks = snapshot.tasks
-            progressEntries = snapshot.entries
+            self.tasks = tasks
             errorMessage = nil
             return true
         } catch {
@@ -205,7 +176,6 @@ private enum TaskStoreError: LocalizedError {
     case unavailable
     case taskMissing
     case nestedSubtask
-    case progressMissing
     case database(String)
 
     var errorDescription: String? {
@@ -213,7 +183,6 @@ private enum TaskStoreError: LocalizedError {
         case .unavailable: return "任务数据库暂不可用，请检查存储位置后重新打开应用。"
         case .taskMissing: return "任务不存在，可能已被删除。"
         case .nestedSubtask: return "子任务下不能再创建子任务。"
-        case .progressMissing: return "这条进展记录已不存在。"
         case .database(let message): return "任务保存失败：\(message)"
         }
     }
@@ -269,6 +238,7 @@ private final class TaskDatabase {
             }
             try run("CREATE INDEX IF NOT EXISTS task_parent ON tasks(parent_id)")
             try run("CREATE INDEX IF NOT EXISTS task_completed ON tasks(completed_at)")
+            // Legacy progress rows stay on disk; task details are the only notes interface.
             try run("""
                 CREATE TABLE IF NOT EXISTS task_progress (
                     id TEXT PRIMARY KEY NOT NULL,
@@ -308,10 +278,6 @@ private final class TaskDatabase {
         }.first ?? nil
     }
 
-    func progressExists(id: String) throws -> Bool {
-        try query("SELECT id FROM task_progress WHERE id = ?", [.text(id)]) { _ in true }.first ?? false
-    }
-
     func reopenAncestors(of id: String, at timestamp: Date) throws {
         try run("""
             WITH RECURSIVE ancestors(id, parent_id) AS (
@@ -324,8 +290,8 @@ private final class TaskDatabase {
             """, [.text(id), .date(timestamp)])
     }
 
-    func snapshot() throws -> (tasks: [TodoTask], entries: [TaskProgressEntry]) {
-        let tasks = try query("""
+    func snapshot() throws -> [TodoTask] {
+        try query("""
             SELECT id, parent_id, title, details, planned_at, created_at, updated_at, completed_at, priority
             FROM tasks ORDER BY created_at ASC, rowid ASC
             """) { statement in
@@ -337,14 +303,6 @@ private final class TaskDatabase {
                      completedAt: self.optionalDate(statement, 7),
                      priority: TaskPriority(rawValue: Int(sqlite3_column_int64(statement, 8))) ?? .none)
         }
-        let entries = try query("""
-            SELECT id, task_id, text, created_at FROM task_progress ORDER BY created_at DESC, rowid DESC
-            """) { statement in
-            TaskProgressEntry(id: self.text(statement, 0), taskID: self.text(statement, 1),
-                              text: self.text(statement, 2),
-                              createdAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 3)))
-        }
-        return (tasks, entries)
     }
 
     func run(_ sql: String, _ values: [TaskSQLValue] = []) throws {
