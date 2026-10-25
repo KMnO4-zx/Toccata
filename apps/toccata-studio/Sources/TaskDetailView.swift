@@ -17,13 +17,12 @@ struct TaskDetailView: View {
     @State private var draft: TaskDetailDraft
     @State private var baseline: TaskDetailDraft
     @State private var childTitle = ""
-    @State private var progressText = ""
     @State private var confirmsDeletion = false
-    @State private var progressToDelete: TaskProgressEntry?
     @State private var saveFailed = false
+    @State private var detailsFocused = false
     @FocusState private var focusedField: Field?
 
-    private enum Field: Hashable { case title, details, child, progress }
+    private enum Field: Hashable { case title, child }
 
     init(task: TodoTask, onSelect: @escaping (String) -> Void,
          focusRequest: TaskDetailFocusRequest? = nil) {
@@ -32,11 +31,9 @@ struct TaskDetailView: View {
         self.focusRequest = focusRequest
         _draft = State(initialValue: TaskDraftBuffer.shared.edits[task.id] ?? TaskDetailDraft(task: task))
         _baseline = State(initialValue: TaskDetailDraft(task: task))
-        _progressText = State(initialValue: TaskDraftBuffer.shared.progress[task.id] ?? "")
     }
 
     private var children: [TodoTask] { store.children(of: task.id) }
-    private var progress: [TaskProgressEntry] { store.progress(for: task.id) }
     private var validTitle: Bool { !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     private var hasChanges: Bool {
         draft.title != baseline.title || draft.details != baseline.details || draft.optionalDate != baseline.optionalDate
@@ -53,7 +50,6 @@ struct TaskDetailView: View {
                         planDateSection
                         detailsSection.id("task-details-editor")
                         subtasksSection.id("task-child-editor")
-                        progressSection
                         metadata
                     }
                     .padding(25)
@@ -66,6 +62,9 @@ struct TaskDetailView: View {
         .background(TaskScrollerStyle())
         .onAppear { applyFocusRequest(focusRequest) }
         .onChange(of: focusRequest) { request in applyFocusRequest(request) }
+        .onChange(of: focusedField) { field in
+            if field != nil { detailsFocused = false }
+        }
         .task(id: draft) {
             do {
                 try await Task.sleep(nanoseconds: 450_000_000)
@@ -83,9 +82,6 @@ struct TaskDetailView: View {
         .onChange(of: task) { updatedTask in
             synchronizeUneditedFields(from: updatedTask)
         }
-        .onChange(of: progressText) { value in
-            TaskDraftBuffer.shared.progress[task.id] = value
-        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
             // Application shutdown may happen before SwiftUI removes this view.
             saveDraft(preservingValidTitle: true)
@@ -101,11 +97,6 @@ struct TaskDetailView: View {
                 } else {
                     TaskDraftBuffer.shared.edits.removeValue(forKey: task.id)
                 }
-                if progressText.isEmpty {
-                    TaskDraftBuffer.shared.progress.removeValue(forKey: task.id)
-                } else {
-                    TaskDraftBuffer.shared.progress[task.id] = progressText
-                }
             } else {
                 TaskDraftBuffer.shared.discard(task.id)
             }
@@ -115,19 +106,7 @@ struct TaskDetailView: View {
             Button("取消", role: .cancel) {}
             Button("删除任务", role: .destructive) { _ = store.deleteTask(id: task.id) }
         } message: {
-            Text(children.isEmpty ? "任务详情和过程记录也会删除。此操作无法撤销。" : "任务、所有子任务及其过程记录都会删除。此操作无法撤销。")
-        }
-        .alert("删除这条过程记录？", isPresented: Binding(
-            get: { progressToDelete != nil },
-            set: { if !$0 { progressToDelete = nil } }
-        )) {
-            Button("取消", role: .cancel) { progressToDelete = nil }
-            Button("删除记录", role: .destructive) {
-                if let entry = progressToDelete { _ = store.deleteProgress(id: entry.id) }
-                progressToDelete = nil
-            }
-        } message: {
-            Text("这条记录删除后无法恢复。")
+            Text(children.isEmpty ? "任务详情也会删除。此操作无法撤销。" : "任务、所有子任务及其详情都会删除。此操作无法撤销。")
         }
     }
 
@@ -227,23 +206,19 @@ struct TaskDetailView: View {
     private var detailsSection: some View {
         VStack(alignment: .leading, spacing: 11) {
             sectionHeading("详情", symbol: "text.alignleft")
-            ZStack(alignment: .topLeading) {
-                TextEditor(text: $draft.details)
-                    .font(.system(size: 12))
-                    .scrollContentBackground(.hidden)
-                    .padding(5)
-                    .frame(minHeight: 120)
-                    .focused($focusedField, equals: .details)
-                    .accessibilityLabel("任务详情")
-                if draft.details.isEmpty {
-                    Text("补充背景、链接，或写下你打算怎么做…")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 13)
-                        .allowsHitTesting(false)
-                }
-            }
+            MarkdownTextEditor(
+                text: $draft.details,
+                placeholder: "补充背景、链接，或写下你打算怎么做…",
+                isFocused: Binding(
+                    get: { detailsFocused },
+                    set: { focused in
+                        if focused { focusedField = nil }
+                        detailsFocused = focused
+                    }
+                )
+            )
+            .frame(minHeight: 120)
+            .accessibilityLabel("任务详情")
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 9))
         }
     }
@@ -322,66 +297,9 @@ struct TaskDetailView: View {
                 .padding(11)
                 .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 9))
             } else if children.isEmpty {
-                Text("这是一个子任务，可在这里独立编辑详情与过程记录。")
+                Text("这是一个子任务，可在这里独立编辑详情。")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var progressSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            sectionHeading("过程与感受", symbol: "bubble.left.and.text.bubble.right")
-            VStack(alignment: .trailing, spacing: 7) {
-                ZStack(alignment: .topLeading) {
-                    TextEditor(text: $progressText)
-                        .font(.system(size: 12))
-                        .scrollContentBackground(.hidden)
-                        .padding(5)
-                        .frame(minHeight: 70, maxHeight: 120)
-                        .focused($focusedField, equals: .progress)
-                        .accessibilityLabel("新增过程记录")
-                    if progressText.isEmpty {
-                        Text("做到哪一步了？有什么卡点或新的想法？")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 13)
-                            .allowsHitTesting(false)
-                    }
-                }
-                Button("记一条", action: addProgress)
-                    .controlSize(.small)
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(progressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .help("保存过程记录（⌘↩）")
-                    .padding(.trailing, 9)
-                    .padding(.bottom, 9)
-            }
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 9))
-
-            ForEach(progress) { entry in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(entry.createdAt.formatted(.dateTime.year().month().day().hour().minute()))
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button { progressToDelete = entry } label: {
-                            Image(systemName: "trash")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .help("删除这条记录")
-                    }
-                    .font(.system(size: 10))
-                    Text(entry.text)
-                        .font(.system(size: 12))
-                        .lineSpacing(4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                }
-                .padding(12)
-                .background(Color.accentColor.opacity(0.045), in: RoundedRectangle(cornerRadius: 9))
             }
         }
     }
@@ -437,7 +355,7 @@ struct TaskDetailView: View {
     private func synchronizeUneditedFields(from updatedTask: TodoTask) {
         let remote = TaskDetailDraft(task: updatedTask)
         // Another window may edit this task. Only preserve fields edited here;
-        // completion and progress updates must never reset an in-flight draft.
+        // completion changes must never reset an in-flight draft.
         if draft.title == baseline.title { draft.title = remote.title }
         if draft.details == baseline.details { draft.details = remote.details }
         if draft.optionalDate == baseline.optionalDate {
@@ -458,10 +376,12 @@ struct TaskDetailView: View {
         // still remember the previous editor as focused, so explicitly clear it
         // even when a nil request returns control to the selected task list.
         focusedField = nil
+        detailsFocused = request?.field == .details
         guard let focusRequest = request else { return }
+        if focusRequest.field == .details { return }
         if focusRequest.field == .child && task.parentID != nil { return }
         DispatchQueue.main.async {
-            focusedField = focusRequest.field == .details ? .details : .child
+            focusedField = .child
         }
     }
 
@@ -473,13 +393,6 @@ struct TaskDetailView: View {
         focusedField = .child
     }
 
-    private func addProgress() {
-        saveDraft(preservingValidTitle: true)
-        guard store.addProgress(taskID: task.id, text: progressText) else { return }
-        progressText = ""
-        TaskDraftBuffer.shared.progress.removeValue(forKey: task.id)
-        focusedField = .progress
-    }
 }
 
 private struct TaskDetailDraft: Equatable {
@@ -504,10 +417,8 @@ private struct TaskDetailDraft: Equatable {
 private final class TaskDraftBuffer {
     static let shared = TaskDraftBuffer()
     var edits: [String: TaskDetailDraft] = [:]
-    var progress: [String: String] = [:]
 
     func discard(_ taskID: String) {
         edits.removeValue(forKey: taskID)
-        progress.removeValue(forKey: taskID)
     }
 }

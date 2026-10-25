@@ -33,7 +33,6 @@ final class MenuTaskPresentation: ObservableObject {
     var onDismissEditor: (() -> Void)?
     var onFocusList: (() -> Void)?
     var onOpenWorkbench: (() -> Void)?
-    var onOpenCalendar: (() -> Void)?
     var onAnchorsChanged: (() -> Void)?
 
     func selectTask(_ id: String, focus: MenuEditorField? = nil) {
@@ -70,5 +69,4 @@ final class MenuTaskPresentation: ObservableObject {
     }
 
     func openWorkbench() { onOpenWorkbench?() }
-    func openCalendar() { onOpenCalendar?() }
 }

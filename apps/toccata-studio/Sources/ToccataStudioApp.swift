@@ -19,7 +19,7 @@ struct ToccataStudioApp: App {
                 .environmentObject(refresher)
                 .environmentObject(taskStore)
                 .frame(minWidth: 1040, minHeight: 650)
-                .background(TaskMenuSetup(controller: taskMenu, store: taskStore, requestedSection: $requestedSection))
+                .background(TaskMenuSetup(controller: taskMenu, store: taskStore))
                 .onAppear { refresher.start() }
         }
         .defaultSize(width: 1240, height: 780)
@@ -56,14 +56,23 @@ private enum WorkspaceSection: String, CaseIterable, Identifiable {
 struct ContentView: View {
     @EnvironmentObject private var tasks: TaskStore
     @EnvironmentObject private var refresher: LiveRefresher
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection: WorkspaceSection? = .thisWeek
+    @State private var selectedTaskID: String?
     @Binding var requestedSection: String?
 
     init(requestedSection: Binding<String?> = .constant(nil)) {
         _requestedSection = requestedSection
     }
 
+    private var section: WorkspaceSection { selection ?? .thisWeek }
     private var openCount: Int { tasks.tasks.filter { $0.parentID == nil && !$0.isCompleted }.count }
+    private var showsTaskWorkspace: Bool {
+        switch section {
+        case .thisWeek, .lastSevenDays, .inbox, .taskCalendar, .review: return true
+        case .activity, .activityCalendar, .ranking: return false
+        }
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -107,21 +116,74 @@ struct ContentView: View {
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 205, max: 240)
         } detail: {
-            switch selection ?? .thisWeek {
-            case .thisWeek: TasksView(mode: .thisWeek)
-            case .lastSevenDays: TasksView(mode: .lastSevenDays)
-            case .inbox: TasksView(mode: .inbox)
-            case .taskCalendar: TaskCalendarView()
-            case .review: TasksView(mode: .review)
-            case .activity: ActivityView()
-            case .activityCalendar: CalendarHeatmapView().navigationTitle("活跃日历")
-            case .ranking: RankingView().navigationTitle("按键与应用")
+            Group {
+                if showsTaskWorkspace {
+                    WorkspaceSplitView {
+                        workspacePage
+                            .id(section)
+                            .transition(WorkspaceMotion.pageTransition)
+                    } detail: {
+                        workspaceDetail
+                            .id(section)
+                            .transition(WorkspaceMotion.pageTransition)
+                    }
+                    .transition(WorkspaceMotion.pageTransition)
+                } else {
+                    activityPage
+                        .transition(WorkspaceMotion.pageTransition)
+                }
             }
+            .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: section)
         }
         .tint(.indigo)
         .background(TaskScrollerStyle())
         .onAppear(perform: openRequestedSection)
         .onChange(of: requestedSection) { _ in openRequestedSection() }
+        .onChange(of: tasks.tasks.map(\.id)) { ids in
+            if let selectedTaskID, !ids.contains(selectedTaskID) { self.selectedTaskID = nil }
+        }
+    }
+
+    @ViewBuilder
+    private var workspacePage: some View {
+        switch section {
+        case .thisWeek: TasksView(mode: .thisWeek, selection: $selectedTaskID)
+        case .lastSevenDays: TasksView(mode: .lastSevenDays, selection: $selectedTaskID)
+        case .inbox: TasksView(mode: .inbox, selection: $selectedTaskID)
+        case .taskCalendar: TaskCalendarView(selection: $selectedTaskID)
+        case .review: TasksView(mode: .review, selection: $selectedTaskID)
+        case .activity, .activityCalendar, .ranking: EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var workspaceDetail: some View {
+        if let selectedTaskID, let task = tasks.task(id: selectedTaskID) {
+            TaskDetailView(task: task, onSelect: { self.selectedTaskID = $0 })
+                .id(task.id)
+        } else if section == .taskCalendar {
+            TaskPlaceholder(
+                symbol: "calendar.badge.clock",
+                title: "把任务放回时间里",
+                message: "选择日期查看当天的记录，\n点击任务即可编辑详情与子任务。"
+            )
+        } else {
+            TaskPlaceholder(
+                symbol: "text.alignleft",
+                title: "留一点空间给思路",
+                message: "选择任务，补充详情、拆分子任务，\n或用 Markdown 整理背景与想法。"
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var activityPage: some View {
+        switch section {
+        case .activity: ActivityView()
+        case .activityCalendar: CalendarHeatmapView().navigationTitle("活跃日历")
+        case .ranking: RankingView().navigationTitle("按键与应用")
+        case .thisWeek, .lastSevenDays, .inbox, .taskCalendar, .review: EmptyView()
+        }
     }
 
     private func openRequestedSection() {

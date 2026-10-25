@@ -15,6 +15,10 @@ enum MenuPanelLayout {
         return CGRect(origin: CGPoint(x: x, y: y), size: size)
     }
 
+    static func revealFrame(for frame: CGRect) -> CGRect {
+        frame.offsetBy(dx: 0, dy: -6)
+    }
+
     static func editorFrame(list: CGRect, row: CGRect?, screen: CGRect) -> CGRect {
         let width = min(400, screen.width - 16)
         let height = min(300, screen.height - 16)

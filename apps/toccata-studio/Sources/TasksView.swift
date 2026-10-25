@@ -43,12 +43,17 @@ struct TasksView: View {
 
     @State private var title = ""
     @State private var query = ""
-    @State private var selection: String?
+    @Binding private var selection: String?
     @State private var reviewPeriod: TaskReviewPeriod = .thisWeek
     @State private var showsCompleted = true
     @State private var copied = false
     @State private var referenceDate = Date()
     @FocusState private var addingTask: Bool
+
+    init(mode: TaskViewMode, selection: Binding<String?> = .constant(nil)) {
+        self.mode = mode
+        _selection = selection
+    }
 
     private var scopedTasks: [TodoTask] {
         guard let scope = mode.scope else { return [] }
@@ -62,7 +67,6 @@ struct TasksView: View {
     private var reviewTasks: [TodoTask] {
         store.completedTasks(in: reviewPeriod).filter(matches)
     }
-    private var selectedTask: TodoTask? { selection.flatMap { store.task(id: $0) } }
     private var reviewDays: [Date] {
         Array(Set(reviewTasks.compactMap { $0.completedAt.map { Calendar.current.startOfDay(for: $0) } }))
             .sorted(by: >)
@@ -73,24 +77,9 @@ struct TasksView: View {
             if let error = store.errorMessage {
                 TaskErrorBanner(message: error) { store.errorMessage = nil }
             }
-            HSplitView {
-                taskList
-                    .frame(minWidth: 310, idealWidth: 410, maxWidth: .infinity, maxHeight: .infinity)
-                Group {
-                    if let task = selectedTask {
-                        TaskDetailView(task: task, onSelect: { selection = $0 })
-                            .id(task.id)
-                    } else {
-                        TaskPlaceholder(
-                            symbol: "text.alignleft",
-                            title: "留一点空间给思路",
-                            message: "选择任务，补充详情、拆分子任务，\n或者记下推进过程中的想法。"
-                        )
-                    }
-                }
-                .frame(minWidth: 330, idealWidth: 440, maxWidth: .infinity, maxHeight: .infinity)
-            }
+            taskList
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
         .background(TaskScrollerStyle())
         .onAppear { referenceDate = Date() }
@@ -122,7 +111,7 @@ struct TasksView: View {
                         Button(action: copyReview) {
                             Image(systemName: copied ? "checkmark" : "doc.on.doc")
                         }
-                        .help(copied ? "已复制回顾" : "复制当前回顾（含详情与过程记录）")
+                        .help(copied ? "已复制回顾" : "复制当前回顾（含任务详情）")
                         .disabled(reviewTasks.isEmpty)
                     }
                 }
@@ -149,7 +138,7 @@ struct TasksView: View {
 
                 HStack(spacing: 7) {
                     Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("搜索任务、详情与过程记录", text: $query)
+                    TextField("搜索任务名称与详情", text: $query)
                         .textFieldStyle(.plain)
                     if !query.isEmpty {
                         Button { query = "" } label: {
@@ -281,7 +270,6 @@ struct TasksView: View {
             task: task,
             children: store.children(of: task.id),
             parentTitle: showsParent ? task.parentID.flatMap { store.task(id: $0)?.title } : nil,
-            hasProgress: !store.progress(for: task.id).isEmpty,
             onToggle: { _ = store.setCompleted(id: task.id, completed: !task.isCompleted) }
         )
         .taskContextMenu(task: task) { selection = task.id }
@@ -290,12 +278,10 @@ struct TasksView: View {
     private func matches(_ task: TodoTask) -> Bool {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return true }
-        let ownText = [task.title, task.details] + store.progress(for: task.id).map(\.text)
-        if ownText.contains(where: { $0.localizedCaseInsensitiveContains(needle) }) { return true }
+        if [task.title, task.details].contains(where: { $0.localizedCaseInsensitiveContains(needle) }) { return true }
         // A child match must remain discoverable from the inbox's parent row.
         return store.children(of: task.id).contains { child in
-            ([child.title, child.details] + store.progress(for: child.id).map(\.text))
-                .contains { $0.localizedCaseInsensitiveContains(needle) }
+            [child.title, child.details].contains { $0.localizedCaseInsensitiveContains(needle) }
         }
     }
 
@@ -327,9 +313,6 @@ struct TasksView: View {
             if !task.details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 lines.append("  详情：\(task.details.replacingOccurrences(of: "\n", with: "\n  "))")
             }
-            for entry in store.progress(for: task.id) {
-                lines.append("  过程：\(entry.text.replacingOccurrences(of: "\n", with: "\n  "))")
-            }
             lines.append("")
         }
         NSPasteboard.general.clearContents()
@@ -345,7 +328,6 @@ private struct TaskListRow: View {
     let task: TodoTask
     let children: [TodoTask]
     let parentTitle: String?
-    let hasProgress: Bool
     let onToggle: () -> Void
 
     var body: some View {
@@ -370,7 +352,7 @@ private struct TaskListRow: View {
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
-                if !children.isEmpty || task.plannedDate != nil || hasProgress || !task.details.isEmpty {
+                if !children.isEmpty || task.plannedDate != nil || !task.details.isEmpty {
                     HStack(spacing: 9) {
                         if !children.isEmpty {
                             Label("\(children.filter(\.isCompleted).count)/\(children.count)", systemImage: "checklist")
@@ -379,7 +361,6 @@ private struct TaskListRow: View {
                             Label(date.formatted(.dateTime.month().day()), systemImage: "calendar")
                         }
                         if !task.details.isEmpty { Image(systemName: "text.alignleft") }
-                        if hasProgress { Image(systemName: "bubble.left") }
                     }
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)

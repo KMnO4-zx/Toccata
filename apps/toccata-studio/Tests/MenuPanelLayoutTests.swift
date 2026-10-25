@@ -49,4 +49,13 @@ final class MenuPanelLayoutTests: XCTestCase {
         XCTAssertTrue(screen.contains(editor))
         XCTAssertLessThanOrEqual(list.height, screen.height - 24)
     }
+
+    func testPanelRevealKeepsItsSizeAndHorizontalAnchor() {
+        let frame = CGRect(x: 700, y: 300, width: 312, height: 554)
+        let reveal = MenuPanelLayout.revealFrame(for: frame)
+        XCTAssertEqual(reveal.size, frame.size)
+        XCTAssertEqual(reveal.minX, frame.minX)
+        XCTAssertEqual(reveal.maxY, frame.maxY - 6)
+        XCTAssertEqual(reveal.offsetBy(dx: 0, dy: 6), frame)
+    }
 }

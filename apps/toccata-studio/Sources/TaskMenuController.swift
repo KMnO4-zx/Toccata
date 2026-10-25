@@ -12,15 +12,15 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var statusItem: NSStatusItem?
     private var store: TaskStore?
     private var openWorkbenchAction: (() -> Void)?
-    private var openCalendarAction: (() -> Void)?
     private var clickMonitor: Any?
     private var observers: [NSObjectProtocol] = []
     private var storeSubscription: AnyCancellable?
     private var isDismissing = false
+    private var isEditorRevealing = false
+    private var editorRevealGeneration = UUID()
 
-    func configure(store: TaskStore, openWorkbench: @escaping () -> Void, openCalendar: (() -> Void)? = nil) {
+    func configure(store: TaskStore, openWorkbench: @escaping () -> Void) {
         openWorkbenchAction = openWorkbench
-        openCalendarAction = openCalendar ?? openWorkbench
         guard statusItem == nil else { return }
         self.store = store
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -40,11 +40,6 @@ final class TaskMenuController: NSObject, ObservableObject {
         presentation.onOpenWorkbench = { [weak self] in
             self?.dismiss()
             self?.openWorkbenchAction?()
-            NSApp.activate(ignoringOtherApps: true)
-        }
-        presentation.onOpenCalendar = { [weak self] in
-            self?.dismiss()
-            self?.openCalendarAction?()
             NSApp.activate(ignoringOtherApps: true)
         }
         presentation.onAnchorsChanged = { [weak self] in self?.positionEditor() }
@@ -104,14 +99,25 @@ final class TaskMenuController: NSObject, ObservableObject {
             )
             listPanel = panel
         }
+        guard let panel = listPanel else { return }
+        let wasVisible = panel.isVisible
         hideEditor()
         presentation.selectedTaskID = nil
         presentation.focusRequest = nil
         presentation.rowFrames = [:]
         presentation.openGeneration = UUID()
-        listPanel?.setFrame(frame, display: true)
+
+        let shouldAnimate = !wasVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        panel.setFrame(shouldAnimate ? MenuPanelLayout.revealFrame(for: frame) : frame, display: true)
+        panel.alphaValue = shouldAnimate ? 0 : 1
         NSApp.activate(ignoringOtherApps: true)
-        listPanel?.makeKeyAndOrderFront(nil)
+        panel.makeKeyAndOrderFront(nil)
+        guard shouldAnimate else { return }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = WorkspaceMotion.panelRevealDuration
+            panel.animator().alphaValue = 1
+            panel.animator().setFrame(frame, display: true, animate: true)
+        }
     }
 
     func dismiss() {
@@ -145,14 +151,39 @@ final class TaskMenuController: NSObject, ObservableObject {
                     .clipShape(RoundedRectangle(cornerRadius: TaskMenuStyle.cornerRadius))
             )
         }
-        positionEditor()
+        let targetFrame = isEditorRevealing ? nil : positionEditor()
+        let shouldAnimate = !editorPanel.isVisible && targetFrame != nil
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if shouldAnimate, let targetFrame {
+            editorRevealGeneration = UUID()
+            isEditorRevealing = true
+            editorPanel.alphaValue = 0
+            editorPanel.setFrame(MenuPanelLayout.revealFrame(for: targetFrame), display: true)
+        } else if !isEditorRevealing {
+            editorPanel.alphaValue = 1
+        }
         if editorPanel.parent !== listPanel { listPanel.addChildWindow(editorPanel, ordered: .above) }
         editorPanel.orderFront(nil)
         if focus != nil { editorPanel.makeKeyAndOrderFront(nil) }
+        guard shouldAnimate, let targetFrame else { return }
+        let generation = editorRevealGeneration
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = WorkspaceMotion.panelRevealDuration
+            editorPanel.animator().alphaValue = 1
+            editorPanel.animator().setFrame(targetFrame, display: true, animate: true)
+        }, completionHandler: {
+            Task { @MainActor [weak self] in
+                guard let self, self.editorRevealGeneration == generation else { return }
+                self.isEditorRevealing = false
+                self.positionEditor()
+            }
+        })
     }
 
     private func hideEditor() {
         presentation.editorDidHide()
+        editorRevealGeneration = UUID()
+        isEditorRevealing = false
         guard let editorPanel else { return }
         if let parent = editorPanel.parent { parent.removeChildWindow(editorPanel) }
         // Releasing the hosted editor flushes its final draft through onDisappear.
@@ -160,12 +191,14 @@ final class TaskMenuController: NSObject, ObservableObject {
         editorPanel.orderOut(nil)
     }
 
-    private func positionEditor() {
-        guard let listPanel, let editorPanel, let id = presentation.selectedTaskID else { return }
+    @discardableResult
+    private func positionEditor() -> CGRect? {
+        guard !isEditorRevealing, let listPanel, let editorPanel, let id = presentation.selectedTaskID else { return nil }
         let screen = listPanel.screen ?? NSScreen.main ?? NSScreen.screens[0]
         let frame = MenuPanelLayout.editorFrame(list: listPanel.frame,
                                                 row: presentation.rowFrames[id], screen: screen.visibleFrame)
         editorPanel.setFrame(frame, display: true)
+        return frame
     }
 
     private func belongsToMenu(_ window: NSWindow?) -> Bool {
@@ -204,15 +237,11 @@ struct TaskMenuSetup: View {
     @Environment(\.openWindow) private var openWindow
     let controller: TaskMenuController
     let store: TaskStore
-    @Binding var requestedSection: String?
 
     var body: some View {
         Color.clear.frame(width: 0, height: 0)
             .onAppear {
-                controller.configure(store: store, openWorkbench: { openWindow(id: "main") }, openCalendar: {
-                    requestedSection = "任务日历"
-                    openWindow(id: "main")
-                })
+                controller.configure(store: store, openWorkbench: { openWindow(id: "main") })
             }
     }
 }

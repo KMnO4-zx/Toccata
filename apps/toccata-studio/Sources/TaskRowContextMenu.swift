@@ -34,8 +34,8 @@ private struct TaskRowContextMenu: ViewModifier {
                 }
             } message: {
                 Text(store.children(of: task.id).isEmpty
-                     ? "任务详情和过程记录也会删除。此操作无法撤销。"
-                     : "任务、所有子任务及其过程记录都会删除。此操作无法撤销。")
+                     ? "任务详情也会删除。此操作无法撤销。"
+                     : "任务、所有子任务及其详情都会删除。此操作无法撤销。")
             }
     }
 }

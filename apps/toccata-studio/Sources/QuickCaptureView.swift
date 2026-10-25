@@ -6,6 +6,8 @@ import Combine
 struct QuickCaptureView: View {
     @EnvironmentObject private var tasks: TaskStore
     @EnvironmentObject private var presentation: MenuTaskPresentation
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var page: MenuPanelPage = .tasks
     @State private var scope: MenuTaskScope = .thisWeek
     @State private var sortOrder: MenuTaskSortOrder = .createdDescending
     @State private var title = ""
@@ -27,7 +29,7 @@ struct QuickCaptureView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            captureField
+            if page == .tasks { captureField }
             if let error = tasks.errorMessage {
                 Text(error)
                     .font(.system(size: 10))
@@ -36,7 +38,17 @@ struct QuickCaptureView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 6)
             }
-            taskList.padding(.top, 8)
+            Group {
+                if page == .tasks {
+                    taskList.padding(.top, 8)
+                } else {
+                    MenuCalendarView()
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .id(page)
+            .transition(WorkspaceMotion.menuTransition)
+            .animation(reduceMotion ? nil : WorkspaceMotion.menuChange, value: page)
             bottomBar
         }
         .frame(width: presentation.panelSize.width, height: presentation.panelSize.height)
@@ -52,6 +64,16 @@ struct QuickCaptureView: View {
         }
         .onChange(of: presentation.openGeneration) { _ in resetForOpening() }
         .onChange(of: presentation.listFocusRequest) { _ in captureFocused = false }
+        .onChange(of: page) { newPage in
+            presentation.selectedTaskID = nil
+            presentation.dismissEditor()
+            captureFocused = false
+            if newPage == .tasks {
+                DispatchQueue.main.async {
+                    if page == .tasks { captureFocused = true }
+                }
+            }
+        }
         .onChange(of: scope) { _ in
             presentation.selectedTaskID = nil
             presentation.dismissEditor()
@@ -77,51 +99,59 @@ struct QuickCaptureView: View {
             }
         } message: {
             if let task = taskToDelete, !tasks.children(of: task.id).isEmpty {
-                Text("任务、所有子任务及其详情和过程记录都会删除。此操作无法撤销。")
+                Text("任务、所有子任务及其详情都会删除。此操作无法撤销。")
             } else {
-                Text("任务的详情和过程记录也会删除。此操作无法撤销。")
+                Text("任务的详情也会删除。此操作无法撤销。")
             }
         }
     }
 
     private var header: some View {
         HStack {
-            Menu {
-                Picker("任务视图", selection: $scope) {
-                    ForEach(MenuTaskScope.allCases) { item in Text(item.title).tag(item) }
+            if page == .calendar {
+                Text("任务日历")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(TaskMenuStyle.primary)
+            } else {
+                Menu {
+                    Picker("任务视图", selection: $scope) {
+                        ForEach(MenuTaskScope.allCases) { item in Text(item.title).tag(item) }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(scope.title)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(TaskMenuStyle.primary)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(TaskMenuStyle.secondary)
+                    }
                 }
-                .pickerStyle(.inline)
-            } label: {
-                HStack(spacing: 8) {
-                    Text(scope.title)
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(TaskMenuStyle.primary)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(TaskMenuStyle.secondary)
-                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel("切换任务视图，当前：\(scope.title)")
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .accessibilityLabel("切换任务视图，当前：\(scope.title)")
 
             Spacer()
-            Menu {
-                Picker("排序", selection: $sortOrder) {
-                    ForEach(MenuTaskSortOrder.allCases) { order in Text(order.rawValue).tag(order) }
+            if page == .tasks {
+                Menu {
+                    Picker("排序", selection: $sortOrder) {
+                        ForEach(MenuTaskSortOrder.allCases) { order in Text(order.rawValue).tag(order) }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.system(size: 14))
+                        .foregroundStyle(TaskMenuStyle.primary)
+                        .frame(width: 18, height: 28)
                 }
-                .pickerStyle(.inline)
-            } label: {
-                Image(systemName: "arrow.up.arrow.down")
-                    .font(.system(size: 14))
-                    .foregroundStyle(TaskMenuStyle.primary)
-                    .frame(width: 18, height: 28)
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel("任务排序")
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .accessibilityLabel("任务排序")
         }
         .padding(.horizontal, 16)
         .frame(height: 48)
@@ -272,29 +302,30 @@ struct QuickCaptureView: View {
     private var bottomBar: some View {
         HStack(spacing: 0) {
             Button {
-                presentation.dismissEditor()
-                presentation.selectedTaskID = nil
+                page = .tasks
                 captureFocused = true
             } label: {
-                Image(systemName: "checkmark.square.fill")
-                .font(.system(size: 22))
-                .foregroundStyle(TaskMenuStyle.accent)
-                .frame(width: 20, height: 20)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
+                Image(systemName: page == .tasks ? "checkmark.circle.fill" : "checkmark.circle")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(page == .tasks ? TaskMenuStyle.accent : TaskMenuStyle.muted)
+                    .frame(width: 20, height: 20)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("任务")
+            .accessibilityAddTraits(page == .tasks ? .isSelected : [])
 
-            Button { presentation.openCalendar() } label: {
+            Button { page = .calendar } label: {
                 Image(systemName: "calendar")
                     .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(TaskMenuStyle.muted)
+                    .foregroundStyle(page == .calendar ? TaskMenuStyle.accent : TaskMenuStyle.muted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("日历")
+            .accessibilityAddTraits(page == .calendar ? .isSelected : [])
 
             Menu {
                 Button("打开工作台") { presentation.openWorkbench() }
@@ -421,6 +452,7 @@ struct QuickCaptureView: View {
     }
 
     private func resetForOpening() {
+        page = .tasks
         scope = .thisWeek
         presentation.selectedTaskID = nil
         presentation.dismissEditor()
@@ -438,6 +470,11 @@ struct QuickCaptureView: View {
             captureFocused = true
         }
     }
+}
+
+private enum MenuPanelPage {
+    case tasks
+    case calendar
 }
 
 private enum MenuTaskSortOrder: String, CaseIterable, Identifiable {

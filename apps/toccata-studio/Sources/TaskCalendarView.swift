@@ -8,16 +8,17 @@ struct TaskCalendarView: View {
     @State private var displayedMonth = Calendar.current.startOfDay(for: Date())
     @State private var selectedDay = Calendar.current.startOfDay(for: Date())
     @State private var mode: TaskCalendarMode = .all
-    @State private var selection: String?
+    @Binding private var selection: String?
     @State private var newTitle = ""
     @State private var showsUnscheduled = false
     @FocusState private var addingTask: Bool
 
     private let calendar = Calendar.current
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
-    private let weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"]
 
-    private var selectedTask: TodoTask? { selection.flatMap { store.task(id: $0) } }
+    init(selection: Binding<String?> = .constant(nil)) {
+        _selection = selection
+    }
+
     private var dayTasks: [TodoTask] {
         TaskCalendarModel.tasks(on: selectedDay, from: store.tasks, mode: mode, calendar: calendar)
     }
@@ -46,25 +47,9 @@ struct TaskCalendarView: View {
                 .background(Color.orange.opacity(0.09))
             }
 
-            HSplitView {
-                calendarPane
-                    .frame(minWidth: 390, idealWidth: 490, maxWidth: .infinity, maxHeight: .infinity)
-
-                Group {
-                    if let task = selectedTask {
-                        TaskDetailView(task: task, onSelect: { selection = $0 })
-                            .id(task.id)
-                    } else {
-                        TaskPlaceholder(
-                            symbol: "calendar.badge.clock",
-                            title: "把任务放回时间里",
-                            message: "选择日期查看当天的记录，\n点击任务即可编辑详情、子任务和过程。"
-                        )
-                    }
-                }
-                .frame(minWidth: 330, idealWidth: 400, maxWidth: .infinity, maxHeight: .infinity)
-            }
+            calendarPane
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
         .background(TaskScrollerStyle())
         .onChange(of: store.tasks.map(\.id)) { ids in
@@ -77,7 +62,8 @@ struct TaskCalendarView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     heading
-                    monthCalendar
+                    TaskMonthGrid(tasks: store.tasks, displayedMonth: $displayedMonth,
+                                  selectedDay: $selectedDay)
                     daySection
                         .id("selected-day")
                     unscheduledSection
@@ -105,82 +91,6 @@ struct TaskCalendarView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
-    }
-
-    private var monthCalendar: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 9) {
-                Text(monthLabel)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
-                Button("今天", action: showToday)
-                    .controlSize(.small)
-                    .help("回到今天")
-                Button { moveMonth(-1) } label: { Image(systemName: "chevron.left") }
-                    .help("上个月")
-                    .accessibilityLabel("上个月")
-                Button { moveMonth(1) } label: { Image(systemName: "chevron.right") }
-                    .help("下个月")
-                    .accessibilityLabel("下个月")
-            }
-
-            LazyVGrid(columns: columns, spacing: 4) {
-                ForEach(Array(weekdayLabels.enumerated()), id: \.offset) { index, label in
-                    Text(label)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(index >= 5 ? Color.secondary.opacity(0.6) : Color.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.bottom, 3)
-                }
-                ForEach(TaskCalendarModel.days(in: displayedMonth, calendar: calendar)) { cell in
-                    calendarCell(cell)
-                }
-            }
-
-            HStack(spacing: 15) {
-                eventLegend("创建", color: .blue)
-                eventLegend("计划", color: .orange)
-                eventLegend("完成", color: .green)
-                Spacer(minLength: 0)
-            }
-        }
-        .padding(15)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 13))
-    }
-
-    private func calendarCell(_ cell: CalendarDateCell) -> some View {
-        let counts = TaskCalendarModel.eventCounts(on: cell.date, from: store.tasks, calendar: calendar)
-        let selected = calendar.isDate(cell.date, inSameDayAs: selectedDay)
-        let today = calendar.isDateInToday(cell.date)
-
-        return Button {
-            selectedDay = cell.date
-            if !cell.isInDisplayedMonth { displayedMonth = cell.date }
-        } label: {
-            VStack(spacing: 5) {
-                Text("\(calendar.component(.day, from: cell.date))")
-                    .font(.system(size: 12, weight: today || selected ? .semibold : .regular, design: .rounded))
-                    .foregroundStyle(selected ? Color.white : (today ? Color.accentColor : Color.primary))
-                    .frame(width: 24, height: 24)
-                    .background(selected ? Color.accentColor : (today ? Color.accentColor.opacity(0.11) : Color.clear), in: Circle())
-                HStack(spacing: 3) {
-                    eventDot(counts.created, color: .blue)
-                    eventDot(counts.planned, color: .orange)
-                    eventDot(counts.completed, color: .green)
-                }
-                .frame(height: 5)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 46)
-            .contentShape(RoundedRectangle(cornerRadius: 7))
-            .background(selected ? Color.accentColor.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 7))
-            .opacity(cell.isInDisplayedMonth ? 1 : 0.36)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(dateLabel(cell.date))，创建 \(counts.created) 项，计划 \(counts.planned) 项，完成 \(counts.completed) 项")
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .help("\(dateLabel(cell.date)) · 创建 \(counts.created) · 计划 \(counts.planned) · 完成 \(counts.completed)")
     }
 
     private var daySection: some View {
@@ -365,21 +275,6 @@ struct TaskCalendarView: View {
             .background(color.opacity(0.09), in: RoundedRectangle(cornerRadius: 4))
     }
 
-    private func eventLegend(_ title: String, color: Color) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(color).frame(width: 5, height: 5)
-            Text(title).font(.system(size: 10)).foregroundStyle(.secondary)
-        }
-    }
-
-    private func eventDot(_ count: Int, color: Color) -> some View {
-        Circle().fill(count > 0 ? color : Color.clear).frame(width: 4, height: 4)
-    }
-
-    private var monthLabel: String {
-        "\(calendar.component(.year, from: displayedMonth))年\(calendar.component(.month, from: displayedMonth))月"
-    }
-
     private var emptyDayTitle: String {
         switch mode {
         case .all: return "当天还没有创建、计划或完成记录"
@@ -394,18 +289,6 @@ struct TaskCalendarView: View {
         guard includesWeekday else { return day }
         let weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
         return "\(day) · \(weekdays[calendar.component(.weekday, from: date) - 1])"
-    }
-
-    private func moveMonth(_ amount: Int) {
-        let month = TaskCalendarModel.month(byAdding: amount, to: displayedMonth, calendar: calendar)
-        displayedMonth = month
-        selectedDay = calendar.dateInterval(of: .month, for: month)?.start ?? month
-    }
-
-    private func showToday() {
-        let today = calendar.startOfDay(for: Date())
-        displayedMonth = today
-        selectedDay = today
     }
 
     private func addPlannedTask() {

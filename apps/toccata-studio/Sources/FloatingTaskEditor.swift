@@ -32,20 +32,18 @@ private struct FloatingTaskEditorContent: View {
     @State private var showsChildComposer = false
     @State private var isChoosingDate = false
     @State private var dateChoice = Date()
-    @State private var showsProgress = false
-    @State private var progressText = ""
     @State private var confirmsDeletion = false
     @State private var saveFailed = false
+    @State private var descriptionFocused = false
     @FocusState private var focusedField: Field?
 
-    private enum Field: Hashable { case title, description, child, progress }
+    private enum Field: Hashable { case title, child }
 
     init(task: TodoTask, focusRequest: MenuEditorFocusRequest?) {
         self.task = task
         self.focusRequest = focusRequest
         _draft = State(initialValue: FloatingEditorDrafts.shared.values[task.id] ?? FloatingEditorDraft(task: task))
         _baseline = State(initialValue: FloatingEditorDraft(task: task))
-        _progressText = State(initialValue: FloatingEditorDrafts.shared.progress[task.id] ?? "")
     }
 
     private var children: [TodoTask] { store.children(of: task.id) }
@@ -87,12 +85,12 @@ private struct FloatingTaskEditorContent: View {
         .background(TaskMenuStyle.background)
         .onAppear { applyFocusRequest(focusRequest) }
         .onChange(of: focusRequest) { request in applyFocusRequest(request) }
+        .onChange(of: focusedField) { field in
+            if field != nil { descriptionFocused = false }
+        }
         .onChange(of: draft) { value in
             if hasChanges { FloatingEditorDrafts.shared.values[task.id] = value }
             else { FloatingEditorDrafts.shared.values.removeValue(forKey: task.id) }
-        }
-        .onChange(of: progressText) { value in
-            FloatingEditorDrafts.shared.progress[task.id] = value
         }
         .onChange(of: task) { latest in synchronizeUneditedFields(from: latest) }
         .task(id: draft) {
@@ -110,13 +108,12 @@ private struct FloatingTaskEditorContent: View {
             Button("取消", role: .cancel) {}
             Button("删除任务", role: .destructive) {
                 if store.deleteTask(id: task.id) {
-                    FloatingEditorDrafts.shared.progress.removeValue(forKey: task.id)
                     presentation.dismissEditor()
                     presentation.requestListFocus()
                 }
             }
         } message: {
-            Text(children.isEmpty ? "任务详情和过程记录也会删除。此操作无法撤销。" : "任务、所有子任务及其过程记录都会删除。此操作无法撤销。")
+            Text(children.isEmpty ? "任务详情也会删除。此操作无法撤销。" : "任务、所有子任务及其详情都会删除。此操作无法撤销。")
         }
     }
 
@@ -261,29 +258,26 @@ private struct FloatingTaskEditorContent: View {
         if children.isEmpty && !showsChildComposer {
             return max(70, available - (task.parentID == nil ? 76 : 98))
         }
-        if draft.details.isEmpty { return focusedField == .description ? 58 : 26 }
+        if draft.details.isEmpty { return descriptionFocused ? 58 : 26 }
         let lines = draft.details.split(separator: "\n", omittingEmptySubsequences: false).count
         return min(84, max(42, CGFloat(lines) * 18 + 12))
     }
 
     private func descriptionEditor(height: CGFloat) -> some View {
-        ZStack(alignment: .topLeading) {
-            TextEditor(text: $draft.details)
-                .font(.system(size: 12))
-                .foregroundStyle(TaskMenuStyle.text)
-                .scrollContentBackground(.hidden)
-                .focused($focusedField, equals: .description)
-                .accessibilityLabel("任务描述")
-                .frame(height: height)
-            if draft.details.isEmpty && focusedField == .description {
-                Text("写下任务描述…")
-                    .font(.system(size: 12))
-                    .foregroundStyle(TaskMenuStyle.muted)
-                    .padding(.leading, 5)
-                    .padding(.top, 8)
-                    .allowsHitTesting(false)
-            }
-        }
+        MarkdownTextEditor(
+            text: $draft.details,
+            placeholder: "写下任务描述…",
+            isFocused: Binding(
+                get: { descriptionFocused },
+                set: { focused in
+                    if focused { focusedField = nil }
+                    descriptionFocused = focused
+                }
+            ),
+            textColor: NSColor(calibratedWhite: 0.33, alpha: 1)
+        )
+        .frame(height: height)
+        .accessibilityLabel("任务描述")
     }
 
     private var childList: some View {
@@ -354,26 +348,14 @@ private struct FloatingTaskEditorContent: View {
                     .foregroundStyle(.orange)
             }
             Button(action: focusDescription) {
-                Image(systemName: "underline")
+                Image(systemName: "square.and.pencil")
                     .font(.system(size: 16))
                     .frame(width: 17, height: 22)
-                .contentShape(Rectangle())
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("编辑任务描述")
             .help("编辑任务描述")
-            Button { showsProgress.toggle() } label: {
-                Image(systemName: "text.bubble")
-                    .font(.system(size: 16))
-                    .frame(width: 18, height: 22)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("过程与感受")
-            .help("查看和添加过程记录")
-            .popover(isPresented: $showsProgress, arrowEdge: .bottom) {
-                progressPopover.background(MenuCompanionWindow(presentation: presentation))
-            }
             moreMenu
         }
         .foregroundStyle(TaskMenuStyle.primary)
@@ -402,55 +384,17 @@ private struct FloatingTaskEditorContent: View {
         .accessibilityLabel("更多任务操作")
     }
 
-    private var progressPopover: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("过程与感受").font(.system(size: 13, weight: .semibold))
-            if !store.progress(for: task.id).isEmpty {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 13) {
-                        ForEach(store.progress(for: task.id)) { entry in
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(entry.text).font(.system(size: 12)).textSelection(.enabled)
-                                Text(entry.createdAt.formatted(.dateTime.month().day().hour().minute()))
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(TaskMenuStyle.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                }
-                .frame(maxHeight: 150)
-            }
-            TextEditor(text: $progressText)
-                .font(.system(size: 12))
-                .focused($focusedField, equals: .progress)
-                .accessibilityLabel("新的过程记录")
-                .frame(height: 70)
-                .overlay(RoundedRectangle(cornerRadius: 5).stroke(TaskMenuStyle.muted, lineWidth: 0.5))
-            HStack {
-                Text("记录进展或新的想法")
-                    .font(.system(size: 10))
-                    .foregroundStyle(TaskMenuStyle.secondary)
-                Spacer()
-                Button("添加记录") {
-                    guard store.addProgress(taskID: task.id, text: progressText) else { return }
-                    progressText = ""
-                    FloatingEditorDrafts.shared.progress.removeValue(forKey: task.id)
-                }
-                .disabled(progressText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-        .padding(16)
-        .frame(width: 300)
-    }
-
     private func applyFocusRequest(_ request: MenuEditorFocusRequest?) {
         focusedField = nil
+        descriptionFocused = request?.field == .description
         guard let request else { return }
-        if request.field == .child && task.parentID != nil { return }
-        if request.field == .child { showsChildComposer = true }
-        let destination: Field = request.field == .description ? .description : .child
-        DispatchQueue.main.async { focusedField = destination }
+        if request.field == .description {
+            focusDescription()
+            return
+        }
+        guard task.parentID == nil else { return }
+        showsChildComposer = true
+        DispatchQueue.main.async { focusedField = .child }
     }
 
     private func scrollToRequest(_ request: MenuEditorFocusRequest?, using proxy: ScrollViewProxy) {
@@ -461,13 +405,14 @@ private struct FloatingTaskEditorContent: View {
 
     private func focusDescription() {
         focusedField = nil
-        DispatchQueue.main.async { focusedField = .description }
+        descriptionFocused = true
     }
 
     private func focusChild() {
         guard task.parentID == nil else { return }
         showsChildComposer = true
         focusedField = nil
+        descriptionFocused = false
         DispatchQueue.main.async { focusedField = .child }
     }
 
@@ -536,5 +481,4 @@ private struct FloatingEditorDraft: Equatable {
 private final class FloatingEditorDrafts {
     static let shared = FloatingEditorDrafts()
     var values: [String: FloatingEditorDraft] = [:]
-    var progress: [String: String] = [:]
 }
