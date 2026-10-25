@@ -7,6 +7,7 @@ struct QuickCaptureView: View {
     @EnvironmentObject private var tasks: TaskStore
     @EnvironmentObject private var presentation: MenuTaskPresentation
     @EnvironmentObject private var loginItems: LoginItemController
+    @EnvironmentObject private var appearance: AppearanceSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var page: MenuPanelPage = .tasks
     @State private var scope: MenuTaskScope = .thisWeek
@@ -55,7 +56,6 @@ struct QuickCaptureView: View {
         .frame(width: presentation.panelSize.width, height: presentation.panelSize.height)
         .background(TaskMenuStyle.background)
         .clipShape(RoundedRectangle(cornerRadius: TaskMenuStyle.cornerRadius))
-        .environment(\.colorScheme, .light)
         .coordinateSpace(name: "taskMenu")
         .onPreferenceChange(MenuTaskRowFrameKey.self) { frames in presentation.rowFrames = frames }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { referenceDate = $0 }
@@ -330,6 +330,13 @@ struct QuickCaptureView: View {
 
             Menu {
                 Button("打开工作台") { presentation.openWorkbench() }
+                Picker("外观", selection: $appearance.mode) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.menu)
+                Divider()
                 Toggle("登录时启动", isOn: Binding(
                     get: { loginItems.enabled }, set: { loginItems.setEnabled($0) }
                 ))

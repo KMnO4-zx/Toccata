@@ -62,7 +62,17 @@ final class TaskScrollerAnchorView: NSView {
 }
 
 private final class TaskScroller: NSScroller {
+    private static let thumbColor = NSColor(name: "Toccata.Scrollbar.thumb") { appearance in
+        let white: CGFloat = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? 0.50 : 0.58
+        return NSColor(srgbRed: white, green: white, blue: white, alpha: 1)
+    }
+
     override class var isCompatibleWithOverlayScrollers: Bool { true }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
 
     override class func scrollerWidth(for controlSize: NSControl.ControlSize,
                                       scrollerStyle: NSScroller.Style) -> CGFloat {
@@ -76,7 +86,7 @@ private final class TaskScroller: NSScroller {
         let indicator = isVertical
             ? CGRect(x: bounds.midX - 2, y: knob.minY, width: 4, height: knob.height)
             : CGRect(x: knob.minX, y: bounds.midY - 2, width: knob.width, height: 4)
-        NSColor(calibratedWhite: 0.86, alpha: 1).setFill()
+        Self.thumbColor.setFill()
         NSBezierPath(roundedRect: indicator, xRadius: 2, yRadius: 2).fill()
     }
 

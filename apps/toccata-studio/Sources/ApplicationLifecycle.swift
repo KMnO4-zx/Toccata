@@ -4,6 +4,7 @@ import SwiftUI
 /// Owns the only workbench window. Closing it never owns the application's lifetime.
 @MainActor
 final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    let appearance = AppearanceSettings()
     let loginItems = LoginItemController()
     private let taskStore = TaskStore()
     private let taskMenu = TaskMenuController()
@@ -23,7 +24,7 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
         didStart = true
         let launchedAtLogin = ApplicationLaunchContext.currentIsLoginItemLaunch
         NSApp.setActivationPolicy(launchedAtLogin ? .accessory : .regular)
-        taskMenu.configure(store: taskStore, loginItems: loginItems) { [weak self] in
+        taskMenu.configure(store: taskStore, loginItems: loginItems, appearance: appearance) { [weak self] in
             self?.openWorkbench()
         }
         refresher.start()
@@ -158,9 +159,21 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
 @MainActor
 struct ApplicationSettingsView: View {
     @ObservedObject var loginItems: LoginItemController
+    @ObservedObject var appearance: AppearanceSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            Text("外观").font(.headline)
+            Picker("外观模式", selection: $appearance.mode) {
+                ForEach(AppearanceMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            Text("跟随系统会随 macOS 的浅色或深色外观自动切换。")
+                .font(.callout).foregroundStyle(.secondary)
+            Divider()
             Text("启动与后台运行").font(.headline)
             Toggle("登录时启动", isOn: Binding(
                 get: { loginItems.enabled }, set: { loginItems.setEnabled($0) }

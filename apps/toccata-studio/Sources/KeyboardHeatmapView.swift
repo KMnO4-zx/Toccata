@@ -134,10 +134,14 @@ enum KeyboardHeatmap {
         return log1p(Double(clampedCount)) / log1p(Double(maxCount))
     }
 
-    fileprivate static func color(intensity: Double) -> Color {
+    fileprivate static func color(intensity: Double, scheme: ColorScheme) -> Color {
         let t = min(max(intensity, 0), 1)
-        let base = (red: 0.949, green: 0.957, blue: 0.969)
-        let hot = (red: 0.025, green: 0.220, blue: 0.720)
+        let base = scheme == .dark
+            ? (red: 0.16, green: 0.17, blue: 0.20)
+            : (red: 0.949, green: 0.957, blue: 0.969)
+        let hot = scheme == .dark
+            ? (red: 0.18, green: 0.32, blue: 0.75)
+            : (red: 0.025, green: 0.220, blue: 0.720)
         return Color(
             .sRGB,
             red: base.red + (hot.red - base.red) * t,
@@ -153,6 +157,7 @@ enum KeyboardHeatmap {
 }
 
 private struct KeyboardKeyCap: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let label: String
@@ -170,19 +175,34 @@ private struct KeyboardKeyCap: View {
         max(7, min(16, size.height * 0.28))
     }
 
+    private var highlights: [Color] {
+        if colorScheme == .dark {
+            return [.white.opacity(0.08), .white.opacity(0.015), .black.opacity(0.12)]
+        }
+        return [.white.opacity(0.62 - intensity * 0.46), .white.opacity(0.08),
+                .black.opacity(0.035 + intensity * 0.025)]
+    }
+
+    private var edges: [Color] {
+        colorScheme == .dark
+            ? [.white.opacity(0.24), .white.opacity(0.07), .black.opacity(0.35)]
+            : [.white.opacity(0.95), Color(white: 0.70), .white.opacity(0.82)]
+    }
+
+    private var labelColor: Color {
+        if colorScheme == .dark { return Color(white: 0.96) }
+        return KeyboardHeatmap.usesWhiteText(intensity: intensity) ? .white : Color(white: 0.17)
+    }
+
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(KeyboardHeatmap.color(intensity: intensity))
-            .shadow(color: Color.black.opacity(0.14), radius: 1.2, x: 0, y: 1)
+            .fill(KeyboardHeatmap.color(intensity: intensity, scheme: colorScheme))
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.30 : 0.14), radius: 1.2, x: 0, y: 1)
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.62 - intensity * 0.46),
-                                Color.white.opacity(0.08),
-                                Color.black.opacity(0.035 + intensity * 0.025)
-                            ],
+                            colors: highlights,
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
@@ -192,11 +212,7 @@ private struct KeyboardKeyCap: View {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .stroke(
                         LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.95),
-                                Color(white: 0.70),
-                                Color.white.opacity(0.82)
-                            ],
+                            colors: edges,
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
@@ -205,17 +221,13 @@ private struct KeyboardKeyCap: View {
             }
             .overlay {
                 RoundedRectangle(cornerRadius: max(0, cornerRadius - 1), style: .continuous)
-                    .stroke(Color.white.opacity(0.42), lineWidth: 0.5)
+                    .stroke(Color.white.opacity(colorScheme == .dark ? 0.06 : 0.42), lineWidth: 0.5)
                     .padding(1)
             }
             .overlay {
                 Text(label)
                     .font(.system(size: fontSize, weight: .medium, design: .rounded))
-                    .foregroundColor(
-                        KeyboardHeatmap.usesWhiteText(intensity: intensity)
-                            ? .white
-                            : Color(white: 0.17)
-                    )
+                    .foregroundColor(labelColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)
                     .padding(2)

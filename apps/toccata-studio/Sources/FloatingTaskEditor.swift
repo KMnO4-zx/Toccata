@@ -278,7 +278,7 @@ private struct FloatingTaskEditorContent: View {
                     descriptionFocused = focused
                 }
             ),
-            textColor: NSColor(calibratedWhite: 0.33, alpha: 1)
+            textColor: TaskMenuStyle.textColor
         )
         .frame(height: height)
         .accessibilityLabel("任务描述")

@@ -12,6 +12,7 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var statusItem: NSStatusItem?
     private var store: TaskStore?
     private var loginItems: LoginItemController?
+    private var appearance: AppearanceSettings?
     private var openWorkbenchAction: (() -> Void)?
     private var clickMonitor: Any?
     private var observers: [NSObjectProtocol] = []
@@ -20,11 +21,13 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var isEditorRevealing = false
     private var editorRevealGeneration = UUID()
 
-    func configure(store: TaskStore, loginItems: LoginItemController, openWorkbench: @escaping () -> Void) {
+    func configure(store: TaskStore, loginItems: LoginItemController, appearance: AppearanceSettings,
+                   openWorkbench: @escaping () -> Void) {
         openWorkbenchAction = openWorkbench
         guard statusItem == nil else { return }
         self.store = store
         self.loginItems = loginItems
+        self.appearance = appearance
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             button.image = NSImage(systemSymbolName: "square.stack.3d.up.fill", accessibilityDescription: "Toccata 任务")
@@ -84,7 +87,8 @@ final class TaskMenuController: NSObject, ObservableObject {
     }
 
     func showMenu() {
-        guard let store, let loginItems, let button = statusItem?.button, let statusWindow = button.window else { return }
+        guard let store, let loginItems, let appearance,
+              let button = statusItem?.button, let statusWindow = button.window else { return }
         loginItems.refresh()
         let anchor = statusWindow.convertToScreen(button.convert(button.bounds, to: nil))
         let screen = statusWindow.screen ?? NSScreen.main ?? NSScreen.screens[0]
@@ -97,8 +101,8 @@ final class TaskMenuController: NSObject, ObservableObject {
                     .environmentObject(store)
                     .environmentObject(presentation)
                     .environmentObject(loginItems)
+                    .environmentObject(appearance)
                     .tint(TaskMenuStyle.accent)
-                    .environment(\.colorScheme, .light)
                     .background(TaskMenuStyle.background)
                     .clipShape(RoundedRectangle(cornerRadius: TaskMenuStyle.cornerRadius))
             )
@@ -151,7 +155,6 @@ final class TaskMenuController: NSObject, ObservableObject {
                     .environmentObject(store)
                     .environmentObject(presentation)
                     .tint(TaskMenuStyle.accent)
-                    .environment(\.colorScheme, .light)
                     .background(TaskMenuStyle.background)
                     .clipShape(RoundedRectangle(cornerRadius: TaskMenuStyle.cornerRadius))
             )
@@ -225,7 +228,6 @@ final class TaskMenuController: NSObject, ObservableObject {
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.transient, .moveToActiveSpace, .fullScreenAuxiliary]
         panel.isOpaque = false
-        panel.appearance = NSAppearance(named: .aqua)
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.isMovable = false

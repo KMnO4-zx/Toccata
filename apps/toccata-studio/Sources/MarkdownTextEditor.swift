@@ -3,6 +3,7 @@ import SwiftUI
 import WebKit
 
 struct MarkdownTextEditor: NSViewRepresentable {
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var text: String
     let placeholder: String
     @Binding var isFocused: Bool
@@ -12,12 +13,14 @@ struct MarkdownTextEditor: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let view = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
         view.underPageBackgroundColor = .clear
+        view.appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
         context.coordinator.attach(to: view, placeholder: placeholder)
         return view
     }
 
     func updateNSView(_ view: WKWebView, context: Context) {
-        context.coordinator.update(text: text, isFocused: isFocused, fontSize: fontSize, textColor: textColor)
+        context.coordinator.update(text: text, isFocused: isFocused, fontSize: fontSize,
+                                   textColor: textColor, colorScheme: colorScheme)
     }
 
     func makeCoordinator() -> MarkdownEditorCoordinator {
@@ -37,6 +40,20 @@ struct MarkdownTextEditor: NSViewRepresentable {
         <head>
         <meta charset="utf-8">
         <style>
+        :root {
+            color-scheme: light;
+            --editor-text: #333333;
+            --editor-placeholder: #8a8a8a;
+            --editor-link: #005cc5;
+            --editor-code-text: #333333;
+            --editor-code-background: rgba(0, 0, 0, 0.05);
+            --editor-quote-text: #6e6e73;
+            --editor-border: rgba(0, 0, 0, 0.14);
+            --editor-scrollbar: rgba(0, 0, 0, 0.20);
+            --editor-scrollbar-hover: rgba(0, 0, 0, 0.35);
+            --editor-selection: #b5d5ff;
+            --editor-selection-text: #111111;
+        }
         * { box-sizing: border-box; }
         html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
         body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
@@ -47,7 +64,8 @@ struct MarkdownTextEditor: NSViewRepresentable {
             padding: 6px 8px;
             overflow: auto;
             outline: none;
-            color: #333333;
+            color: var(--editor-text);
+            caret-color: var(--editor-text);
             font-size: 12px;
             line-height: 1.55;
             tab-size: 4;
@@ -59,19 +77,24 @@ struct MarkdownTextEditor: NSViewRepresentable {
             top: 6px;
             left: 8px;
             right: 8px;
-            color: #a6a6a6;
+            color: var(--editor-placeholder);
             pointer-events: none;
         }
         #editor::-webkit-scrollbar { width: 8px; height: 8px; }
         #editor::-webkit-scrollbar-track { background: transparent; }
         #editor::-webkit-scrollbar-thumb {
-            background: #dbdbdb;
+            background: var(--editor-scrollbar);
             border: 2px solid transparent;
             border-radius: 4px;
             background-clip: content-box;
         }
+        #editor::-webkit-scrollbar-thumb:hover { background-color: var(--editor-scrollbar-hover); }
         #editor::-webkit-scrollbar-button { display: none; }
         #editor::-webkit-scrollbar-corner { background: transparent; }
+        #editor ::selection, #editor::selection {
+            background: var(--editor-selection);
+            color: var(--editor-selection-text);
+        }
         p { margin: 0 0 8px; }
         h1, h2, h3, h4, h5, h6 { margin: 0 0 8px; line-height: 1.35; }
         h1 { font-size: 18px; }
@@ -79,19 +102,28 @@ struct MarkdownTextEditor: NSViewRepresentable {
         h3 { font-size: 14px; }
         h4, h5, h6 { font-size: 12px; }
         ul, ol { margin: 0 0 8px; padding-left: 22px; }
-        blockquote { margin: 0 0 8px; padding-left: 8px; border-left: 2px solid #d3d3d3; color: #777777; }
-        a { color: #4772fa; text-decoration: underline; }
-        code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+        blockquote { margin: 0 0 8px; padding-left: 8px; border-left: 2px solid var(--editor-border); color: var(--editor-quote-text); }
+        a { color: var(--editor-link); text-decoration: underline; }
+        code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 11px;
+            color: var(--editor-code-text);
+            background: var(--editor-code-background);
+            padding: 1px 4px;
+            border-radius: 4px;
+        }
         pre {
             margin: 0 0 8px;
             padding: 10px;
             overflow: auto;
             border-radius: 7px;
-            background: #f5f5f5;
+            background: var(--editor-code-background);
+            color: var(--editor-code-text);
+            border: 1px solid var(--editor-border);
             white-space: pre-wrap;
         }
-        pre code { font: inherit; }
-        hr { border: 0; border-top: 1px solid #dddddd; margin: 10px 0; }
+        pre code { font: inherit; color: inherit; background: transparent; padding: 0; border-radius: 0; }
+        hr { border: 0; border-top: 1px solid var(--editor-border); margin: 10px 0; }
         </style>
         </head>
         <body>
@@ -660,9 +692,10 @@ final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptM
     private var isFlushing = false
     private var requestedFocus: Bool
     private var lastFocus: Bool?
-    private var lastStyle: String?
+    private var lastStyle: MarkdownEditorStyle?
     private var fontSize: CGFloat = 12
     private var textColor = NSColor.labelColor
+    private var colorScheme: ColorScheme = .light
 
     init(text: Binding<String>, isFocused: Binding<Bool>) {
         _text = text
@@ -679,10 +712,16 @@ final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptM
         webView.loadHTMLString(MarkdownTextEditor.pageHTML(placeholder: placeholder), baseURL: nil)
     }
 
-    func update(text: String, isFocused: Bool, fontSize: CGFloat, textColor: NSColor) {
+    func update(text: String, isFocused: Bool, fontSize: CGFloat, textColor: NSColor,
+                colorScheme: ColorScheme = .light) {
         requestedFocus = isFocused
         self.fontSize = fontSize
         self.textColor = textColor
+        self.colorScheme = colorScheme
+        let appearanceName: NSAppearance.Name = colorScheme == .dark ? .darkAqua : .aqua
+        if webView?.appearance?.name != appearanceName {
+            webView?.appearance = NSAppearance(named: appearanceName)
+        }
         guard isReady else { return }
         // SwiftUI can redraw with the previous binding while WebKit is returning
         // the final edit. Do not replace that edit with a stale external render.
@@ -765,16 +804,68 @@ final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptM
     }
 
     private func updateStyle() {
-        let color = textColor.usingColorSpace(.sRGB) ?? textColor
-        let style = "\(fontSize)|\(color.redComponent)|\(color.greenComponent)|\(color.blueComponent)|\(color.alphaComponent)"
+        let style = MarkdownEditorStyle(fontSize: fontSize, textColor: textColor, colorScheme: colorScheme)
         guard lastStyle != style else { return }
         lastStyle = style
-        let red = Int(color.redComponent * 255)
-        let green = Int(color.greenComponent * 255)
-        let blue = Int(color.blueComponent * 255)
-        webView?.evaluateJavaScript("""
-            document.getElementById('editor').style.fontSize = '\(fontSize)px';
-            document.getElementById('editor').style.color = 'rgba(\(red),\(green),\(blue),\(color.alphaComponent))';
-        """)
+        // Only CSS changes: no HTML reload, normalization, or focus mutation.
+        // Composition state, native binding, DOM nodes, and selection stay intact.
+        webView?.evaluateJavaScript(style.javascript)
+    }
+}
+
+/// Resolves dynamic AppKit colors using the editor's explicit SwiftUI appearance,
+/// rather than whichever appearance happens to be current on the drawing thread.
+@MainActor
+struct MarkdownEditorStyle: Equatable {
+    let fontSize: CGFloat
+    let colorSchemeName: String
+    let variables: [String: String]
+
+    init(fontSize: CGFloat, textColor: NSColor, colorScheme: ColorScheme) {
+        self.fontSize = fontSize
+        colorSchemeName = colorScheme == .dark ? "dark" : "light"
+        let appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
+        var resolved: [String: String] = [:]
+        let resolve = {
+            resolved = [
+                "--editor-text": Self.cssColor(textColor),
+                "--editor-placeholder": Self.cssColor(.placeholderTextColor),
+                "--editor-link": Self.cssColor(.linkColor),
+                "--editor-code-text": Self.cssColor(.labelColor),
+                "--editor-code-background": Self.cssColor(NSColor.quaternaryLabelColor),
+                "--editor-quote-text": Self.cssColor(.secondaryLabelColor),
+                "--editor-border": Self.cssColor(.separatorColor),
+                "--editor-scrollbar": Self.cssColor(.tertiaryLabelColor),
+                "--editor-scrollbar-hover": Self.cssColor(.secondaryLabelColor),
+                "--editor-selection": Self.cssColor(.selectedTextBackgroundColor),
+                "--editor-selection-text": Self.cssColor(.selectedTextColor)
+            ]
+        }
+        if let appearance { appearance.performAsCurrentDrawingAppearance(resolve) }
+        else { resolve() }
+        variables = resolved
+    }
+
+    var javascript: String {
+        let data = (try? JSONSerialization.data(withJSONObject: variables, options: [.sortedKeys])) ?? Data("{}".utf8)
+        let values = String(data: data, encoding: .utf8) ?? "{}"
+        return """
+            (() => {
+                const root = document.documentElement;
+                root.style.colorScheme = \(MarkdownTextEditor.javascriptString(colorSchemeName));
+                for (const [name, value] of Object.entries(\(values))) {
+                    root.style.setProperty(name, value);
+                }
+                document.getElementById('editor').style.fontSize = \(MarkdownTextEditor.javascriptString("\(fontSize)px"));
+            })();
+        """
+    }
+
+    private static func cssColor(_ color: NSColor) -> String {
+        guard let rgb = color.usingColorSpace(.sRGB) else { return "currentColor" }
+        let red = Int((min(1, max(0, rgb.redComponent)) * 255).rounded())
+        let green = Int((min(1, max(0, rgb.greenComponent)) * 255).rounded())
+        let blue = Int((min(1, max(0, rgb.blueComponent)) * 255).rounded())
+        return "rgba(\(red),\(green),\(blue),\(rgb.alphaComponent))"
     }
 }

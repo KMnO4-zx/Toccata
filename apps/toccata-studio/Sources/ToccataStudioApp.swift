@@ -8,7 +8,7 @@ struct ToccataStudioApp: App {
 
     var body: some Scene {
         Settings {
-            ApplicationSettingsView(loginItems: application.loginItems)
+            ApplicationSettingsView(loginItems: application.loginItems, appearance: application.appearance)
         }
         .commands {
             CommandGroup(replacing: .newItem) {

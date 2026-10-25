@@ -166,6 +166,47 @@ final class MarkdownWebEditorTests: XCTestCase {
         XCTAssertEqual(renderCount, "0")
     }
 
+    func testAppearanceSwitchPreservesUncommittedCompositionAndSelection() async throws {
+        let (editor, coordinator, state) = try await loadCoordinatedEditor()
+        _ = try await evaluate(editor, """
+            focusEditor();
+            editor.dispatchEvent(new CompositionEvent('compositionstart'));
+            document.execCommand('insertText', false, '正在输入');
+            window.compositionHTML = editor.innerHTML;
+            window.compositionNode = window.getSelection().anchorNode;
+            window.compositionOffset = window.getSelection().anchorOffset;
+        """)
+        XCTAssertEqual(state.text, "")
+
+        for scheme in [ColorScheme.dark, .light] {
+            coordinator.update(text: state.text, isFocused: true, fontSize: 12,
+                               textColor: .labelColor, colorScheme: scheme)
+            let result = try await evaluate(editor, """
+                JSON.stringify({
+                    scheme: getComputedStyle(document.documentElement).colorScheme,
+                    unchangedHTML: editor.innerHTML === window.compositionHTML,
+                    unchangedNode: window.getSelection().anchorNode === window.compositionNode,
+                    unchangedOffset: window.getSelection().anchorOffset === window.compositionOffset,
+                    composing: composing,
+                    renders: window.externalRenders
+                })
+            """)
+            let values = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any])
+            XCTAssertEqual(values["scheme"] as? String, scheme == .dark ? "dark" : "light")
+            XCTAssertEqual(values["unchangedHTML"] as? Bool, true)
+            XCTAssertEqual(values["unchangedNode"] as? Bool, true)
+            XCTAssertEqual(values["unchangedOffset"] as? Bool, true)
+            XCTAssertEqual(values["composing"] as? Bool, true)
+            XCTAssertEqual(values["renders"] as? Int, 0)
+            XCTAssertEqual(state.text, "")
+        }
+
+        _ = try await evaluate(editor, "editor.dispatchEvent(new CompositionEvent('compositionend')); clearTimeout(normalizeTimer);")
+        let saved = await coordinator.flushPendingMarkdown()
+        XCTAssertTrue(saved)
+        XCTAssertEqual(state.text, "正在输入")
+    }
+
     func testMainDetailKeepsFocusAfterDraftUpdates() async throws {
         let (store, id, task) = try focusFixture()
         let view = TaskDetailView(task: task, onSelect: { _ in }).environmentObject(store)
