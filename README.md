@@ -30,23 +30,23 @@
 
 这些数字是**根据键盘活动估算的电脑使用时间**。阅读、看视频、仅使用鼠标时可能没有记录。**Fn 累计按住时间用于估算语音输出时间**，也可能包含 Fn 快捷键操作；Toccata 不检测麦克风录音。
 
-键盘采集由独立的 Rust 后台服务运行，记录键码、时间、按住时长和前台应用归属。任务功能可独立使用，后台服务未连接时仍能添加、编辑和完成任务。
+键盘采集由 Rust 后台服务运行，记录键码、时间、按住时长和前台应用归属。标准 App 已内嵌该服务，并会在现有 socket 不可连接时自动启动；已有可用服务会直接复用。任务功能可独立使用，后台服务未连接时仍能添加、编辑和完成任务。
 
 ## 构建与运行
 
 需要 macOS 13 或更新版本、Rust 工具链和支持 Swift 5.9 的 Xcode Command Line Tools。
 
 ```bash
-# 在项目根目录：构建工作台应用，产物为 dist/Toccata.app
+# 在项目根目录：构建工作台及内嵌采集服务，产物为 dist/Toccata.app
 ./scripts/build-app.sh
 open dist/Toccata.app
 
-# 单独构建并启动键盘采集服务
+# 开发时也可单独构建并启动键盘采集服务
 cargo build --release --locked
 ./target/release/toccata-core
 ```
 
-首次启动采集服务需要在“系统设置 → 隐私与安全性 → 输入监控”中授权。服务会在等待授权时定期重试。工作台界面本身不负责启动后台采集。
+首次启动采集服务需要在“系统设置 → 隐私与安全性 → 输入监控”中授权。服务会在等待授权时定期重试。App 会启动内嵌服务，不需要另行手工启动；SwiftPM 开发构建没有内嵌服务，可使用上面的独立运行方式。
 
 也可直接通过 SwiftPM 构建界面：
 
@@ -57,7 +57,7 @@ swift build -c release
 ./.build/release/toccata-studio
 ```
 
-如需后台服务随登录启动，可使用 `scripts/com.toccata.core.plist`：先将其中 `ProgramArguments` 改为实际服务可执行文件的绝对路径，再安装并加载：
+如果需要在未打开 App 时也随登录启动独立服务，可使用 `scripts/com.toccata.core.plist`：先将其中 `ProgramArguments` 改为实际服务可执行文件的绝对路径，再安装并加载：
 
 ```bash
 mkdir -p "$HOME/Library/LaunchAgents"
@@ -65,7 +65,7 @@ cp scripts/com.toccata.core.plist "$HOME/Library/LaunchAgents/"
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.toccata.core.plist"
 ```
 
-工作台应用和后台服务分别运行。
+标准 App 不需要安装 LaunchAgent；手工服务与 LaunchAgent 仅用于开发或自定义常驻部署。
 
 ## 数据与配置
 

@@ -7,6 +7,7 @@ struct ToccataStudioApp: App {
     @StateObject private var refresher = LiveRefresher()
     @StateObject private var taskStore = TaskStore()
     @StateObject private var taskMenu = TaskMenuController()
+    @StateObject private var coreProcess = CoreProcessController()
     @State private var requestedSection: String?
 
     init() {
@@ -20,7 +21,10 @@ struct ToccataStudioApp: App {
                 .environmentObject(taskStore)
                 .frame(minWidth: 1040, minHeight: 650)
                 .background(TaskMenuSetup(controller: taskMenu, store: taskStore))
-                .onAppear { refresher.start() }
+                .onAppear {
+                    coreProcess.start()
+                    refresher.start()
+                }
         }
         .defaultSize(width: 1240, height: 780)
 
@@ -135,6 +139,7 @@ struct ContentView: View {
             }
             .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: section)
         }
+        .font(.system(size: 13))
         .tint(.indigo)
         .background(TaskScrollerStyle())
         .onAppear(perform: openRequestedSection)

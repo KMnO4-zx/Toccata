@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build a local, ad-hoc signed macOS app. Keyboard collection remains a separate daemon.
+# Build a local, ad-hoc signed macOS app with the keyboard collection helper.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PACKAGE="$ROOT/apps/toccata-studio"
@@ -9,13 +9,15 @@ export CLANG_MODULE_CACHE_PATH="$CACHE/clang-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$CACHE/swift-cache"
 "$ROOT/scripts/sync-assets.sh"
 
+cargo build --manifest-path "$ROOT/Cargo.toml" --release --locked
 swift build --package-path "$PACKAGE" --configuration release --disable-sandbox --cache-path "$CACHE/spm-cache"
 BIN_DIR="$(swift build --package-path "$PACKAGE" --configuration release --disable-sandbox --cache-path "$CACHE/spm-cache" --show-bin-path)"
 STAGING="$(mktemp -d "$ROOT/dist/.Toccata.XXXXXX")"
 trap 'rm -rf "$STAGING"' EXIT
 APP="$STAGING/Toccata.app"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
 cp "$BIN_DIR/toccata-studio" "$APP/Contents/MacOS/Toccata"
+cp "$ROOT/target/release/toccata-core" "$APP/Contents/Helpers/toccata-core"
 cp -R "$BIN_DIR/toccata-studio_toccata-studio.bundle" "$APP/Contents/Resources/"
 cp "$PACKAGE/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
@@ -34,6 +36,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
+codesign --force --sign - "$APP/Contents/Helpers/toccata-core"
 codesign --force --sign - "$APP"
 rm -rf "$ROOT/dist/Toccata.app"
 mv "$APP" "$ROOT/dist/Toccata.app"
