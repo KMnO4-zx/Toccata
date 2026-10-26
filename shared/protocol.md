@@ -54,12 +54,14 @@
 
 | 字段 | 含义 |
 |---|---|
-| `keycode` | macOS CGKeyCode |
+| `keycode` | macOS CGKeyCode；Lock / Power 归一化为 `127` |
 | `kind` | `down` 或 `up` |
 | `ts` | Unix epoch 毫秒 |
 | `app` | 事件发生时前台应用的 bundle ID，可能为 `null` |
 
 采集层过滤长按产生的 autorepeat `keyDown`，将修饰键的 `FlagsChanged` 转换为按下/松开事件。实时 `key` 消息可能先于数据库事务提交到达，其中没有 `hold_ms`。
+
+F1–F12、Caps Lock 和 Lock 由进程内非独占 IOHIDManager 补充监听，只匹配键盘设备的相关输入元素。媒体功能归一化到对应 F 键；仅当设备成功打开并提供该键时，才忽略普通 tap 的重复事件。设备移除后释放未松开的键并恢复 tap 回退。Caps Lock 的 HID 按下/松开表示物理动作；无法使用 HID 时，锁定状态切换归一化为一次短点击，避免把大写锁定期间当成长按。Lock 使用 `127`，原来的 `105` 是 F13；Lock 按下立即生成一对 down/up，避免锁屏后的松开事件缺失导致时长增长。不会改写旧事件或追补漏记。
 
 有待写数据且事务成功提交后，再广播：
 

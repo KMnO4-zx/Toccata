@@ -7,14 +7,16 @@ struct KeyboardHeatmapView: View {
     private let counts: [Int: Int]
     private let fnMs: Int64
     private let periodDescription: String
+    private let labelScale: CGFloat
     @State private var hoveredKeyID: String?
 
     init(layout: KeyboardLayout = .magicKeyboard, counts: [Int: Int] = [:], fnMs: Int64 = 0,
-         periodDescription: String = "今天") {
+         periodDescription: String = "今天", labelScale: CGFloat = 1) {
         self.layout = layout
         self.counts = counts
         self.fnMs = fnMs
         self.periodDescription = periodDescription
+        self.labelScale = labelScale
     }
 
     var body: some View {
@@ -50,6 +52,7 @@ struct KeyboardHeatmapView: View {
                         activity: activityDescription(for: item.key),
                         intensity: intensity,
                         size: item.frame.size,
+                        labelScale: labelScale,
                         hovering: hoveredKeyID == item.id
                     )
                     .frame(width: item.frame.width, height: item.frame.height)
@@ -142,6 +145,7 @@ private struct KeyboardKeyCap: View {
     let activity: String
     let intensity: Double
     let size: CGSize
+    let labelScale: CGFloat
     let hovering: Bool
 
     private var cornerRadius: CGFloat {
@@ -149,7 +153,7 @@ private struct KeyboardKeyCap: View {
     }
 
     private var fontSize: CGFloat {
-        max(7, min(16, size.height * 0.28))
+        max(7, min(16 * labelScale, size.height * 0.28 * labelScale))
     }
 
     private var highlights: [Color] {

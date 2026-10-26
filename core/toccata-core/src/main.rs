@@ -7,6 +7,8 @@
 //! - 信号：signal-hook 置原子标志，主线程 timer 发现后优雅退出（退出前保证落盘）
 
 mod config;
+mod hid;
+mod special_keys;
 mod ipc;
 mod session;
 mod store;
@@ -191,6 +193,7 @@ fn main() {
 }
 
 fn shutdown(tx: Sender<WriterMsg>, writer: std::thread::JoinHandle<()>) {
+    hid::stop();
     let _ = tx.send(WriterMsg::Shutdown);
     if writer.join().is_err() {
         eprintln!("[toccata-core] writer 线程异常退出");

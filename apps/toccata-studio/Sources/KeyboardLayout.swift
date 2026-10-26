@@ -29,7 +29,7 @@ struct KeyboardLayout {
             case 55: return "左 Command"
             case 54: return "右 Command"
             case 63: return "Fn / 地球键"
-            case 105: return "锁定"
+            case 127: return "锁定"
             case 49: return "空格"
             case 53: return "Esc"
             case 48: return "Tab"

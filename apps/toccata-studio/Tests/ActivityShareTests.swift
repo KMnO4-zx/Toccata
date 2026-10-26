@@ -84,7 +84,7 @@ final class ActivityShareTests: XCTestCase {
         let report = try ActivityShareSnapshot.load(range: .today, now: date(26, hour: 12), calendar: calendar, url: url)
         let rendered = try ActivityShareImage.render(report: report, identities: [:])
         let bitmap = try XCTUnwrap(NSBitmapImageRep(data: rendered.png))
-        XCTAssertEqual(bitmap.pixelsWide, 1920)
+        XCTAssertEqual(bitmap.pixelsWide, 1440)
         XCTAssertGreaterThan(bitmap.pixelsHigh, 1500)
         let board = NSPasteboard.withUniqueName()
         defer { board.releaseGlobally() }

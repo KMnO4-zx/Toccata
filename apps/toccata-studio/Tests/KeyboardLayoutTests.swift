@@ -24,7 +24,7 @@ final class KeyboardLayoutTests: XCTestCase {
             XCTAssertEqual(width, layout.widthUnits, accuracy: 0.000_001, "第 \(row) 行宽度不一致")
         }
         XCTAssertEqual(try key(63).label, "🌐 fn")
-        XCTAssertEqual(try key(105).label, "lock")
+        XCTAssertEqual(try key(127).label, "lock")
     }
 
     func testRealKeycodesAndIdentitiesAreUnique() {

@@ -19,6 +19,7 @@ use core_graphics::event::{
 use objc2_app_kit::NSWorkspace;
 
 use crate::tracker::KeyKind;
+use crate::{hid, special_keys::CapsLockTransitions};
 use crate::WriterMsg;
 
 // core-graphics 0.25 未封装这三个函数，自行声明（同属 CoreGraphics framework）。
@@ -36,6 +37,7 @@ thread_local! {
     // tap 只在主线程（runloop 线程）创建与访问，thread_local 足够。
     static TAP: RefCell<Option<CGEventTap<'static>>> = const { RefCell::new(None) };
     static SOURCE: RefCell<Option<CFRunLoopSource>> = const { RefCell::new(None) };
+    static CAPS_LOCK: RefCell<CapsLockTransitions> = RefCell::default();
 }
 
 pub fn capture_enabled() -> bool {
@@ -87,7 +89,7 @@ fn frontmost_app() -> Option<String> {
 }
 
 /// FlagsChanged 的修饰键 → down/up 判定。未知修饰键返回 None（忽略该事件）。
-/// 55/54=cmd, 56/60=shift, 58/61=option, 59/62=ctrl, 63=fn, 57=caps
+/// 55/54=cmd, 56/60=shift, 58/61=option, 59/62=ctrl, 63=fn. Caps is handled separately.
 fn modifier_kind(keycode: i64, flags: core_graphics::event::CGEventFlags) -> Option<KeyKind> {
     use core_graphics::event::CGEventFlags as F;
     // IOKit/hidsystem/IOLLEvent.h 中的 NX_DEVICE*KEYMASK 区分左右键。
@@ -102,7 +104,6 @@ fn modifier_kind(keycode: i64, flags: core_graphics::event::CGEventFlags) -> Opt
         59 => 0x00000001, // left control
         62 => 0x00002000, // right control
         63 => F::CGEventFlagSecondaryFn.bits(),
-        57 => F::CGEventFlagAlphaShift.bits(),
         _ => return None,
     };
     Some(if flags.bits() & mask != 0 { KeyKind::Down } else { KeyKind::Up })
@@ -121,15 +122,23 @@ fn callback(
                 return CallbackResult::Drop;
             }
             let keycode = event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE);
-            send(sender, keycode, KeyKind::Down);
+            if !hid::covers(keycode) { send(sender, keycode, KeyKind::Down); }
         }
         CGEventType::KeyUp => {
             let keycode = event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE);
-            send(sender, keycode, KeyKind::Up);
+            if !hid::covers(keycode) { send(sender, keycode, KeyKind::Up); }
         }
         CGEventType::FlagsChanged => {
             let keycode = event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE);
-            if let Some(kind) = modifier_kind(keycode, event.get_flags()) {
+            if hid::covers(keycode) { return CallbackResult::Drop; }
+            if keycode == 57 {
+                let enabled = event.get_flags().contains(core_graphics::event::CGEventFlags::CGEventFlagAlphaShift);
+                if CAPS_LOCK.with(|state| state.borrow_mut().changed(enabled)) {
+                    // A toggle is one press, never a hold until the next toggle.
+                    send(sender, 57, KeyKind::Down);
+                    send(sender, 57, KeyKind::Up);
+                }
+            } else if let Some(kind) = modifier_kind(keycode, event.get_flags()) {
                 send(sender, keycode, kind);
             }
         }
@@ -149,7 +158,7 @@ fn callback(
     CallbackResult::Drop // ListenOnly：返回值被系统忽略
 }
 
-fn send(sender: &Sender<WriterMsg>, keycode: i64, kind: KeyKind) {
+pub(crate) fn send(sender: &Sender<WriterMsg>, keycode: i64, kind: KeyKind) {
     let _ = sender.send(WriterMsg::Event(RawKeyEvent {
         ts_ms: now_ms(),
         keycode,
@@ -166,6 +175,7 @@ fn key_event_types() -> [CGEventType; 3] {
 /// 创建 tap 并挂到当前线程（必须是主线程）的 CFRunLoop 上。
 pub fn create_tap(sender: Sender<WriterMsg>) -> Result<(), ()> {
     let capture_sender = sender.clone();
+    let hid_sender = sender.clone();
     // Disabled-tap notifications are delivered by CoreGraphics, not valid event-mask bits.
     let tap = CGEventTap::new(
         CGEventTapLocation::HID,
@@ -180,6 +190,7 @@ pub fn create_tap(sender: Sender<WriterMsg>) -> Result<(), ()> {
     set_capture_active(true, Some(&capture_sender));
     SOURCE.with(|s| *s.borrow_mut() = Some(source));
     TAP.with(|t| *t.borrow_mut() = Some(tap));
+    hid::start(hid_sender);
     Ok(())
 }
 

@@ -18,7 +18,7 @@
       { "code": 109, "label": "F10" },
       { "code": 103, "label": "F11" },
       { "code": 111, "label": "F12" },
-      { "code": 105, "label": "lock", "x": 0.125 }
+      { "code": 127, "label": "lock", "x": 0.125 }
     ],
     [
       { "code": 50, "label": "`" },
