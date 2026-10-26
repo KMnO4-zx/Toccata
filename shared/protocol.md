@@ -148,7 +148,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   created_at   REAL NOT NULL,
   updated_at   REAL NOT NULL,
   completed_at REAL,
-  priority     INTEGER NOT NULL DEFAULT 0
+  priority     INTEGER NOT NULL DEFAULT 0,
+  subtask_order INTEGER
 );
 CREATE INDEX IF NOT EXISTS task_parent ON tasks(parent_id);
 CREATE INDEX IF NOT EXISTS task_completed ON tasks(completed_at);
@@ -166,6 +167,8 @@ CREATE INDEX IF NOT EXISTS progress_task ON task_progress(task_id, created_at);
 任务库中全部 `*_at` 字段使用 **Unix epoch 秒（REAL）**，与键盘库的整数毫秒不同。`id` 为 UUID 字符串；`parent_id = NULL` 表示顶层任务。当前界面支持一级子任务，存储层保留递归父子关系。
 
 `priority` 对应任务旗标：`0` 无优先级、`1` 低、`2` 中、`3` 高，新任务默认使用 `0`。旧任务库打开时会在 `BEGIN IMMEDIATE` 事务中检查表结构，仅在缺少该列时执行 `ALTER TABLE tasks ADD COLUMN priority INTEGER NOT NULL DEFAULT 0`；原有任务保留，重复打开不会重复迁移。
+
+`subtask_order` 保存同一主任务、同一完成状态内的手动顺序（从 `0` 开始）。缺失该列的旧任务库在同一迁移事务中添加可空的 `INTEGER` 列；`NULL` 子任务按创建时间从新到旧排列，位于该状态分组中已手动排序的子任务之前。拖拽成功时，在事务内重新校验父任务与完成状态，并重排该组全部子任务（包括被筛选隐藏的项），不修改任务日期、内容、父级或完成状态。未完成分组始终先于已完成分组，菜单栏主任务排序不影响子任务顺序。
 
 ### 任务状态语义
 

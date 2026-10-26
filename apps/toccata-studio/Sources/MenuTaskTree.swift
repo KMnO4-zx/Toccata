@@ -88,7 +88,9 @@ enum MenuTaskTree {
         }
 
         func node(for id: String) -> MenuTaskTreeNode {
-            let children = (childrenByParent[id] ?? []).map(\.child).sorted(by: precedes)
+            let children = (childrenByParent[id] ?? []).map(\.child).sorted {
+                SubtaskOrder.precedes(tasksByID[$0]!, tasksByID[$1]!)
+            }
             return MenuTaskTreeNode(task: tasksByID[id]!, children: children.map(node),
                                     isContextOnly: !matchingIDs.contains(id))
         }

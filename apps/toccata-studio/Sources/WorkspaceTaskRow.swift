@@ -48,6 +48,8 @@ struct WorkspaceTaskRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
+            SubtaskDragHandle(task: task)
+
             if childCount > 0, let onToggleExpanded {
                 Button(action: onToggleExpanded) {
                     Image(systemName: "chevron.right")

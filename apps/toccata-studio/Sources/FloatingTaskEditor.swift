@@ -304,6 +304,7 @@ private struct FloatingTaskEditorContent: View {
                             .font(.system(size: 10))
                             .foregroundStyle(TaskMenuStyle.muted)
                     }
+                    SubtaskDragHandle(task: child)
                 }
                 .padding(.vertical, 7)
                 .padding(.leading, 8)
@@ -311,6 +312,7 @@ private struct FloatingTaskEditorContent: View {
                     saveDraft()
                     presentation.selectTask(child.id)
                 }
+                .subtaskReordering(task: child)
             }
             if showsChildComposer {
                 HStack(spacing: 9) {

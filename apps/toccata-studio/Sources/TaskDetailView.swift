@@ -259,13 +259,12 @@ struct TaskDetailView: View {
                             }
                             .buttonStyle(.plain)
                             .help("编辑子任务详情")
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.tertiary)
+                            SubtaskDragHandle(task: child)
                         }
                         .font(.system(size: 13))
                         .padding(.vertical, 10)
                         .padding(.horizontal, 11)
+                        .subtaskReordering(task: child)
                         if child.id != children.last?.id { Divider().padding(.leading, 35) }
                     }
                 }

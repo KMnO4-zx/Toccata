@@ -328,6 +328,7 @@ struct TasksView: View {
             }
         )
         .taskContextMenu(task: row.task) { selection = row.id }
+        .subtaskReordering(task: row.task)
     }
 
     @ViewBuilder

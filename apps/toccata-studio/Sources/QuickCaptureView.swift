@@ -206,6 +206,7 @@ struct QuickCaptureView: View {
                     }
                     .animation(reduceMotion ? nil : WorkspaceMotion.branchChange,
                                value: presentation.expandedTaskIDs)
+                    .animation(reduceMotion ? nil : WorkspaceMotion.taskReorder, value: sortOrder)
                 }
                 .scrollIndicators(.visible)
                 .background(TaskScrollerStyle())
@@ -253,6 +254,7 @@ struct QuickCaptureView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("编辑任务：\(task.title)")
             .accessibilityIdentifier("menu-task-\(task.id)")
+            SubtaskDragHandle(task: task)
         }
         .padding(.leading, 23 + indentation)
         .padding(.trailing, 18)
@@ -287,6 +289,7 @@ struct QuickCaptureView: View {
                                    value: [task.id: proxy.frame(in: .named("taskMenu"))])
         })
         .contextMenu { taskActions(task) }
+        .subtaskReordering(task: task)
     }
 
     @ViewBuilder
@@ -424,7 +427,8 @@ struct QuickCaptureView: View {
     }
 
     private func flatten(_ roots: [MenuTaskTreeNode], depth: Int = 0) -> [MenuTaskVisibleRow] {
-        sorted(roots).flatMap { node in
+        // Header sorting affects roots only; children keep their saved sibling order.
+        (depth == 0 ? sorted(roots) : roots).flatMap { node in
             let row = MenuTaskVisibleRow(node: node, depth: depth)
             return [row] + (presentation.expandedTaskIDs.contains(node.task.id)
                 ? flatten(node.children, depth: depth + 1) : [])

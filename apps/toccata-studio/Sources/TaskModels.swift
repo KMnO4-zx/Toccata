@@ -29,9 +29,12 @@ struct TodoTask: Identifiable, Equatable {
     let updatedAt: Date
     let completedAt: Date?
     let priority: TaskPriority
+    /// Manual order among siblings in the same completion group; nil keeps the legacy order.
+    let subtaskOrder: Int?
 
     init(id: String, parentID: String?, title: String, details: String, plannedDate: Date?,
-         createdAt: Date, updatedAt: Date, completedAt: Date?, priority: TaskPriority = .none) {
+         createdAt: Date, updatedAt: Date, completedAt: Date?, priority: TaskPriority = .none,
+         subtaskOrder: Int? = nil) {
         self.id = id
         self.parentID = parentID
         self.title = title
@@ -41,6 +44,7 @@ struct TodoTask: Identifiable, Equatable {
         self.updatedAt = updatedAt
         self.completedAt = completedAt
         self.priority = priority
+        self.subtaskOrder = subtaskOrder
     }
 
     var isCompleted: Bool { completedAt != nil }

@@ -311,11 +311,15 @@ struct TaskCalendarView: View {
             }
             .buttonStyle(.plain)
             .help("编辑任务详情")
-            Image(systemName: "chevron.right")
-                .font(.system(size: 9))
-                .foregroundStyle(.tertiary)
-                .padding(.top, 5)
-                .allowsHitTesting(false)
+            if task.parentID != nil {
+                SubtaskDragHandle(task: task)
+            } else {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 5)
+                    .allowsHitTesting(false)
+            }
         }
         .padding(10)
         .background(selection == task.id ? Color.accentColor.opacity(0.1) : Color(nsColor: .controlBackgroundColor).opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
@@ -325,6 +329,7 @@ struct TaskCalendarView: View {
             addingTask = false
         }
         .padding(.leading, CGFloat(row.depth) * 22)
+        .subtaskReordering(task: task)
     }
 
     private func eventBadge(_ title: String, color: Color) -> some View {

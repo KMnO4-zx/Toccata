@@ -52,7 +52,29 @@ final class TaskStore: ObservableObject {
     }
 
     func children(of parentID: String?) -> [TodoTask] {
-        tasks.filter { $0.parentID == parentID }
+        let children = tasks.filter { $0.parentID == parentID }
+        return parentID == nil ? children : children.sorted(by: SubtaskOrder.precedes)
+    }
+
+    /// A move never changes the parent, completion state, or task dates.
+    @discardableResult
+    func moveSubtask(id: String, relativeTo targetID: String, placement: SubtaskPlacement) -> Bool {
+        guard let ids = SubtaskOrder.reorderedIDs(in: tasks, moving: id,
+                                                 relativeTo: targetID, placement: placement),
+              let source = task(id: id) else { return false }
+        let currentIDs = children(of: source.parentID).filter {
+            $0.isCompleted == source.isCompleted
+        }.map(\.id)
+        if currentIDs == ids { return true }
+        return write { database in
+            // Validate again inside the transaction, against the latest persisted state.
+            guard let orderedIDs = SubtaskOrder.reorderedIDs(in: try database.snapshot(), moving: id,
+                relativeTo: targetID, placement: placement) else { throw TaskStoreError.invalidSubtaskMove }
+            for (position, childID) in orderedIDs.enumerated() {
+                try database.run("UPDATE tasks SET subtask_order = ? WHERE id = ?",
+                                 [.integer(Int64(position)), .text(childID)])
+            }
+        }
     }
 
     func completedTasks(in period: TaskReviewPeriod, relativeTo referenceDate: Date? = nil) -> [TodoTask] {
@@ -176,6 +198,7 @@ private enum TaskStoreError: LocalizedError {
     case unavailable
     case taskMissing
     case nestedSubtask
+    case invalidSubtaskMove
     case database(String)
 
     var errorDescription: String? {
@@ -183,6 +206,7 @@ private enum TaskStoreError: LocalizedError {
         case .unavailable: return "任务数据库暂不可用，请检查存储位置后重新打开应用。"
         case .taskMissing: return "任务不存在，可能已被删除。"
         case .nestedSubtask: return "子任务下不能再创建子任务。"
+        case .invalidSubtaskMove: return "只能在同一主任务、同一完成状态的子任务之间排序。"
         case .database(let message): return "任务保存失败：\(message)"
         }
     }
@@ -226,7 +250,8 @@ private final class TaskDatabase {
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL,
                     completed_at REAL,
-                    priority INTEGER NOT NULL DEFAULT 0
+                    priority INTEGER NOT NULL DEFAULT 0,
+                    subtask_order INTEGER
                 )
                 """)
             // Serialize the schema check and ALTER so repeated opens also migrate safely.
@@ -234,6 +259,9 @@ private final class TaskDatabase {
                 let columns = try query("PRAGMA table_info(tasks)") { self.text($0, 1) }
                 if !columns.contains("priority") {
                     try run("ALTER TABLE tasks ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
+                }
+                if !columns.contains("subtask_order") {
+                    try run("ALTER TABLE tasks ADD COLUMN subtask_order INTEGER")
                 }
             }
             try run("CREATE INDEX IF NOT EXISTS task_parent ON tasks(parent_id)")
@@ -292,7 +320,7 @@ private final class TaskDatabase {
 
     func snapshot() throws -> [TodoTask] {
         try query("""
-            SELECT id, parent_id, title, details, planned_at, created_at, updated_at, completed_at, priority
+            SELECT id, parent_id, title, details, planned_at, created_at, updated_at, completed_at, priority, subtask_order
             FROM tasks ORDER BY created_at ASC, rowid ASC
             """) { statement in
             TodoTask(id: self.text(statement, 0), parentID: self.optionalText(statement, 1),
@@ -301,7 +329,8 @@ private final class TaskDatabase {
                      createdAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 5)),
                      updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 6)),
                      completedAt: self.optionalDate(statement, 7),
-                     priority: TaskPriority(rawValue: Int(sqlite3_column_int64(statement, 8))) ?? .none)
+                     priority: TaskPriority(rawValue: Int(sqlite3_column_int64(statement, 8))) ?? .none,
+                     subtaskOrder: sqlite3_column_type(statement, 9) == SQLITE_NULL ? nil : Int(sqlite3_column_int64(statement, 9)))
         }
     }
 
