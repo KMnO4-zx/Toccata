@@ -31,7 +31,11 @@ struct TasksView: View {
     @State private var showsCompleted = true
     @State private var copied = false
     @State private var referenceDate = Date()
+    @State private var collapsedTaskIDs: Set<String> = []
+    @State private var hoveredTaskID: String?
+    @AppStorage("tasks.listDisplayMode") private var displayMode: TaskListDisplayMode = .titles
     @FocusState private var addingTask: Bool
+    @FocusState private var taskListFocused: Bool
 
     init(mode: TaskViewMode, selection: Binding<String?> = .constant(nil),
          taskPeriod: Binding<TaskReviewPeriod> = .constant(.thisWeek)) {
@@ -52,11 +56,6 @@ struct TasksView: View {
     }
     private var scopedTasks: [TodoTask] {
         store.menuTasks(for: taskScope, relativeTo: referenceDate)
-    }
-    private var pendingTasks: [TodoTask] { scopedTasks.filter { !$0.isCompleted && matches($0) } }
-    private var completedTasks: [TodoTask] {
-        scopedTasks.filter { $0.isCompleted && matches($0) }
-            .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
     }
     private var reviewSnapshot: TaskReviewSnapshot {
         TaskReviewSnapshot(tasks: store.tasks, range: reviewRange, referenceDate: referenceDate, query: query)
@@ -83,6 +82,7 @@ struct TasksView: View {
             selection = nil
             copied = false
             showsCustomReviewRange = false
+            collapsedTaskIDs.removeAll()
         }
         .onChange(of: taskPeriod) { _ in selection = nil }
         .onChange(of: reviewRange) { _ in selection = nil; copied = false }
@@ -134,22 +134,20 @@ struct TasksView: View {
                     .foregroundStyle(.secondary)
                 }
 
-                HStack(spacing: 7) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("搜索任务名称与详情", text: $query)
-                        .textFieldStyle(.plain)
-                    if !query.isEmpty {
-                        Button { query = "" } label: {
-                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    searchField
+                    Picker("显示方式", selection: $displayMode) {
+                        ForEach(TaskListDisplayMode.allCases) { option in
+                            Text(option.title).tag(option)
                         }
-                        .buttonStyle(.plain)
-                        .help("清除搜索")
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .fixedSize()
+                    .controlSize(.small)
+                    .help("切换仅标题或标题与描述")
+                    .accessibilityLabel("任务显示方式")
                 }
-                .font(.system(size: 13))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
             }
             .padding(22)
             .padding(.bottom, -5)
@@ -173,7 +171,7 @@ struct TasksView: View {
             Divider()
             HStack(spacing: 5) {
                 Image(systemName: mode == .review ? "doc.text" : taskScope.symbol)
-                Text(mode == .review ? "含子任务与遗留待办；复制保留详情和完成状态" : "视图按时间组织任务，不会自动设置计划日期")
+                Text(mode == .review ? "按主任务归组；已完成子任务保留在所属任务下" : "视图按时间组织任务，不会自动设置计划日期")
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
@@ -273,48 +271,70 @@ struct TasksView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.accentColor.opacity(0.12)))
     }
 
+    private var searchField: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("搜索任务名称与详情", text: $query)
+                .textFieldStyle(.plain)
+            if !query.isEmpty {
+                Button { query = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("清除搜索")
+            }
+        }
+        .font(.system(size: 13))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+    }
+
     @ViewBuilder
     private var inboxList: some View {
-        if scopedTasks.isEmpty && query.isEmpty {
+        let scoped = scopedTasks
+        let snapshot = WorkspaceTaskListSnapshot(allTasks: store.tasks, scopedTasks: scoped,
+            includeAllDescendants: mode == .inbox, query: query)
+        // Search always reveals matching descendants, even inside a folded branch.
+        let collapsed = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? collapsedTaskIDs : []
+        let pendingRows = WorkspaceTaskListSnapshot.rows(from: snapshot.pendingRoots, collapsedIDs: collapsed)
+        let completedRows = WorkspaceTaskListSnapshot.rows(from: snapshot.completedRoots, collapsedIDs: collapsed)
+        if scoped.isEmpty && query.isEmpty {
             TaskPlaceholder(symbol: taskScope.symbol, title: mode == .inbox ? "先收集，再安排" : "这个视图还没有任务", message: mode == .inbox ? "把想到的事情放进来。\n没有计划日期，也可以安心待在这里。" : "添加一个新任务，或切换范围查看其他记录。")
-        } else if pendingTasks.isEmpty && completedTasks.isEmpty {
+        } else if pendingRows.isEmpty && completedRows.isEmpty {
             TaskPlaceholder(symbol: "magnifyingglass", title: "没有匹配的任务", message: "试试其他关键词。")
         } else {
-            List(selection: $selection) {
-                Section {
-                    ForEach(pendingTasks) { task in
-                        taskRow(task, showsParent: mode != .inbox).tag(task.id)
-                    }
-                } header: {
-                    Text("待办 · \(pendingTasks.count)")
-                }
-                Section {
-                    if showsCompleted {
-                        ForEach(completedTasks) { task in
-                            taskRow(task, showsParent: mode != .inbox).tag(task.id)
-                        }
-                    }
-                } header: {
-                    Button {
-                        showsCompleted.toggle()
-                    } label: {
-                        HStack {
-                            Text("已完成 · \(completedTasks.count)")
-                            Spacer()
-                            Image(systemName: showsCompleted ? "chevron.down" : "chevron.right")
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .help(showsCompleted ? "收起已完成任务" : "展开已完成任务")
+            hierarchyList(
+                firstTitle: "待办 · \(snapshot.pendingRoots.count) 项主任务", firstRows: pendingRows,
+                secondTitle: "已完成 · \(snapshot.completedRoots.count) 项主任务", secondRows: completedRows,
+                collapsed: collapsed, collapsesSecondSection: true
+            )
+        }
+    }
+
+    private func hierarchyRow(_ row: WorkspaceTaskListRow, collapsed: Set<String>) -> some View {
+        WorkspaceTaskRow(
+            task: row.task,
+            displayMode: displayMode,
+            depth: row.depth,
+            childCount: row.node.children.count,
+            isExpanded: !collapsed.contains(row.id),
+            onToggle: { _ = store.setCompleted(id: row.id, completed: !row.task.isCompleted) },
+            onToggleExpanded: {
+                withAnimation(reduceMotion ? nil : WorkspaceMotion.branchChange) {
+                    if collapsedTaskIDs.contains(row.id) { collapsedTaskIDs.remove(row.id) }
+                    else { collapsedTaskIDs.insert(row.id) }
                 }
             }
-            .listStyle(.inset)
-            .scrollContentBackground(.hidden)
-        }
+        )
+        .taskContextMenu(task: row.task) { selection = row.id }
     }
 
     @ViewBuilder
     private func reviewList(_ review: TaskReviewSnapshot) -> some View {
+        let collapsed = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? collapsedTaskIDs : []
+        let completedRows = WorkspaceTaskListSnapshot.rows(from: review.completedRoots, collapsedIDs: collapsed)
+        let pendingRows = WorkspaceTaskListSnapshot.rows(from: review.pendingRoots, collapsedIDs: collapsed)
         if review.tasks.isEmpty {
             TaskPlaceholder(
                 symbol: query.isEmpty ? "doc.text" : "magnifyingglass",
@@ -322,44 +342,111 @@ struct TasksView: View {
                 message: query.isEmpty ? "本期完成的任务和当前未完成的事项\n都会出现在这里，方便整理周报。" : "试试其他关键词。"
             )
         } else {
-            List(selection: $selection) {
-                Section {
-                    ForEach(review.completed) { task in
-                        taskRow(task, showsParent: true).tag(task.id)
+            hierarchyList(
+                firstTitle: "已完成主任务 · \(review.completedRoots.count) 组", firstRows: completedRows,
+                secondTitle: "待推进主任务 · \(review.pendingRoots.count) 组", secondRows: pendingRows,
+                collapsed: collapsed
+            )
+        }
+    }
+
+    /// SwiftUI owns the row layout so insertion/removal animates its height as
+    /// well as opacity; AppKit-backed List reloads used to snap collapsed rows.
+    private func hierarchyList(firstTitle: String, firstRows: [WorkspaceTaskListRow],
+                               secondTitle: String, secondRows: [WorkspaceTaskListRow],
+                               collapsed: Set<String>, collapsesSecondSection: Bool = false) -> some View {
+        let secondVisible = !collapsesSecondSection || showsCompleted
+        let visibleRows = firstRows + (secondVisible ? secondRows : [])
+        return ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    listSectionHeader(firstTitle)
+                    ForEach(firstRows) { row in selectableRow(row, collapsed: collapsed) }
+                    if collapsesSecondSection {
+                        Button {
+                            withAnimation(reduceMotion ? nil : WorkspaceMotion.branchChange) {
+                                showsCompleted.toggle()
+                            }
+                        } label: {
+                            HStack {
+                                Text(secondTitle)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .rotationEffect(.degrees(showsCompleted ? 90 : 0))
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 20)
+                        .padding(.bottom, 9)
+                        .help(showsCompleted ? "收起已完成任务" : "展开已完成任务")
+                    } else {
+                        listSectionHeader(secondTitle)
                     }
-                } header: {
-                    Text("已完成 · \(review.completed.count)")
-                }
-                Section {
-                    ForEach(review.pending) { task in
-                        taskRow(task, showsParent: true).tag(task.id)
+                    if secondVisible {
+                        ForEach(secondRows) { row in selectableRow(row, collapsed: collapsed) }
                     }
-                } header: {
-                    Text("未完成 · \(review.pending.count)")
                 }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 18)
+                .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: collapsedTaskIDs)
+                .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: showsCompleted)
+                .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: displayMode)
             }
-            .listStyle(.inset)
-            .scrollContentBackground(.hidden)
+            .focusable()
+            .focused($taskListFocused)
+            .modifier(TaskListFocusAppearance())
+            .onMoveCommand { direction in
+                guard !visibleRows.isEmpty, direction == .up || direction == .down else { return }
+                let offset = direction == .up ? -1 : 1
+                let current = visibleRows.firstIndex { $0.id == selection } ?? (offset > 0 ? -1 : visibleRows.count)
+                let next = visibleRows[min(max(current + offset, 0), visibleRows.count - 1)].id
+                selection = next
+                proxy.scrollTo(next)
+            }
         }
     }
 
-    private func taskRow(_ task: TodoTask, showsParent: Bool = false) -> some View {
-        TaskListRow(
-            task: task,
-            children: store.children(of: task.id),
-            parentTitle: showsParent ? task.parentID.flatMap { store.task(id: $0)?.title } : nil,
-            onToggle: { _ = store.setCompleted(id: task.id, completed: !task.isCompleted) }
-        )
-        .taskContextMenu(task: task) { selection = task.id }
+    private func listSectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.top, 16)
+            .padding(.bottom, 9)
     }
 
-    private func matches(_ task: TodoTask) -> Bool {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else { return true }
-        if [task.title, task.details].contains(where: { $0.localizedCaseInsensitiveContains(needle) }) { return true }
-        return store.children(of: task.id).contains { child in
-            [child.title, child.details].contains { $0.localizedCaseInsensitiveContains(needle) }
+    private func selectableRow(_ row: WorkspaceTaskListRow, collapsed: Set<String>) -> some View {
+        VStack(spacing: 0) {
+            hierarchyRow(row, collapsed: collapsed)
+                .padding(.horizontal, 12)
+                .background {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(selection == row.id ? Color.accentColor.opacity(0.1) :
+                              (hoveredTaskID == row.id ? Color.primary.opacity(0.035) : Color.clear))
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selection = row.id
+                    addingTask = false
+                    taskListFocused = true
+                }
+                .onHover { inside in
+                    if inside { hoveredTaskID = row.id }
+                    else if hoveredTaskID == row.id { hoveredTaskID = nil }
+                }
+                .accessibilityAddTraits(selection == row.id ? .isSelected : [])
+            Divider()
+                .opacity(0.45)
+                .padding(.leading, 44 + CGFloat(row.depth) * 26)
+                .padding(.trailing, 12)
         }
+        .id(row.id)
+        .transition(reduceMotion ? .identity : WorkspaceMotion.branchTransition)
     }
 
     private func addTask() {
@@ -380,55 +467,15 @@ struct TasksView: View {
     }
 }
 
-private struct TaskListRow: View {
-    let task: TodoTask
-    let children: [TodoTask]
-    let parentTitle: String?
-    let onToggle: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Button(action: onToggle) {
-                Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 19, weight: .regular))
-                    .foregroundStyle(task.isCompleted ? Color.accentColor : Color.secondary.opacity(0.65))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(task.isCompleted ? "将\(task.title)恢复为待办" : "完成\(task.title)")
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(task.title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(task.isCompleted ? .secondary : .primary)
-                    .strikethrough(task.isCompleted, color: .secondary.opacity(0.5))
-                    .lineLimit(2)
-                if let parentTitle {
-                    Label(parentTitle, systemImage: "arrow.turn.down.right")
-                        .lineLimit(1)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-                if !children.isEmpty || task.plannedDate != nil || !task.details.isEmpty {
-                    HStack(spacing: 9) {
-                        if !children.isEmpty {
-                            Label("\(children.filter(\.isCompleted).count)/\(children.count)", systemImage: "checklist")
-                        }
-                        if let date = task.plannedDate {
-                            Label(date.formatted(.dateTime.month().day()), systemImage: "calendar")
-                        }
-                        if !task.details.isEmpty { Image(systemName: "text.alignleft") }
-                    }
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                }
-                Text("创建于 \(task.createdAt.formatted(.dateTime.month().day()))\(task.completedAt.map { " · 完成于 \($0.formatted(.dateTime.month().day()))" } ?? "")")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+/// Keep arrow-key navigation without drawing a focus halo around the full list.
+private struct TaskListFocusAppearance: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(macOS 14.0, *) {
+            content.focusEffectDisabled()
+        } else {
+            content
         }
-        .padding(.vertical, 9)
-        .contentShape(Rectangle())
     }
 }
 

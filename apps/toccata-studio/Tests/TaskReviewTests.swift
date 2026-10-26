@@ -270,4 +270,94 @@ final class TaskReviewTests: XCTestCase {
         XCTAssertFalse(review.markdown.contains("Project Beta"))
         XCTAssertEqual(review.markdown.components(separatedBy: "\n").filter { $0.hasPrefix("- [") }.count, 1)
     }
+
+    func testReviewNestsEachChildUnderItsParentWithoutChangingActualCounts() {
+        let all = [
+            task("first", created: date(19)),
+            task("first-child-a", parent: "first", created: date(20)),
+            task("first-child-b", parent: "first", created: date(21)),
+            task("second", created: date(20)),
+            task("second-child-a", parent: "second", created: date(20)),
+            task("second-child-b", parent: "second", created: date(21))
+        ]
+        let review = snapshot(all)
+        let rows = WorkspaceTaskListSnapshot.rows(from: review.pendingRoots)
+
+        XCTAssertEqual(rows.map(\.id), ["second", "second-child-b", "second-child-a",
+                                       "first", "first-child-b", "first-child-a"])
+        XCTAssertEqual(rows.map(\.depth), [0, 1, 1, 0, 1, 1])
+        XCTAssertEqual(review.pending.count, 6)
+        XCTAssertEqual(review.pendingRoots.count, 2)
+        XCTAssertEqual(Set(rows.map(\.id)).count, 6)
+    }
+
+    func testCompletedChildStaysWithPendingParentAndKeepsItsActualStatus() {
+        let review = snapshot([
+            task("parent"), task("pending-child", parent: "parent"),
+            task("completed-child", parent: "parent", completed: date(20)),
+            task("completed-root", completed: date(21))
+        ])
+        let pendingRows = WorkspaceTaskListSnapshot.rows(from: review.pendingRoots)
+
+        XCTAssertEqual(pendingRows.map(\.id), ["parent", "pending-child", "completed-child"])
+        XCTAssertTrue(pendingRows.last!.task.isCompleted)
+        XCTAssertEqual(review.completedRoots.map(\.id), ["completed-root"])
+        XCTAssertEqual(review.completed.count, 2)
+        XCTAssertEqual(review.pending.count, 2)
+        let allRows = pendingRows + WorkspaceTaskListSnapshot.rows(from: review.completedRoots)
+        XCTAssertEqual(Set(allRows.map(\.id)), Set(review.tasks.map(\.id)))
+    }
+
+    func testOldParentIsContextOnlyAndDoesNotPullOutOfRangeSiblingIntoReview() {
+        let review = snapshot([
+            task("old-parent", completed: date(1)),
+            task("current-child", parent: "old-parent", completed: date(20)),
+            task("old-sibling", parent: "old-parent", completed: date(2))
+        ])
+        let rows = WorkspaceTaskListSnapshot.rows(from: review.completedRoots)
+
+        XCTAssertEqual(rows.map(\.id), ["old-parent", "current-child"])
+        XCTAssertTrue(rows[0].node.isContextOnly)
+        XCTAssertFalse(rows[1].node.isContextOnly)
+        XCTAssertEqual(review.tasks.map(\.id), ["current-child"])
+        XCTAssertTrue(review.pendingRoots.isEmpty)
+        XCTAssertFalse(review.markdown.contains("old-sibling"))
+    }
+
+    func testReviewSearchAndCollapseKeepMembershipAndExportStable() {
+        let review = snapshot([
+            task("parent", title: "科研项目"),
+            task("match", title: "制作 PPT", parent: "parent", details: "说明核心结论"),
+            task("sibling", title: "无关资料", parent: "parent")
+        ], query: "核心结论")
+        let before = review.markdown
+        let roots = review.pendingRoots
+
+        XCTAssertEqual(WorkspaceTaskListSnapshot.rows(from: roots).map(\.id), ["parent", "match"])
+        XCTAssertEqual(WorkspaceTaskListSnapshot.rows(from: roots, collapsedIDs: ["parent"]).map(\.id), ["parent"])
+        XCTAssertEqual(Set(review.tasks.map(\.id)), ["parent", "match"])
+        XCTAssertEqual(review.markdown, before)
+        XCTAssertFalse(review.markdown.contains("无关资料"))
+    }
+
+    func testFutureAncestorCannotBeReintroducedAsReviewContext() {
+        let review = snapshot([
+            task("future-parent", created: date(22)),
+            task("current-child", parent: "future-parent", completed: date(20))
+        ])
+
+        XCTAssertEqual(WorkspaceTaskListSnapshot.rows(from: review.completedRoots).map(\.id), ["current-child"])
+        XCTAssertEqual(review.tasks.map(\.id), ["current-child"])
+    }
+
+    func testCompletedGroupsSortByTheirLatestMatchingCompletion() {
+        let review = snapshot([
+            task("old-parent", completed: date(1)),
+            task("recent-child", parent: "old-parent", completed: date(21, hour: 20)),
+            task("other-parent", completed: date(21, hour: 12))
+        ], now: date(21, hour: 23))
+
+        XCTAssertEqual(review.completedRoots.map(\.id), ["old-parent", "other-parent"])
+        XCTAssertEqual(review.completed.count, 2)
+    }
 }

@@ -47,7 +47,6 @@ private enum WorkspaceSection: String, CaseIterable, Identifiable {
 @MainActor
 struct ContentView: View {
     @EnvironmentObject private var tasks: TaskStore
-    @EnvironmentObject private var refresher: LiveRefresher
     @EnvironmentObject private var appearance: AppearanceSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection: WorkspaceSection? = .tasks

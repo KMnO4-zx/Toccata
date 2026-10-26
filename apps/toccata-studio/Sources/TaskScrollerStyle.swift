@@ -23,36 +23,96 @@ final class TaskScrollerAnchorView: NSView {
     }
 
     func configureScrollViews() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self, let contentView = self.window?.contentView else { return }
-            for scrollView in Self.scrollViews(in: contentView) {
-                scrollView.scrollerStyle = .legacy
-                scrollView.autohidesScrollers = false
-                if scrollView.hasVerticalScroller, !(scrollView.verticalScroller is TaskScroller) {
-                    let scroller = TaskScroller()
-                    scroller.controlSize = .small
-                    scrollView.verticalScroller = scroller
-                }
-                if scrollView.hasHorizontalScroller, !(scrollView.horizontalScroller is TaskScroller) {
-                    let scroller = TaskScroller()
-                    scroller.controlSize = .small
-                    scrollView.horizontalScroller = scroller
-                }
-                scrollView.tile()
-                if scrollView.hasVerticalScroller, let vertical = scrollView.verticalScroller {
-                    Self.present(vertical, in: scrollView)
-                }
-                if scrollView.hasHorizontalScroller, let horizontal = scrollView.horizontalScroller {
-                    Self.present(horizontal, in: scrollView)
-                }
+        guard let window else { return }
+        // SwiftUI can replace a List's native scroll view while retaining this
+        // background anchor, for example when an empty task list gains a row.
+        // Rediscovery is coalesced per window; unchanged scroll views need no work.
+        var ancestor = superview
+        while let view = ancestor {
+            if let scrollView = view as? NSScrollView {
+                TaskScrollerWindowConfiguration.schedule(in: window, scrollView: scrollView)
+                return
             }
+            ancestor = view.superview
+        }
+        TaskScrollerWindowConfiguration.schedule(in: window)
+    }
+}
+
+/// A window can contain several SwiftUI background anchors. Coalesce discovery
+/// after their updates, then leave unchanged scrolling/layout to AppKit.
+@MainActor
+private final class TaskScrollerWindowConfiguration {
+    private static let configurations = NSMapTable<NSWindow, TaskScrollerWindowConfiguration>(
+        keyOptions: .weakMemory, valueOptions: .strongMemory
+    )
+
+    private weak var window: NSWindow?
+    private let pendingScrollViews = NSHashTable<NSScrollView>.weakObjects()
+    private var needsWindowDiscovery = false
+    private var isScheduled = false
+
+    private init(window: NSWindow) { self.window = window }
+
+    static func schedule(in window: NSWindow, scrollView: NSScrollView? = nil) {
+        let configuration: TaskScrollerWindowConfiguration
+        if let existing = configurations.object(forKey: window) {
+            configuration = existing
+        } else {
+            configuration = TaskScrollerWindowConfiguration(window: window)
+            configurations.setObject(configuration, forKey: window)
+        }
+        if let scrollView { configuration.pendingScrollViews.add(scrollView) }
+        else { configuration.needsWindowDiscovery = true }
+        guard !configuration.isScheduled else { return }
+        configuration.isScheduled = true
+        DispatchQueue.main.async { [weak configuration] in configuration?.configure() }
+    }
+
+    private func configure() {
+        isScheduled = false
+        guard let contentView = window?.contentView else { return }
+        let scrollViews = needsWindowDiscovery ? Self.scrollViews(in: contentView) : pendingScrollViews.allObjects
+        needsWindowDiscovery = false
+        pendingScrollViews.removeAllObjects()
+        for scrollView in scrollViews { Self.configure(scrollView) }
+    }
+
+    private static func configure(_ scrollView: NSScrollView) {
+        var changed = false
+        if scrollView.scrollerStyle != .legacy {
+            scrollView.scrollerStyle = .legacy
+            changed = true
+        }
+        if scrollView.autohidesScrollers {
+            scrollView.autohidesScrollers = false
+            changed = true
+        }
+        if scrollView.hasVerticalScroller, !(scrollView.verticalScroller is TaskScroller) {
+            let scroller = TaskScroller()
+            scroller.controlSize = .small
+            scrollView.verticalScroller = scroller
+            changed = true
+        }
+        if scrollView.hasHorizontalScroller, !(scrollView.horizontalScroller is TaskScroller) {
+            let scroller = TaskScroller()
+            scroller.controlSize = .small
+            scrollView.horizontalScroller = scroller
+            changed = true
+        }
+        guard changed else { return }
+        scrollView.tile()
+        if scrollView.hasVerticalScroller, let vertical = scrollView.verticalScroller as? TaskScroller {
+            present(vertical, in: scrollView)
+        }
+        if scrollView.hasHorizontalScroller, let horizontal = scrollView.horizontalScroller as? TaskScroller {
+            present(horizontal, in: scrollView)
         }
     }
 
-    private static func present(_ scroller: NSScroller, in scrollView: NSScrollView) {
+    private static func present(_ scroller: TaskScroller, in scrollView: NSScrollView) {
         scrollView.addSubview(scroller, positioned: .above, relativeTo: scrollView.documentView)
-        scroller.isHidden = scroller.knobProportion >= 1
-        scroller.needsDisplay = true
+        scroller.updateVisibility()
     }
 
     private static func scrollViews(in view: NSView) -> [NSScrollView] {
@@ -68,6 +128,15 @@ private final class TaskScroller: NSScroller {
     }
 
     override class var isCompatibleWithOverlayScrollers: Bool { true }
+
+    override var knobProportion: CGFloat {
+        didSet { updateVisibility() }
+    }
+
+    func updateVisibility() {
+        let shouldHide = knobProportion >= 1
+        if isHidden != shouldHide { isHidden = shouldHide }
+    }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()

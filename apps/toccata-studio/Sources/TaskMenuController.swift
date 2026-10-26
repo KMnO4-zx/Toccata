@@ -15,6 +15,7 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var appearance: AppearanceSettings?
     private var openWorkbenchAction: (() -> Void)?
     private var clickMonitor: Any?
+    private var globalClickMonitor: Any?
     private var observers: [NSObjectProtocol] = []
     private var storeSubscription: AnyCancellable?
     private var isDismissing = false
@@ -34,9 +35,10 @@ final class TaskMenuController: NSObject, ObservableObject {
             button.image?.isTemplate = true
             button.imagePosition = .imageLeading
             button.font = .systemFont(ofSize: 13)
-            button.toolTip = "Toccata 任务"
+            button.toolTip = "Toccata 任务 · 右键打开设置"
             button.target = self
             button.action = #selector(toggleMenu)
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.setAccessibilityLabel("Toccata 任务")
         }
         statusItem = item
@@ -46,7 +48,6 @@ final class TaskMenuController: NSObject, ObservableObject {
         presentation.onOpenWorkbench = { [weak self] in
             self?.dismiss()
             self?.openWorkbenchAction?()
-            NSApp.activate(ignoringOtherApps: true)
         }
         presentation.onAnchorsChanged = { [weak self] in self?.positionEditor() }
         storeSubscription = store.$tasks.receive(on: RunLoop.main).sink { [weak self] updated in
@@ -80,16 +81,26 @@ final class TaskMenuController: NSObject, ObservableObject {
             }
             return event
         }
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  application.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
+            MainActor.assumeIsolated { self?.dismiss() }
+        })
     }
 
     @objc func toggleMenu() {
+        if let event = NSApp.currentEvent, event.type == .rightMouseUp {
+            showSettingsMenu(with: event)
+            return
+        }
         if listPanel?.isVisible == true { dismiss() } else { showMenu() }
     }
 
     func showMenu() {
-        guard let store, let loginItems, let appearance,
+        guard let store,
               let button = statusItem?.button, let statusWindow = button.window else { return }
-        loginItems.refresh()
         let anchor = statusWindow.convertToScreen(button.convert(button.bounds, to: nil))
         let screen = statusWindow.screen ?? NSScreen.main ?? NSScreen.screens[0]
         let frame = MenuPanelLayout.listFrame(anchor: anchor, screen: screen.visibleFrame)
@@ -100,8 +111,6 @@ final class TaskMenuController: NSObject, ObservableObject {
                 QuickCaptureView()
                     .environmentObject(store)
                     .environmentObject(presentation)
-                    .environmentObject(loginItems)
-                    .environmentObject(appearance)
                     .tint(TaskMenuStyle.accent)
                     .background(TaskMenuStyle.background)
                     .clipShape(RoundedRectangle(cornerRadius: TaskMenuStyle.cornerRadius))
@@ -119,8 +128,8 @@ final class TaskMenuController: NSObject, ObservableObject {
         let shouldAnimate = !wasVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         panel.setFrame(shouldAnimate ? MenuPanelLayout.revealFrame(for: frame) : frame, display: true)
         panel.alphaValue = shouldAnimate ? 0 : 1
-        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
+        monitorOutsideClicks()
         guard shouldAnimate else { return }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = WorkspaceMotion.panelRevealDuration
@@ -132,9 +141,23 @@ final class TaskMenuController: NSObject, ObservableObject {
     func dismiss() {
         guard !isDismissing else { return }
         isDismissing = true
+        if let globalClickMonitor {
+            NSEvent.removeMonitor(globalClickMonitor)
+            self.globalClickMonitor = nil
+        }
         hideEditor()
         listPanel?.orderOut(nil)
         isDismissing = false
+    }
+
+    private func monitorOutsideClicks() {
+        guard globalClickMonitor == nil else { return }
+        // Nonactivating panels leave the previous app active. Those clicks do
+        // not reach the local monitor or trigger this app's resign notification.
+        // Observe them only while a task panel is actually on screen.
+        globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated { self?.dismiss() }
+        }
     }
 
     private func showEditor(focus: MenuEditorField?) {
@@ -230,10 +253,13 @@ final class TaskMenuController: NSObject, ObservableObject {
     }
 
     private func makePanel(title: String) -> NSPanel {
-        let panel = TaskMenuPanel(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
+        // The nonactivating style must be set at construction time. It lets the
+        // list/editor take keyboard focus without raising the workbench window.
+        let panel = TaskMenuPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = title
         panel.isReleasedWhenClosed = false
         panel.isFloatingPanel = true
+        panel.becomesKeyOnlyIfNeeded = false
         panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.transient, .moveToActiveSpace, .fullScreenAuxiliary]
@@ -243,6 +269,73 @@ final class TaskMenuController: NSObject, ObservableObject {
         panel.isMovable = false
         return panel
     }
+
+    private func showSettingsMenu(with event: NSEvent) {
+        guard let button = statusItem?.button, let appearance, let loginItems else { return }
+        dismiss()
+        loginItems.refresh()
+        let menu = NSMenu()
+        menu.addItem(settingsItem("打开工作台", action: #selector(openWorkbenchFromSettings)))
+
+        let appearanceItem = NSMenuItem(title: "外观", action: nil, keyEquivalent: "")
+        let appearanceMenu = NSMenu()
+        for mode in AppearanceMode.allCases {
+            let item = settingsItem(mode.title, action: #selector(selectAppearance(_:)))
+            item.representedObject = mode.rawValue
+            item.state = appearance.mode == mode ? .on : .off
+            appearanceMenu.addItem(item)
+        }
+        appearanceItem.submenu = appearanceMenu
+        menu.addItem(appearanceItem)
+        menu.addItem(.separator())
+
+        let loginItem = settingsItem("登录时启动", action: #selector(toggleLoginItem))
+        loginItem.state = loginItems.enabled ? .on : .off
+        menu.addItem(loginItem)
+        if loginItems.requiresApproval {
+            menu.addItem(settingsItem("前往系统设置允许启动", action: #selector(openLoginSettings)))
+            menu.addItem(settingsItem("取消登录启动申请", action: #selector(disableLoginItem)))
+        }
+        if let error = loginItems.errorMessage {
+            let item = NSMenuItem(title: error, action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+
+        let shortcutsItem = NSMenuItem(title: "快捷键", action: nil, keyEquivalent: "")
+        let shortcutsMenu = NSMenu()
+        for title in ["Tab：编辑所选任务的描述", "Enter：为顶层任务添加子任务", "↑ / ↓：选择任务", "Esc：收起编辑浮窗"] {
+            shortcutsMenu.addItem(NSMenuItem(title: title, action: nil, keyEquivalent: ""))
+        }
+        shortcutsItem.submenu = shortcutsMenu
+        menu.addItem(shortcutsItem)
+        menu.addItem(.separator())
+        menu.addItem(settingsItem("退出 Toccata", action: #selector(quitFromSettings)))
+        NSMenu.popUpContextMenu(menu, with: event, for: button)
+    }
+
+    private func settingsItem(_ title: String, action: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        return item
+    }
+
+    @objc private func openWorkbenchFromSettings() { presentation.openWorkbench() }
+
+    @objc private func selectAppearance(_ item: NSMenuItem) {
+        guard let value = item.representedObject as? String, let mode = AppearanceMode(rawValue: value) else { return }
+        appearance?.setMode(mode)
+    }
+
+    @objc private func toggleLoginItem() {
+        guard let loginItems else { return }
+        loginItems.setEnabled(!loginItems.enabled)
+    }
+
+    @objc private func disableLoginItem() { loginItems?.setEnabled(false) }
+    @objc private func openLoginSettings() { loginItems?.openSystemSettings() }
+    @objc private func quitFromSettings() { NSApp.terminate(nil) }
 }
 
 private final class TaskMenuPanel: NSPanel {

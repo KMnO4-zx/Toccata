@@ -6,8 +6,6 @@ import Combine
 struct QuickCaptureView: View {
     @EnvironmentObject private var tasks: TaskStore
     @EnvironmentObject private var presentation: MenuTaskPresentation
-    @EnvironmentObject private var loginItems: LoginItemController
-    @EnvironmentObject private var appearance: AppearanceSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var page: MenuPanelPage = .tasks
     @State private var scope: MenuTaskScope = .thisWeek
@@ -206,6 +204,8 @@ struct QuickCaptureView: View {
                             taskRows(completedRoots)
                         }
                     }
+                    .animation(reduceMotion ? nil : WorkspaceMotion.branchChange,
+                               value: presentation.expandedTaskIDs)
                 }
                 .scrollIndicators(.visible)
                 .background(TaskScrollerStyle())
@@ -218,7 +218,11 @@ struct QuickCaptureView: View {
     }
 
     private func taskRows(_ roots: [MenuTaskTreeNode]) -> some View {
-        ForEach(flatten(roots)) { row in taskRow(row).id(row.id) }
+        ForEach(flatten(roots)) { row in
+            taskRow(row)
+                .id(row.id)
+                .transition(reduceMotion ? .identity : WorkspaceMotion.branchTransition)
+        }
     }
 
     private func taskRow(_ row: MenuTaskVisibleRow) -> some View {
@@ -256,8 +260,10 @@ struct QuickCaptureView: View {
         .overlay(alignment: .leading) {
             if !row.node.children.isEmpty {
                 Button { toggleExpanded(task.id) } label: {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    Image(systemName: "chevron.right")
                         .font(.system(size: 8, weight: .medium))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: isExpanded)
                         .foregroundStyle(TaskMenuStyle.secondary)
                         .frame(width: 12, height: 32)
                         .contentShape(Rectangle())
@@ -328,45 +334,16 @@ struct QuickCaptureView: View {
             .accessibilityLabel("日历")
             .accessibilityAddTraits(page == .calendar ? .isSelected : [])
 
-            Menu {
-                Button("打开工作台") { presentation.openWorkbench() }
-                Picker("外观", selection: $appearance.mode) {
-                    ForEach(AppearanceMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.menu)
-                Divider()
-                Toggle("登录时启动", isOn: Binding(
-                    get: { loginItems.enabled }, set: { loginItems.setEnabled($0) }
-                ))
-                if loginItems.requiresApproval {
-                    Button("前往系统设置允许启动") { loginItems.openSystemSettings() }
-                    Button("取消登录启动申请") { loginItems.setEnabled(false) }
-                }
-                if let error = loginItems.errorMessage {
-                    Text(error)
-                }
-                Divider()
-                Menu("快捷键") {
-                    Text("Tab：编辑所选任务的描述")
-                    Text("Enter：为顶层任务添加子任务")
-                    Text("↑ / ↓：选择任务")
-                    Text("Esc：收起编辑浮窗")
-                }
-                Divider()
-                Button("退出 Toccata") { NSApp.terminate(nil) }
-            } label: {
-                Image(systemName: "gearshape.fill")
+            Button { presentation.openWorkbench() } label: {
+                Image(systemName: "macwindow")
                     .font(.system(size: 20))
                     .foregroundStyle(TaskMenuStyle.muted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityLabel("设置")
+            .buttonStyle(.plain)
+            .help("打开工作台")
+            .accessibilityLabel("打开工作台")
         }
         .frame(height: 48)
     }
@@ -424,8 +401,10 @@ struct QuickCaptureView: View {
     }
 
     private func toggleExpanded(_ id: String) {
-        if presentation.expandedTaskIDs.contains(id) { presentation.expandedTaskIDs.remove(id) }
-        else { presentation.expandedTaskIDs.insert(id) }
+        withAnimation(reduceMotion ? nil : WorkspaceMotion.branchChange) {
+            if presentation.expandedTaskIDs.contains(id) { presentation.expandedTaskIDs.remove(id) }
+            else { presentation.expandedTaskIDs.insert(id) }
+        }
     }
 
     private func sorted(_ nodes: [MenuTaskTreeNode]) -> [MenuTaskTreeNode] {
@@ -509,7 +488,7 @@ private struct MenuTaskVisibleRow: Identifiable {
     var id: String { node.task.id }
 }
 
-private struct MenuTaskRowFrameKey: PreferenceKey {
+struct MenuTaskRowFrameKey: PreferenceKey {
     static let defaultValue: [String: CGRect] = [:]
     static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { _, newest in newest })

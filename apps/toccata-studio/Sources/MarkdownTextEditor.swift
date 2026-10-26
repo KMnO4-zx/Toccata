@@ -174,13 +174,27 @@ struct MarkdownTextEditor: NSViewRepresentable {
             return value.replace(/~~([^~]+)~~/g, '<del>$1</del>');
         }
 
-        function parse(markdown) {
+        function parse(markdown, preservePlainLines = false) {
             const lines = markdown.replace(/\\r\\n/g, '\\n').split('\\n');
             const output = [];
             let index = 0;
             while (index < lines.length) {
                 const line = lines[index].trim();
-                if (!line) { index += 1; continue; }
+                if (!line) {
+                    const start = index;
+                    while (index < lines.length && !lines[index].trim()) { index += 1; }
+                    // Two newlines separate paragraphs. Additional empty
+                    // paragraphs, including the last editing line, must survive
+                    // saving and opening the editor again.
+                    const blankLines = index - start;
+                    const onlyBlankParagraphs = start === 0 && index === lines.length;
+                    const emptyParagraphs = onlyBlankParagraphs && markdown.length
+                        ? Math.floor((blankLines + 1) / 2) : Math.floor(blankLines / 2);
+                    for (let blank = 0; blank < emptyParagraphs; blank += 1) {
+                        output.push('<p><br></p>');
+                    }
+                    continue;
+                }
                 const fence = line.match(/^(`{3}|~{3})\\s*(.*)$/);
                 if (fence) {
                     const marker = fence[1];
@@ -242,7 +256,11 @@ struct MarkdownTextEditor: NSViewRepresentable {
                     paragraph.push(lines[index].trim());
                     index += 1;
                 }
-                output.push('<p>' + inline(paragraph.join(' ')) + '</p>');
+                if (preservePlainLines) {
+                    output.push(...paragraph.map(line => '<p>' + inline(line) + '</p>'));
+                } else {
+                    output.push('<p>' + inline(paragraph.join(' ')) + '</p>');
+                }
             }
             return output.join('');
         }
@@ -299,10 +317,16 @@ struct MarkdownTextEditor: NSViewRepresentable {
         }
 
         function getMarkdown(canonical = true) {
-            return Array.from(editor.childNodes).map(node => {
+            return Array.from(editor.childNodes).filter(node => {
+                // Formatting may leave empty inline text nodes. A blank P/DIV,
+                // however, is a real line the user is still editing.
+                return ['P', 'DIV'].includes(node.tagName)
+                    || blockMarkdown(node, canonical).trim().length > 0;
+            }).map(node => {
                 if (node.nodeType === Node.TEXT_NODE) { return plain(node.nodeValue, canonical); }
+                if (['P', 'DIV'].includes(node.tagName) && !node.textContent.length) { return ''; }
                 return blockMarkdown(node, canonical);
-            }).filter(part => part.trim().length > 0).join('\\n\\n');
+            }).join('\\n\\n');
         }
 
         function caretOffset() {
@@ -382,7 +406,13 @@ struct MarkdownTextEditor: NSViewRepresentable {
                     point.collapse(false);
                 }
             }
-            return { node: point.startContainer, offset: point.startOffset, fallback: caretOffset() };
+            const caret = { node: point.startContainer, offset: point.startOffset, fallback: caretOffset() };
+            if (caret.node.nodeType === Node.ELEMENT_NODE && caret.offset > 0) {
+                const previous = caret.node.childNodes[caret.offset - 1];
+                caret.exitInline = { STRONG: 'strong', B: 'strong', EM: 'em', I: 'em',
+                                     DEL: 'del', S: 'del', STRIKE: 'del' }[previous && previous.tagName];
+            }
+            return caret;
         }
 
         function restoreCaret(caret) {
@@ -584,6 +614,14 @@ struct MarkdownTextEditor: NSViewRepresentable {
             }
             for (const block of Array.from(editor.children)) {
                 if (['UL', 'OL', 'PRE', 'CODE'].includes(block.tagName)) { continue; }
+                // WebKit uses <p><br></p> (or DIV) for the new empty line.
+                // Splitting its placeholder BR removes the caret's DOM node and
+                // collapses the line during the delayed normalization pass.
+                if (['P', 'DIV'].includes(block.tagName) && !block.textContent.length
+                    && block.querySelectorAll('br').length <= 1) {
+                    if (!block.querySelector('br')) { block.appendChild(document.createElement('br')); }
+                    continue;
+                }
                 const source = blockMarkdown(block, false);
                 const code = source.match(/^```([^\\n]*)\\n([\\s\\S]*)```$/);
                 if (code) {
@@ -592,8 +630,19 @@ struct MarkdownTextEditor: NSViewRepresentable {
                 }
                 if (!block.querySelector('br')) { continue; }
                 const pieces = [document.createElement(block.tagName)];
-                for (const child of Array.from(block.childNodes)) {
+                const children = Array.from(block.childNodes);
+                for (const child of children) {
                     if (child.tagName === 'BR') {
+                        // Shift+Return ends with an extra WebKit placeholder BR.
+                        // It occupies the new line; it is not a second break.
+                        if (child === children[children.length - 1]
+                            && child.previousSibling && child.previousSibling.tagName === 'BR') {
+                            if (caret && caret.node === child) {
+                                caret.node = pieces[pieces.length - 1].firstChild;
+                                caret.offset = 0;
+                            }
+                            continue;
+                        }
                         const paragraph = document.createElement('p');
                         const text = document.createTextNode('');
                         paragraph.appendChild(text);
@@ -604,6 +653,11 @@ struct MarkdownTextEditor: NSViewRepresentable {
                         pieces.push(paragraph);
                     } else {
                         pieces[pieces.length - 1].appendChild(child);
+                    }
+                }
+                for (const piece of pieces) {
+                    if (!piece.textContent.length && !piece.querySelector('br')) {
+                        piece.appendChild(document.createElement('br'));
                     }
                 }
                 block.replaceWith(...pieces);
@@ -630,6 +684,47 @@ struct MarkdownTextEditor: NSViewRepresentable {
         function focusEditor() {
             editor.focus({ preventScroll: true });
             if (!editor.textContent.length) { setCaret(0); }
+        }
+
+        function insertPlainText(text) {
+            if (text.includes('\\n') || text.includes('\\r')) {
+                // Parse a pasted source once, so Markdown separator lines don't
+                // become extra editable empty paragraphs. Plain lines stay apart.
+                document.execCommand('insertHTML', false, parse(text, true));
+                // Finish a pasted inline span just as incremental formatting
+                // does, so later typing doesn't inherit its bold/italic style.
+                const selection = window.getSelection();
+                if (selection.rangeCount && selection.isCollapsed) {
+                    const range = selection.getRangeAt(0);
+                    let element = range.startContainer.nodeType === Node.TEXT_NODE
+                        ? range.startContainer.parentElement : range.startContainer;
+                    let outer = null;
+                    const commands = new Set();
+                    const inlineTags = ['STRONG', 'B', 'EM', 'I', 'DEL', 'S', 'STRIKE', 'CODE', 'A'];
+                    while (element && inlineTags.includes(element.tagName)) {
+                        const remaining = document.createRange();
+                        remaining.selectNodeContents(element);
+                        remaining.setStart(range.startContainer, range.startOffset);
+                        if (remaining.toString().length) { break; }
+                        const command = { STRONG: 'bold', B: 'bold', EM: 'italic', I: 'italic',
+                                          DEL: 'strikeThrough', S: 'strikeThrough', STRIKE: 'strikeThrough' }[element.tagName];
+                        if (command) { commands.add(command); }
+                        outer = element;
+                        element = element.parentElement;
+                    }
+                    if (outer) {
+                        range.setStartAfter(outer);
+                        range.collapse(true);
+                        selection.removeAllRanges();
+                        selection.addRange(range);
+                        for (const command of commands) {
+                            if (document.queryCommandState(command)) { document.execCommand(command, false, false); }
+                        }
+                    }
+                }
+            } else {
+                document.execCommand('insertText', false, text);
+            }
         }
 
         editor.addEventListener('input', event => {
@@ -660,7 +755,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
         });
         editor.addEventListener('paste', event => {
             event.preventDefault();
-            document.execCommand('insertText', false, event.clipboardData.getData('text/plain'));
+            insertPlainText(event.clipboardData.getData('text/plain'));
         });
         editor.addEventListener('keydown', event => {
             if (event.key === 'Tab') {

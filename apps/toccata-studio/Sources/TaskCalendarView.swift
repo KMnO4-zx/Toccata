@@ -4,6 +4,8 @@ import SwiftUI
 @MainActor
 struct TaskCalendarView: View {
     @EnvironmentObject private var store: TaskStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage("tasks.listDisplayMode") private var displayMode: TaskListDisplayMode = .titles
 
     @State private var displayedMonth = Calendar.current.startOfDay(for: Date())
     @State private var selectedDay = Calendar.current.startOfDay(for: Date())
@@ -11,6 +13,7 @@ struct TaskCalendarView: View {
     @Binding private var selection: String?
     @State private var newTitle = ""
     @State private var showsUnscheduled = false
+    @State private var collapsedTaskIDs: Set<String> = []
     @FocusState private var addingTask: Bool
 
     private let calendar = Calendar.current
@@ -29,8 +32,6 @@ struct TaskCalendarView: View {
             return $0.id < $1.id
         }
     }
-    private var pendingUnscheduledCount: Int { unscheduledTasks.filter { !$0.isCompleted }.count }
-
     var body: some View {
         VStack(spacing: 0) {
             if let error = store.errorMessage {
@@ -72,6 +73,7 @@ struct TaskCalendarView: View {
             }
             .onChange(of: selectedDay) { _ in
                 selection = nil
+                collapsedTaskIDs.removeAll()
             }
             .onChange(of: addingTask) { focused in
                 if focused {
@@ -94,28 +96,54 @@ struct TaskCalendarView: View {
     }
 
     private var daySection: some View {
-        VStack(alignment: .leading, spacing: 13) {
+        let matchingTasks = dayTasks
+        let snapshot = WorkspaceTaskListSnapshot(allTasks: store.tasks, scopedTasks: matchingTasks)
+        let rows = WorkspaceTaskListSnapshot.rows(from: snapshot.pendingRoots + snapshot.completedRoots,
+                                                  collapsedIDs: collapsedTaskIDs)
+        return VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .firstTextBaseline) {
                 Text(dateLabel(selectedDay, includesWeekday: true))
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
-                Text("\(dayTasks.count) 项任务")
+                Text("\(matchingTasks.count) 项任务")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
 
-            Picker("按哪种日期查看", selection: Binding(
-                get: { mode },
-                set: { mode = $0; selection = nil }
-            )) {
-                ForEach(TaskCalendarMode.allCases) { item in
-                    Text(item.title).tag(item)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text("查看记录")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Picker("按哪种日期查看", selection: Binding(
+                        get: { mode },
+                        set: { mode = $0; selection = nil; collapsedTaskIDs.removeAll() }
+                    )) {
+                        ForEach(TaskCalendarMode.allCases) { item in
+                            Text(item.title).tag(item)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .accessibilityLabel("按哪种日期查看")
+                }
+                HStack(spacing: 8) {
+                    Text("显示方式")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Picker("任务显示方式", selection: $displayMode) {
+                        ForEach(TaskListDisplayMode.allCases) { item in
+                            Text(item.title).tag(item)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .accessibilityLabel("任务显示方式")
                 }
             }
-            .pickerStyle(.segmented)
 
-            if dayTasks.isEmpty {
+            if matchingTasks.isEmpty {
                 VStack(spacing: 7) {
                     Text(emptyDayTitle)
                         .font(.system(size: 13, weight: .medium))
@@ -128,10 +156,13 @@ struct TaskCalendarView: View {
                 .padding(.vertical, 22)
             } else {
                 LazyVStack(spacing: 4) {
-                    ForEach(dayTasks) { task in
-                        taskRow(task, showsDayEvents: true)
+                    ForEach(rows) { row in
+                        taskRow(row, showsDayEvents: true)
+                            .transition(reduceMotion ? .identity : WorkspaceMotion.branchTransition)
                     }
                 }
+                .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: collapsedTaskIDs)
+                .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: displayMode)
             }
 
             plannedTaskComposer
@@ -165,7 +196,11 @@ struct TaskCalendarView: View {
     }
 
     private var unscheduledSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let matchingTasks = unscheduledTasks
+        let snapshot = WorkspaceTaskListSnapshot(allTasks: store.tasks, scopedTasks: matchingTasks)
+        let rows = WorkspaceTaskListSnapshot.rows(from: snapshot.pendingRoots + snapshot.completedRoots,
+                                                  collapsedIDs: collapsedTaskIDs)
+        return VStack(alignment: .leading, spacing: 10) {
             Divider()
             DisclosureGroup(isExpanded: $showsUnscheduled) {
                 LazyVStack(alignment: .leading, spacing: 7) {
@@ -174,23 +209,25 @@ struct TaskCalendarView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.vertical, 6)
-                    if unscheduledTasks.isEmpty {
+                    if matchingTasks.isEmpty {
                         Text("当前没有未安排日期的任务。")
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                             .padding(.vertical, 8)
                     } else {
-                        ForEach(unscheduledTasks) { task in
-                            taskRow(task, showsDayEvents: false)
+                        ForEach(rows) { row in
+                            taskRow(row, showsDayEvents: false)
+                                .transition(reduceMotion ? .identity : WorkspaceMotion.branchTransition)
                         }
                     }
                 }
+                .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: collapsedTaskIDs)
             } label: {
                 HStack(spacing: 7) {
                     Label("未安排日期", systemImage: "tray")
                         .font(.system(size: 13, weight: .medium))
                     Spacer(minLength: 0)
-                    Text("\(pendingUnscheduledCount) 项待办 · \(unscheduledTasks.count) 项共计")
+                    Text("\(matchingTasks.filter { !$0.isCompleted }.count) 项待办 · \(matchingTasks.count) 项共计")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
@@ -198,8 +235,31 @@ struct TaskCalendarView: View {
         }
     }
 
-    private func taskRow(_ task: TodoTask, showsDayEvents: Bool) -> some View {
-        HStack(alignment: .top, spacing: 9) {
+    private func taskRow(_ row: WorkspaceTaskListRow, showsDayEvents: Bool) -> some View {
+        let task = row.task
+        return HStack(alignment: .top, spacing: 7) {
+            if row.node.children.isEmpty {
+                Color.clear.frame(width: 12, height: 22)
+                    .accessibilityHidden(true)
+            } else {
+                Button {
+                    withAnimation(reduceMotion ? nil : WorkspaceMotion.branchChange) {
+                        if collapsedTaskIDs.contains(task.id) { collapsedTaskIDs.remove(task.id) }
+                        else { collapsedTaskIDs.insert(task.id) }
+                    }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .rotationEffect(.degrees(collapsedTaskIDs.contains(task.id) ? 0 : 90))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(collapsedTaskIDs.contains(task.id) ? "展开\(task.title)的子任务" : "收起\(task.title)的子任务")
+                .accessibilityValue(collapsedTaskIDs.contains(task.id) ? "已收起" : "已展开")
+            }
+
             Button {
                 _ = store.setCompleted(id: task.id, completed: !task.isCompleted)
             } label: {
@@ -221,13 +281,13 @@ struct TaskCalendarView: View {
                         .strikethrough(task.isCompleted)
                         .foregroundStyle(task.isCompleted ? .secondary : .primary)
                         .lineLimit(2)
-                    if let parentID = task.parentID, let parent = store.task(id: parentID) {
-                        Label(parent.title, systemImage: "arrow.turn.down.right")
+                    if displayMode.showsDescriptions, !task.details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(task.details)
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                            .lineLimit(3)
                     }
-                    if showsDayEvents {
+                    if showsDayEvents, !row.node.isContextOnly, displayMode.showsDescriptions {
                         HStack(spacing: 6) {
                             if calendar.isDate(task.createdAt, inSameDayAs: selectedDay) {
                                 eventBadge("创建", color: .blue)
@@ -240,7 +300,7 @@ struct TaskCalendarView: View {
                             }
                             Spacer(minLength: 0)
                         }
-                    } else {
+                    } else if !showsDayEvents, !row.node.isContextOnly, displayMode.showsDescriptions {
                         Text(task.isCompleted ? "已完成 · 未设置计划日期" : "待办 · 未设置计划日期")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
@@ -264,6 +324,7 @@ struct TaskCalendarView: View {
             selection = task.id
             addingTask = false
         }
+        .padding(.leading, CGFloat(row.depth) * 22)
     }
 
     private func eventBadge(_ title: String, color: Color) -> some View {

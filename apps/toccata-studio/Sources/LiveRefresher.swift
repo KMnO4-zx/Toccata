@@ -16,12 +16,25 @@ final class LiveRefresher: ObservableObject {
     private var thread: Thread?
     private var pollTimer: Timer?
     private var pendingRefresh: DispatchWorkItem?
+    private var pendingUpdates: [PendingLiveUpdate] = []
     private var liveBuffer = LiveEventBuffer()
+    private let refreshInterval: TimeInterval
+
+    init(refreshInterval: TimeInterval = 0.3) {
+        self.refreshInterval = refreshInterval
+    }
+
+    private enum PendingLiveUpdate {
+        case connection(connected: Bool, enabled: Bool, permissionRequired: Bool)
+        case capture(enabled: Bool, permissionRequired: Bool)
+        case key(ActivityKeyEvent)
+        case persistedData
+    }
 
     func start() {
         guard thread == nil else { return }
         pollTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-            self?.generation += 1
+            self?.enqueue(.persistedData)
         }
         let worker = Thread { [weak self] in self?.runLoop() }
         worker.qualityOfService = .utility
@@ -32,9 +45,11 @@ final class LiveRefresher: ObservableObject {
 
     func stop() {
         pollTimer?.invalidate()
-        pendingRefresh?.cancel()
         lock.lock()
         stopFlag = true
+        pendingRefresh?.cancel()
+        pendingRefresh = nil
+        pendingUpdates.removeAll()
         if currentFD >= 0 { shutdown(currentFD, SHUT_RDWR) }
         lock.unlock()
     }
@@ -46,17 +61,71 @@ final class LiveRefresher: ObservableObject {
     }
 
     private func connectionChanged(_ connected: Bool) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.isConnected = connected
-            if !connected {
-                self.captureEnabled = false
-                self.permissionRequired = false
+        enqueue(.connection(connected: connected, enabled: false, permissionRequired: false))
+    }
+
+    // Ingestion happens on the socket thread. One queued main-thread job owns
+    // each batch, instead of publishing every key-down and key-up separately.
+    private func enqueue(_ update: PendingLiveUpdate) {
+        lock.lock()
+        guard !stopFlag else { lock.unlock(); return }
+        pendingUpdates.append(update)
+        guard pendingRefresh == nil else { lock.unlock(); return }
+        let item = DispatchWorkItem { [weak self] in self?.publishPendingUpdates() }
+        pendingRefresh = item
+        lock.unlock()
+        DispatchQueue.main.asyncAfter(deadline: .now() + refreshInterval, execute: item)
+    }
+
+    private func publishPendingUpdates() {
+        lock.lock()
+        guard !stopFlag, !pendingUpdates.isEmpty else { lock.unlock(); return }
+        let updates = pendingUpdates
+        pendingUpdates.removeAll(keepingCapacity: true)
+        pendingRefresh = nil
+        lock.unlock()
+
+        var connected = isConnected
+        var enabled = captureEnabled
+        var required = permissionRequired
+        var keys: [ActivityKeyEvent] = []
+        var eventsChanged = false
+        var shouldRefresh = false
+        for update in updates {
+            switch update {
+            case let .connection(nextConnected, nextEnabled, nextRequired):
+                if connected != nextConnected {
+                    liveBuffer.reset()
+                    keys.removeAll(keepingCapacity: true)
+                    eventsChanged = !liveEvents.isEmpty
+                    shouldRefresh = true
+                }
+                shouldRefresh = shouldRefresh || enabled != nextEnabled || required != nextRequired
+                connected = nextConnected
+                enabled = nextEnabled
+                required = nextRequired
+            case let .capture(nextEnabled, nextRequired):
+                shouldRefresh = shouldRefresh || enabled != nextEnabled || required != nextRequired
+                enabled = nextEnabled
+                required = nextRequired
+            case let .key(event):
+                keys.append(event)
+                enabled = true
+                required = false
+                shouldRefresh = true
+            case .persistedData:
+                shouldRefresh = true
             }
-            self.liveEvents.removeAll()
-            self.liveBuffer.reset()
-            self.generation += 1
         }
+        if !keys.isEmpty {
+            liveBuffer.append(contentsOf: keys)
+            eventsChanged = true
+        }
+        if isConnected != connected { isConnected = connected }
+        if captureEnabled != enabled { captureEnabled = enabled }
+        if permissionRequired != required { permissionRequired = required }
+        if eventsChanged { liveEvents = liveBuffer.events }
+        if shouldRefresh { generation += 1 }
     }
 
     private func runLoop() {
@@ -133,50 +202,27 @@ final class LiveRefresher: ObservableObject {
         }
     }
 
-    private func receive(_ data: Data) {
+    /// Shared parser for the socket stream; publication is batched independently
+    /// of how many protocol lines arrive in one read.
+    func receive(_ data: Data) {
         guard let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = payload["type"] as? String else { return }
         if type == "hello" {
-            let enabled = payload["capture_enabled"] as? Bool ?? false
-            let permissionRequired = payload["permission_required"] as? Bool ?? false
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.captureEnabled = enabled
-                self.permissionRequired = permissionRequired
-                self.connectionChanged(true)
-            }
+            enqueue(.connection(connected: true,
+                                enabled: payload["capture_enabled"] as? Bool ?? false,
+                                permissionRequired: payload["permission_required"] as? Bool ?? false))
         } else if type == "capture", let enabled = payload["enabled"] as? Bool {
-            let permissionRequired = payload["permission_required"] as? Bool ?? false
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.captureEnabled = enabled
-                self.permissionRequired = permissionRequired
-                self.generation += 1
-            }
+            enqueue(.capture(enabled: enabled,
+                             permissionRequired: payload["permission_required"] as? Bool ?? false))
         } else if type == "updated" {
-            DispatchQueue.main.async { [weak self] in self?.generation += 1 }
+            enqueue(.persistedData)
         } else if type == "key",
                   let timestamp = payload["ts"] as? NSNumber,
                   let keycode = payload["keycode"] as? NSNumber,
                   let kind = payload["kind"] as? String,
                   kind == "down" || kind == "up" {
-            let event = ActivityKeyEvent(timestampMs: timestamp.int64Value,
-                                         keycode: keycode.intValue, kind: kind == "down" ? 0 : 1)
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.captureEnabled = true
-                self.permissionRequired = false
-                self.liveBuffer.append(event)
-                self.liveEvents = self.liveBuffer.events
-                // Throttle rather than debounce, so continuous typing still refreshes.
-                guard self.pendingRefresh == nil else { return }
-                let item = DispatchWorkItem { [weak self] in
-                    self?.pendingRefresh = nil
-                    self?.generation += 1
-                }
-                self.pendingRefresh = item
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: item)
-            }
+            enqueue(.key(ActivityKeyEvent(timestampMs: timestamp.int64Value,
+                                          keycode: keycode.intValue, kind: kind == "down" ? 0 : 1)))
         }
     }
 
@@ -194,26 +240,27 @@ struct LiveEventBuffer {
     }
 
     mutating func append(_ rawEvent: ActivityKeyEvent) {
-        var event = rawEvent
-        if event.kind == 0 {
-            if downAt[event.keycode] == nil { downAt[event.keycode] = event.timestampMs }
-        } else if let down = downAt.removeValue(forKey: event.keycode) {
-            event.holdMs = max(0, event.timestampMs - down)
-        }
-        events.append(event)
-        let cutoff = event.timestampMs - 5 * 60 * 1000
-        guard let first = events.first, first.timestampMs < cutoff else { return }
-        var held: [Int: Int] = [:]
-        for (index, item) in events.enumerated() {
-            if item.kind == 0 {
-                if held[item.keycode] == nil { held[item.keycode] = index }
-            } else {
-                held.removeValue(forKey: item.keycode)
+        append(contentsOf: [rawEvent])
+    }
+
+    /// Publish and trim once per batch; copying a five-minute history on every
+    /// physical key event made typing invalidate the full SwiftUI view tree.
+    mutating func append(contentsOf rawEvents: [ActivityKeyEvent]) {
+        guard !rawEvents.isEmpty else { return }
+        for rawEvent in rawEvents {
+            var event = rawEvent
+            if event.kind == 0 {
+                if downAt[event.keycode] == nil { downAt[event.keycode] = event.timestampMs }
+            } else if let down = downAt.removeValue(forKey: event.keycode) {
+                event.holdMs = max(0, event.timestampMs - down)
             }
+            events.append(event)
         }
-        let retainedDowns = Set(held.values)
-        events = events.enumerated().compactMap { index, item in
-            item.timestampMs >= cutoff || retainedDowns.contains(index) ? item : nil
+        guard let latest = rawEvents.last?.timestampMs else { return }
+        let cutoff = latest - 5 * 60 * 1000
+        guard let first = events.first, first.timestampMs < cutoff else { return }
+        events = events.filter { event in
+            event.timestampMs >= cutoff || (event.kind == 0 && downAt[event.keycode] == event.timestampMs)
         }
     }
 }

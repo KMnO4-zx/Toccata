@@ -38,15 +38,16 @@ final class MarkdownWebEditorTests: XCTestCase {
         XCTAssertEqual(contentEditable, "true")
     }
 
-    func testMultilineTypingFormsBlocksIncrementally() async throws {
+    func testPastedMarkdownFormsBlocksIncrementally() async throws {
         let editor = try await loadEditor()
         let markdown = "## 中文标题\n\n- **中文加粗**"
-        _ = try await evaluate(editor, "document.getElementById('editor').focus(); document.execCommand('insertText', false, \(MarkdownTextEditor.javascriptString(markdown))); normalizeEditor();")
+        _ = try await evaluate(editor, "document.getElementById('editor').focus(); insertPlainText(\(MarkdownTextEditor.javascriptString(markdown))); window.beforeMultilineNormalization = editor.innerHTML; normalizeEditor();")
         let html = try await evaluate(editor, "document.getElementById('editor').innerHTML")
         XCTAssertTrue(html.contains("<h2>中文标题</h2>"))
         XCTAssertTrue(html.contains("<ul><li><strong>中文加粗</strong></li></ul>"))
         let roundTrip = try await evaluate(editor, "getMarkdown()")
-        XCTAssertEqual(roundTrip, markdown)
+        let originalDOM = try await evaluate(editor, "window.beforeMultilineNormalization")
+        XCTAssertEqual(roundTrip, markdown, originalDOM)
     }
 
     func testConsecutiveTypingKeepsEditorFocused() async throws {
@@ -62,6 +63,103 @@ final class MarkdownWebEditorTests: XCTestCase {
         let activeElement = try await evaluate(editor, "document.activeElement.id")
         XCTAssertEqual(markdown, "abc")
         XCTAssertEqual(activeElement, "editor")
+    }
+
+    func testReturnThenPauseKeepsEmptyLineAndCaret() async throws {
+        let editor = try await loadEditor()
+        _ = try await evaluate(editor, """
+            setMarkdown('给 Agentic RL Lab 做贡献');
+            focusEditor(); setCaret(editor.textContent.length);
+            document.execCommand('insertParagraph', false);
+        """)
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        let markdown = try await evaluate(editor, "getMarkdown()")
+        let caretOnEmptyLine = try await evaluate(editor, """
+            (() => {
+                const node = window.getSelection().anchorNode;
+                const block = (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement).closest('p, div');
+                return block !== editor && block.textContent === '' && block.querySelector('br') !== null;
+            })()
+        """)
+        XCTAssertEqual(markdown, "给 Agentic RL Lab 做贡献\n\n")
+        XCTAssertEqual(caretOnEmptyLine, "true")
+
+        _ = try await evaluate(editor, "document.execCommand('insertText', false, '第二行');")
+        try await Task.sleep(nanoseconds: 350_000_000)
+        let continued = try await evaluate(editor, "getMarkdown()")
+        XCTAssertEqual(continued, "给 Agentic RL Lab 做贡献\n\n第二行")
+    }
+
+    func testEmptyLineSurvivesBindingEchoFlushAndReopening() async throws {
+        let (editor, coordinator, state) = try await loadCoordinatedEditor()
+        _ = try await evaluate(editor, "focusEditor(); document.execCommand('insertText', false, '第一行');")
+        try await Task.sleep(nanoseconds: 350_000_000)
+        coordinator.update(text: state.text, isFocused: true, fontSize: 12, textColor: .labelColor)
+        _ = try await evaluate(editor, "document.execCommand('insertParagraph', false);")
+        try await Task.sleep(nanoseconds: 500_000_000)
+        coordinator.update(text: state.text, isFocused: true, fontSize: 12, textColor: .labelColor)
+
+        let saved = await coordinator.flushPendingMarkdown()
+        XCTAssertTrue(saved)
+        XCTAssertEqual(state.text, "第一行\n\n")
+        let externalRenders = try await evaluate(editor, "String(window.externalRenders)")
+        XCTAssertEqual(externalRenders, "0")
+
+        let reopened = try await loadEditor()
+        _ = try await evaluate(reopened, "setMarkdown(\(MarkdownTextEditor.javascriptString(state.text)))")
+        let roundTrip = try await evaluate(reopened, "getMarkdown()")
+        XCTAssertEqual(roundTrip, state.text)
+        let lastLineIsEmpty = try await evaluate(reopened, "editor.lastElementChild.textContent === '' && editor.lastElementChild.querySelector('br') !== null")
+        XCTAssertEqual(lastLineIsEmpty, "true")
+    }
+
+    func testEmptyParagraphsRoundTripWithoutLosingOrAddingLines() async throws {
+        let editor = try await loadEditor()
+        for markdown in ["", "\n\n", "\n\n第一行", "第一行\n\n", "第一行\n\n\n\n", "第一行\n\n\n\n第二行"] {
+            _ = try await evaluate(editor, "setMarkdown(\(MarkdownTextEditor.javascriptString(markdown)))")
+            for _ in 0..<3 {
+                _ = try await evaluate(editor, "normalizeEditor();")
+                let saved = try await evaluate(editor, "getMarkdown()")
+                XCTAssertEqual(saved, markdown)
+                _ = try await evaluate(editor, "setMarkdown(\(MarkdownTextEditor.javascriptString(saved)))")
+            }
+        }
+    }
+
+    func testRepeatedReturnPausesPreserveEveryEmptyParagraph() async throws {
+        let editor = try await loadEditor()
+        _ = try await evaluate(editor, "setMarkdown('第一行'); focusEditor(); setCaret(editor.textContent.length);")
+        for count in 1...3 {
+            _ = try await evaluate(editor, "document.execCommand('insertParagraph', false);")
+            try await Task.sleep(nanoseconds: 350_000_000)
+            let markdown = try await evaluate(editor, "getMarkdown()")
+            XCTAssertEqual(markdown, "第一行" + String(repeating: "\n\n", count: count))
+        }
+        _ = try await evaluate(editor, "document.execCommand('insertText', false, '最后一行');")
+        try await Task.sleep(nanoseconds: 350_000_000)
+        let continued = try await evaluate(editor, "getMarkdown()")
+        XCTAssertEqual(continued, "第一行" + String(repeating: "\n\n", count: 3) + "最后一行")
+    }
+
+    func testPastedPlainLinesStaySeparateWithoutAddingBlankParagraphs() async throws {
+        let editor = try await loadEditor()
+        _ = try await evaluate(editor, "focusEditor(); insertPlainText('第一行\\n第二行'); normalizeEditor();")
+        let markdown = try await evaluate(editor, "getMarkdown()")
+        XCTAssertEqual(markdown, "第一行\n\n第二行")
+    }
+
+    func testShiftReturnKeepsOneNewLineAfterPausing() async throws {
+        let editor = try await loadEditor()
+        _ = try await evaluate(editor, "setMarkdown('第一行'); focusEditor(); setCaret(editor.textContent.length); document.execCommand('insertLineBreak', false);")
+        let originalDOM = try await evaluate(editor, "editor.innerHTML")
+        try await Task.sleep(nanoseconds: 350_000_000)
+        let markdown = try await evaluate(editor, "getMarkdown()")
+        XCTAssertEqual(markdown, "第一行\n\n", originalDOM)
+        _ = try await evaluate(editor, "document.execCommand('insertText', false, '第二行');")
+        try await Task.sleep(nanoseconds: 350_000_000)
+        let continued = try await evaluate(editor, "getMarkdown()")
+        XCTAssertEqual(continued, "第一行\n\n第二行")
     }
 
     func testComposingInputDefersNormalization() async throws {
@@ -99,7 +197,7 @@ final class MarkdownWebEditorTests: XCTestCase {
         let editor = try await loadEditor()
         _ = try await evaluate(editor, """
             document.getElementById('editor').focus();
-            document.execCommand('insertText', false, '## 中文标题\\n\\n- **中文加粗**');
+            insertPlainText('## 中文标题\\n\\n- **中文加粗**');
             normalizeEditor();
             document.execCommand('insertText', false, '继续输入');
         """)
@@ -265,6 +363,16 @@ final class MarkdownWebEditorTests: XCTestCase {
         XCTAssertEqual(committedMarkdown, "ab你！")
         XCTAssertEqual(committedFocus, "editor")
         XCTAssertEqual(store.task(id: id)?.details, "ab你！")
+
+        _ = try await evaluate(editor, "document.execCommand('insertParagraph', false);")
+        try await waitForDetails("ab你！\n\n", store: store, id: id)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(store.task(id: id)?.details, "ab你！\n\n")
+        _ = try await evaluate(editor, "document.execCommand('insertText', false, '下一行');")
+        try await waitForDetails("ab你！\n\n下一行", store: store, id: id)
+        let multilineMarkdown = try await evaluate(editor, "getMarkdown()")
+        XCTAssertEqual(multilineMarkdown, "ab你！\n\n下一行")
+        XCTAssertEqual(store.task(id: id)?.details, multilineMarkdown)
     }
 
     private func waitForDetails(_ expected: String, store: TaskStore, id: String) async throws {

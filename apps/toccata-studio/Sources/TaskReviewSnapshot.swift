@@ -7,6 +7,8 @@ struct TaskReviewSnapshot {
     let completed: [TodoTask]
     let pending: [TodoTask]
     let tasks: [TodoTask]
+    let completedRoots: [MenuTaskTreeNode]
+    let pendingRoots: [MenuTaskTreeNode]
     let title: String
     let dateLabel: String
 
@@ -62,9 +64,26 @@ struct TaskReviewSnapshot {
         let dateLabel = "\(dateFormatter.string(from: dates.start)) — \(dateFormatter.string(from: dates.end))"
         let parentTitles = byID.mapValues(\.title)
 
+        let roots = MenuTaskTree.roots(allTasks: Array(byID.values), matchingTasks: visible)
+        let pendingIDs = Set(pending.map(\.id))
+        let completedIDs = Set(completed.map(\.id))
+        func containsPending(_ node: MenuTaskTreeNode) -> Bool {
+            pendingIDs.contains(node.id) || node.children.contains(where: containsPending)
+        }
+        func latestCompletion(_ node: MenuTaskTreeNode) -> Date {
+            let ownDate = completedIDs.contains(node.id) ? node.task.completedAt ?? .distantPast : .distantPast
+            return node.children.reduce(ownDate) { max($0, latestCompletion($1)) }
+        }
+
         self.completed = completed
         self.pending = pending
         self.tasks = completed + pending
+        self.pendingRoots = roots.filter(containsPending)
+        self.completedRoots = roots.filter { !containsPending($0) }.sorted {
+            let left = latestCompletion($0)
+            let right = latestCompletion($1)
+            return left == right ? $0.id < $1.id : left > right
+        }
         self.title = title
         self.dateLabel = dateLabel
         self.parentTitles = parentTitles
