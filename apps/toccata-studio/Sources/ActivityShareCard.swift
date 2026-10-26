@@ -57,7 +57,7 @@ struct ActivityShareCard: View {
 
     private var metrics: some View {
         VStack(spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .center) {
                 Text("键盘活跃时间").font(.system(size: 21)).foregroundStyle(muted)
                 Spacer(minLength: 8)
                 Text(Formatters.duration(ms: report.activity.activeMs))
@@ -99,7 +99,7 @@ struct ActivityShareCard: View {
                 HStack(spacing: 6) {
                     ForEach(keys) { key in
                         VStack(spacing: 4) {
-                            Text(shortName(key)).font(.system(size: 21)).lineLimit(1)
+                            keyBadge(shortName(key))
                             Text("\(key.count.formatted()) 次")
                                 .font(.system(size: 19)).monospacedDigit().foregroundStyle(muted)
                                 .lineLimit(1).minimumScaleFactor(0.75)
@@ -110,6 +110,23 @@ struct ActivityShareCard: View {
             }
         }
         .padding(14).background(.white, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func keyBadge(_ name: String) -> some View {
+        Text(name)
+            .font(.system(size: 21, weight: .regular, design: .monospaced))
+            .lineLimit(1)
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .frame(minWidth: 34)
+            .background {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color(red: 0.96, green: 0.965, blue: 0.975))
+                    .shadow(color: .black.opacity(0.08), radius: 1.2, x: 0, y: 1.5)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 5)
+                            .strokeBorder(ink.opacity(0.1), lineWidth: 0.6)
+                    }
+            }
     }
 
     private func shortName(_ key: KeyboardUsageRanking.Entry) -> String {
