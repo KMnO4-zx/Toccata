@@ -8,12 +8,12 @@ enum KeyboardUsageRanking {
         var id: Int { keycode }
     }
 
-    static func topThree(counts: [Int: Int], layout: KeyboardLayout = .magicKeyboard) -> [Entry] {
+    static func topFive(counts: [Int: Int], layout: KeyboardLayout = .magicKeyboard) -> [Entry] {
         counts.filter { $0.value > 0 }
             .sorted { lhs, rhs in
                 lhs.value == rhs.value ? lhs.key < rhs.key : lhs.value > rhs.value
             }
-            .prefix(3)
+            .prefix(5)
             .map { code, count in
                 Entry(keycode: code,
                       name: layout.keys.first { $0.code == code }?.readableLabel ?? "Key\(code)",
@@ -60,7 +60,7 @@ struct KeyboardActivityHeader: View {
 
     @ViewBuilder
     private var topKeys: some View {
-        let entries = KeyboardUsageRanking.topThree(counts: counts)
+        let entries = KeyboardUsageRanking.topFive(counts: counts)
         if !entries.isEmpty {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .firstTextBaseline, spacing: 14) {
@@ -69,12 +69,14 @@ struct KeyboardActivityHeader: View {
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Text("常用按键").foregroundStyle(.secondary)
-                    ForEach(entries) { entry in keyUsage(entry) }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), alignment: .leading)], alignment: .leading, spacing: 8) {
+                        ForEach(entries) { entry in keyUsage(entry) }
+                    }
                 }
             }
             .font(.system(size: 11))
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("所选时段按键次数前三名")
+            .accessibilityLabel("所选时段按键次数前五名")
             .accessibilityValue(entries.map { "\($0.name)，\($0.count) 次" }.joined(separator: "；"))
         }
     }

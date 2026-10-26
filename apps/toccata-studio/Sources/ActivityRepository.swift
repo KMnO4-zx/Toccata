@@ -18,7 +18,7 @@ final class ActivityRepository {
 
     func snapshot(
         range: ActivityRange, now: Date = Date(),
-        liveEvents: [ActivityKeyEvent] = [], liveConnected: Bool = false
+        liveEvents: [ActivityKeyEvent] = [], liveConnected: Bool = false, database: Database? = nil
     ) -> ActivitySnapshot {
         let interval = range.interval(now: now, calendar: calendar)
         // Include key-down windows that started just before the selected day.
@@ -29,7 +29,7 @@ final class ActivityRepository {
         var events: [ActivityKeyEvent] = []
         var error: String?
         do {
-            let database = try Database(url: url)
+            let database = try database ?? Database(url: url)
             events = try database.query(
                 "SELECT ts_ms, keycode, kind, hold_ms FROM key_events WHERE ts_ms >= ? AND ts_ms <= ? ORDER BY ts_ms, rowid",
                 params: [start, end]

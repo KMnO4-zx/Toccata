@@ -86,52 +86,57 @@ final class StatsRepository {
 
     func topApps(range: TimeRange, limit: Int = 20, now: Date = Date(), calendar: Calendar = .current) -> [AppRank] {
         let interval = range.interval(now: now, calendar: calendar)
+        return (try? topApps(interval: interval, limit: limit, now: now)) ?? []
+    }
+
+    /// Accept exact bounds so sharing uses the same custom range as the keyboard.
+    /// Unlike the dashboard fallback, export callers must surface read failures.
+    func topApps(interval: DateInterval, limit: Int = 20, now: Date = Date(), database: Database? = nil) throws -> [AppRank] {
         let nowMs = ActivityCalculator.milliseconds(now)
         let window = ActivitySpan(startMs: ActivityCalculator.milliseconds(interval.start),
                                   endMs: min(ActivityCalculator.milliseconds(interval.end), nowMs))
         guard window.endMs > window.startMs, limit > 0 else { return [] }
-        return withDatabase([]) { db in
-            // Reconstruct historical and current rankings from raw events using
-            // the same policy as the keyboard overview, without waiting for an
-            // app_sessions segment to settle. Later releases can carry a hold
-            // that crosses the selected end, so include those through now.
-            // Union in SQLite so a month of raw events does not have to be
-            // materialized as Swift objects on each refresh. The running MAX
-            // handles nested holds as well as ordinary overlapping windows.
-            return try db.query(
-                """
-                WITH selected_events AS (
-                    SELECT DISTINCT app, ts_ms, keycode, kind, hold_ms FROM key_events
-                    WHERE app IS NOT NULL AND ts_ms>=?3 AND ts_ms<=?4
-                        AND (ts_ms<?2 OR (kind=1 AND hold_ms>0 AND ts_ms-hold_ms<?2))
-                ), event_spans AS (
-                    SELECT app,
-                        MAX(?1, CASE WHEN kind=0 THEN ts_ms ELSE ts_ms-hold_ms END) start_ms,
-                        MIN(?2, CASE WHEN kind=0 THEN ts_ms+?5 ELSE ts_ms END) end_ms
-                    FROM selected_events WHERE kind=0 OR (kind=1 AND hold_ms>0)
-                ), covered_spans AS (
-                    SELECT app, start_ms, end_ms,
-                        MAX(end_ms) OVER (PARTITION BY app ORDER BY start_ms, end_ms
-                            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) previous_end
-                    FROM event_spans WHERE end_ms>start_ms
-                ), app_usage AS (
-                    SELECT app, SUM(MAX(0, end_ms-MAX(start_ms, COALESCE(previous_end, start_ms)))) usage_ms
-                    FROM covered_spans GROUP BY app
-                ), app_keys AS (
-                    SELECT app, COUNT(*) key_count FROM selected_events
-                    WHERE kind=0 AND ts_ms>=?1 AND ts_ms<?2 GROUP BY app
-                ), apps AS (
-                    SELECT app FROM app_usage UNION SELECT app FROM app_keys
-                )
-                SELECT apps.app, COALESCE(app_usage.usage_ms, 0), COALESCE(app_keys.key_count, 0)
-                FROM apps LEFT JOIN app_usage ON app_usage.app=apps.app
-                    LEFT JOIN app_keys ON app_keys.app=apps.app
-                ORDER BY COALESCE(app_usage.usage_ms, 0) DESC, apps.app ASC LIMIT ?6
-                """,
-                params: [window.startMs, window.endMs, window.startMs - policy.activityWindowMs,
-                         nowMs, policy.activityWindowMs, Int64(limit)]
-            ) { AppRank(app: columnText($0, 0), usageMs: columnInt64($0, 1), keyCount: columnInt64($0, 2)) }
-        }
+        let db = try database ?? Database(url: url)
+        // Reconstruct historical and current rankings from raw events using
+        // the same policy as the keyboard overview, without waiting for an
+        // app_sessions segment to settle. Later releases can carry a hold
+        // that crosses the selected end, so include those through now.
+        // Union in SQLite so a month of raw events does not have to be
+        // materialized as Swift objects on each refresh. The running MAX
+        // handles nested holds as well as ordinary overlapping windows.
+        return try db.query(
+            """
+            WITH selected_events AS (
+                SELECT DISTINCT app, ts_ms, keycode, kind, hold_ms FROM key_events
+                WHERE app IS NOT NULL AND ts_ms>=?3 AND ts_ms<=?4
+                    AND (ts_ms<?2 OR (kind=1 AND hold_ms>0 AND ts_ms-hold_ms<?2))
+            ), event_spans AS (
+                SELECT app,
+                    MAX(?1, CASE WHEN kind=0 THEN ts_ms ELSE ts_ms-hold_ms END) start_ms,
+                    MIN(?2, CASE WHEN kind=0 THEN ts_ms+?5 ELSE ts_ms END) end_ms
+                FROM selected_events WHERE kind=0 OR (kind=1 AND hold_ms>0)
+            ), covered_spans AS (
+                SELECT app, start_ms, end_ms,
+                    MAX(end_ms) OVER (PARTITION BY app ORDER BY start_ms, end_ms
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) previous_end
+                FROM event_spans WHERE end_ms>start_ms
+            ), app_usage AS (
+                SELECT app, SUM(MAX(0, end_ms-MAX(start_ms, COALESCE(previous_end, start_ms)))) usage_ms
+                FROM covered_spans GROUP BY app
+            ), app_keys AS (
+                SELECT app, COUNT(*) key_count FROM selected_events
+                WHERE kind=0 AND ts_ms>=?1 AND ts_ms<?2 GROUP BY app
+            ), apps AS (
+                SELECT app FROM app_usage UNION SELECT app FROM app_keys
+            )
+            SELECT apps.app, COALESCE(app_usage.usage_ms, 0), COALESCE(app_keys.key_count, 0)
+            FROM apps LEFT JOIN app_usage ON app_usage.app=apps.app
+                LEFT JOIN app_keys ON app_keys.app=apps.app
+            ORDER BY COALESCE(app_usage.usage_ms, 0) DESC, apps.app ASC LIMIT ?6
+            """,
+            params: [window.startMs, window.endMs, window.startMs - policy.activityWindowMs,
+                     nowMs, policy.activityWindowMs, Int64(limit)]
+        ) { AppRank(app: columnText($0, 0), usageMs: columnInt64($0, 1), keyCount: columnInt64($0, 2)) }
     }
 }
 

@@ -37,6 +37,19 @@ final class Database {
         sqlite3_close(handle)
     }
 
+    /// Keep all sections of an exported report on one committed SQLite snapshot.
+    func readSnapshot<T>(_ body: () throws -> T) throws -> T {
+        _ = try query("BEGIN") { _ in 0 }
+        do {
+            let result = try body()
+            _ = try query("COMMIT") { _ in 0 }
+            return result
+        } catch {
+            _ = try? query("ROLLBACK") { _ in 0 }
+            throw error
+        }
+    }
+
     /// 编译并执行查询，逐行交由 `row` 映射。仅支持 Int64 参数绑定（本 App 的查询足够用）。
     func query<T>(_ sql: String, params: [Int64] = [], row: (OpaquePointer) -> T) throws -> [T] {
         var stmt: OpaquePointer?

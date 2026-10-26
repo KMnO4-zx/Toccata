@@ -18,6 +18,9 @@ struct ActivityView: View {
     @State private var isReloading = false
     @State private var refreshPending = false
     @State private var hoveredBucketID: Int64?
+    @State private var showsShare = false
+    @State private var shareRange: ActivityRange = .today
+    @State private var shareReferenceDate = Date()
 
     var body: some View {
         ScrollView {
@@ -101,6 +104,24 @@ struct ActivityView: View {
                     .accessibilityHidden(!isChangingRange)
                     .accessibilityLabel("正在更新所选时段")
                 Spacer(minLength: 0)
+                Button {
+                    shareRange = range
+                    shareReferenceDate = Date()
+                    showsShare = true
+                } label: {
+                    Label("分享", systemImage: "square.and.arrow.up")
+                        .font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .foregroundStyle(Color.accentColor)
+                        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("activity-share")
+                .help("分享所选时段的键盘活动与常用应用")
+                .popover(isPresented: $showsShare, arrowEdge: .bottom) {
+                    ActivitySharePopover(range: shareRange, referenceDate: shareReferenceDate,
+                                         onClose: { showsShare = false })
+                }
             }
             Text(dateDescription(for: displayedRange))
                 .font(.caption)
