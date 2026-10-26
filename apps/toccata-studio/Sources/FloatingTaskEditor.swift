@@ -281,11 +281,10 @@ private struct FloatingTaskEditorContent: View {
     private var childList: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(children) { child in
-                HStack(alignment: .top, spacing: 9) {
+                HStack(alignment: .firstTextBaseline, spacing: 9) {
                     TaskMenuCheckbox(isCompleted: child.isCompleted, size: 12) {
                         _ = store.setCompleted(id: child.id, completed: !child.isCompleted)
                     }
-                    .padding(.top, 1)
                     .accessibilityLabel(child.isCompleted ? "恢复子任务：\(child.title)" : "完成子任务：\(child.title)")
                     Button {
                         saveDraft()
@@ -294,6 +293,7 @@ private struct FloatingTaskEditorContent: View {
                         Text(child.title)
                             .font(.system(size: 12))
                             .foregroundStyle(child.isCompleted ? TaskMenuStyle.secondary : TaskMenuStyle.text)
+                            .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                     }
