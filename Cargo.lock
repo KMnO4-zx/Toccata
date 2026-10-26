@@ -547,7 +547,7 @@ dependencies = [
 
 [[package]]
 name = "toccata-core"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "core-foundation",
  "core-graphics",

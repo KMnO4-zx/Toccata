@@ -7,9 +7,9 @@ struct ActivityShareCard: View {
     static let width: CGFloat = 720
     let report: ActivityShareSnapshot
     let identities: [String: ApplicationIdentityCache.Identity]
-    private let ink = Color(red: 0.12, green: 0.17, blue: 0.25)
-    private let muted = Color(red: 0.39, green: 0.44, blue: 0.52)
-    private let blue = Color(red: 0.12, green: 0.35, blue: 0.90)
+    private let ink = Color(red: 0.16, green: 0.19, blue: 0.25)
+    private let muted = Color(red: 0.43, green: 0.47, blue: 0.53)
+    private let blue = Color(red: 0.16, green: 0.37, blue: 0.83)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -23,17 +23,17 @@ struct ActivityShareCard: View {
                     Text("本机已保存记录 · 活跃时长为估算")
                         .font(.system(size: 16)).foregroundStyle(muted)
                     Spacer()
-                    Text("看见投入").font(.system(size: 17, weight: .medium)).foregroundStyle(blue)
+                    Text("看见投入").font(.system(size: 17)).foregroundStyle(muted)
                 }
                 Label(ToccataReleaseSource.repositoryAddress, systemImage: "link")
-                    .font(.system(size: 18, weight: .medium)).foregroundStyle(blue)
+                    .font(.system(size: 18)).foregroundStyle(blue)
             }
             .padding(.horizontal, 2)
         }
         .padding(18)
         .frame(width: Self.width)
         .foregroundStyle(ink)
-        .background(Color(red: 0.94, green: 0.96, blue: 1))
+        .background(Color(red: 0.965, green: 0.972, blue: 0.984))
         .environment(\.colorScheme, .light)
         .environment(\.locale, Locale(identifier: "zh_CN"))
         .environment(\.calendar, report.calendar)
@@ -44,12 +44,12 @@ struct ActivityShareCard: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("我的键盘足迹").font(.system(size: 32, weight: .bold))
+                Text("我的键盘足迹").font(.system(size: 32))
                 Spacer()
                 Label("Toccata", systemImage: "square.3.layers.3d")
-                    .font(.system(size: 21, weight: .semibold)).foregroundStyle(blue)
+                    .font(.system(size: 21, weight: .medium)).foregroundStyle(blue)
             }
-            Text(report.dateLabel).font(.system(size: 19, weight: .medium, design: .rounded))
+            Text(report.dateLabel).font(.system(size: 19))
                 .monospacedDigit().foregroundStyle(muted)
         }
         .padding(.horizontal, 2).padding(.bottom, 2)
@@ -58,14 +58,14 @@ struct ActivityShareCard: View {
     private var metrics: some View {
         VStack(spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text("键盘活跃时间").font(.system(size: 21, weight: .medium))
+                Text("键盘活跃时间").font(.system(size: 21)).foregroundStyle(muted)
                 Spacer(minLength: 8)
                 Text(Formatters.duration(ms: report.activity.activeMs))
-                    .font(.system(size: 35, weight: .bold, design: .rounded)).monospacedDigit()
+                    .font(.system(size: 35)).monospacedDigit().foregroundStyle(blue)
                     .lineLimit(1).minimumScaleFactor(0.75)
             }
             .padding(.horizontal, 18).padding(.vertical, 14)
-            .foregroundStyle(.white).background(blue, in: RoundedRectangle(cornerRadius: 13))
+            .background(blue.opacity(0.065), in: RoundedRectangle(cornerRadius: 13))
             HStack(spacing: 8) {
                 metric("按键次数", value: report.activity.keyCount.formatted())
                 metric("语音输出估算 · Fn", value: Formatters.duration(ms: report.activity.fnMs))
@@ -75,9 +75,9 @@ struct ActivityShareCard: View {
 
     private func metric(_ title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(.system(size: 18, weight: .medium)).foregroundStyle(muted)
+            Text(title).font(.system(size: 18)).foregroundStyle(muted)
                 .fixedSize(horizontal: true, vertical: false)
-            Text(value).font(.system(size: 27, weight: .bold, design: .rounded)).monospacedDigit()
+            Text(value).font(.system(size: 27)).monospacedDigit()
                 .lineLimit(1).minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).padding(.vertical, 10)
@@ -95,16 +95,16 @@ struct ActivityShareCard: View {
             if keys.isEmpty {
                 Text("暂无按键记录").font(.system(size: 19)).foregroundStyle(muted)
             } else {
+                Rectangle().fill(ink.opacity(0.07)).frame(height: 1)
                 HStack(spacing: 6) {
                     ForEach(keys) { key in
                         VStack(spacing: 4) {
-                            Text(shortName(key)).font(.system(size: 21, weight: .semibold)).lineLimit(1)
+                            Text(shortName(key)).font(.system(size: 21)).lineLimit(1)
                             Text("\(key.count.formatted()) 次")
                                 .font(.system(size: 19)).monospacedDigit().foregroundStyle(muted)
                                 .lineLimit(1).minimumScaleFactor(0.75)
                         }
-                        .frame(maxWidth: .infinity).padding(.vertical, 8)
-                        .background(blue.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+                        .frame(maxWidth: .infinity).padding(.vertical, 4)
                     }
                 }
             }
@@ -140,9 +140,9 @@ struct ActivityShareCard: View {
                     VStack(spacing: 5) {
                         HStack(alignment: .firstTextBaseline) {
                             Text(day.date, format: .dateTime.month(.twoDigits).day(.twoDigits))
-                                .font(.system(size: 19, weight: .semibold, design: .rounded))
+                                .font(.system(size: 19))
                             Spacer()
-                            Text(Formatters.duration(ms: day.activeMs)).font(.system(size: 19, weight: .semibold))
+                            Text(Formatters.duration(ms: day.activeMs)).font(.system(size: 19))
                             Text("· Fn \(Formatters.duration(ms: day.fnMs))")
                                 .font(.system(size: 17)).foregroundStyle(muted)
                         }
@@ -167,13 +167,16 @@ struct ActivityShareCard: View {
 
     private var applications: some View {
         VStack(alignment: .leading, spacing: 10) {
-            heading("常用应用", detail: "活跃时长前 6 名")
+            heading("常用应用", detail: "活跃时长前 6 名", weight: .light)
             if report.apps.isEmpty {
                 Text("暂无应用记录").font(.system(size: 19)).foregroundStyle(muted)
             } else {
                 // Eager stacks ensure all rows are present in the exported image.
                 VStack(spacing: 8) {
                     ForEach(0..<((report.apps.count + 1) / 2), id: \.self) { row in
+                        if row > 0 {
+                            Rectangle().fill(ink.opacity(0.07)).frame(height: 1)
+                        }
                         HStack(spacing: 8) {
                             appCell(report.apps[row * 2])
                             if row * 2 + 1 < report.apps.count { appCell(report.apps[row * 2 + 1]) }
@@ -195,20 +198,21 @@ struct ActivityShareCard: View {
             }
             .scaledToFit().frame(width: 38, height: 38)
             VStack(alignment: .leading, spacing: 3) {
-                Text(identity?.name ?? app.shortName).font(.system(size: 21, weight: .semibold)).lineLimit(1)
-                Text(Formatters.duration(ms: app.usageMs)).font(.system(size: 20, weight: .medium)).foregroundStyle(blue)
-                Text("\(app.keyCount.formatted()) 次按键").font(.system(size: 18)).foregroundStyle(muted)
+                Text(identity?.name ?? app.shortName).font(.system(size: 21, weight: .light)).lineLimit(1)
+                Text(Formatters.duration(ms: app.usageMs)).font(.system(size: 20, weight: .light))
+                Text("\(app.keyCount.formatted()) 次按键")
+                    .font(.system(size: 18, weight: .light)).foregroundStyle(muted)
             }
+            .foregroundStyle(Color(red: 0.30, green: 0.33, blue: 0.39))
             .monospacedDigit().lineLimit(1).minimumScaleFactor(0.85)
             Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading).padding(10)
-        .background(blue.opacity(0.04), in: RoundedRectangle(cornerRadius: 10))
+        .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 6)
     }
 
-    private func heading(_ title: String, detail: String) -> some View {
+    private func heading(_ title: String, detail: String, weight: Font.Weight = .regular) -> some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(title).font(.system(size: 23, weight: .bold))
+            Text(title).font(.system(size: 23, weight: weight))
             Spacer()
             Text(detail).font(.system(size: 17)).foregroundStyle(muted)
         }
