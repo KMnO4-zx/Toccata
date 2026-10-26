@@ -10,6 +10,7 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
     private let taskMenu = TaskMenuController()
     private let coreProcess = CoreProcessController()
     private let refresher = LiveRefresher()
+    private let aboutWindow = AboutWindowController()
     private var workbench: NSWindow?
     private var healthTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
@@ -24,7 +25,9 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
         didStart = true
         let launchedAtLogin = ApplicationLaunchContext.currentIsLoginItemLaunch
         NSApp.setActivationPolicy(launchedAtLogin ? .accessory : .regular)
-        taskMenu.configure(store: taskStore, loginItems: loginItems, appearance: appearance) { [weak self] in
+        taskMenu.configure(store: taskStore, loginItems: loginItems, appearance: appearance, openAbout: { [weak self] in
+            self?.openAbout()
+        }) { [weak self] in
             self?.openWorkbench()
         }
         refresher.start()
@@ -51,11 +54,16 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
         loginItems.refresh()
     }
 
+    func openAbout() {
+        taskMenu.dismiss()
+        aboutWindow.show()
+    }
+
     func openWorkbench() {
         guard !isQuitting else { return }
         NSApp.setActivationPolicy(.regular)
         if workbench == nil {
-            let content = ContentView()
+            let content = ContentView(openAbout: { [weak self] in self?.openAbout() })
                 .environmentObject(refresher)
                 .environmentObject(taskStore)
                 .environmentObject(appearance)
@@ -172,6 +180,7 @@ private final class WorkbenchWindow: NSWindow {
 struct ApplicationSettingsView: View {
     @ObservedObject var loginItems: LoginItemController
     @ObservedObject var appearance: AppearanceSettings
+    var openAbout: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -201,6 +210,19 @@ struct ApplicationSettingsView: View {
             Divider()
             Text("关闭工作台后，Toccata 会继续留在菜单栏。登录启动时只显示菜单栏图标；选择“退出 Toccata”可停止运行。")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Button(action: openAbout) {
+                HStack {
+                    Text("Toccata · \(AppVersion.current.displayVersion)")
+                    Spacer()
+                    Text("关于与更新")
+                    Image(systemName: "chevron.right")
+                }
+                .font(.caption).foregroundStyle(.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 4)
+            .help("关于 Toccata 与检查更新")
         }
         .padding(24)
         .frame(width: 420)

@@ -8,9 +8,13 @@ struct ToccataStudioApp: App {
 
     var body: some Scene {
         Settings {
-            ApplicationSettingsView(loginItems: application.loginItems, appearance: application.appearance)
+            ApplicationSettingsView(loginItems: application.loginItems, appearance: application.appearance,
+                                    openAbout: application.openAbout)
         }
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("关于 Toccata") { application.openAbout() }
+            }
             CommandGroup(replacing: .newItem) {
                 Button("打开工作台") {
                     application.openWorkbench()
@@ -52,9 +56,11 @@ struct ContentView: View {
     @State private var isOpeningTasks = false
     @State private var homeNavigationFailed = false
     @Binding var requestedSection: String?
+    private let openAbout: () -> Void
 
-    init(requestedSection: Binding<String?> = .constant(nil)) {
+    init(requestedSection: Binding<String?> = .constant(nil), openAbout: @escaping () -> Void) {
         _requestedSection = requestedSection
+        self.openAbout = openAbout
     }
 
     private var section: WorkspaceSection { selection ?? .tasks }
@@ -101,7 +107,7 @@ struct ContentView: View {
                 }
                 .listStyle(.sidebar)
 
-                SidebarFooterView()
+                SidebarFooterView(openAbout: openAbout)
             }
             .navigationSplitViewColumnWidth(min: 190, ideal: 205, max: 240)
         } detail: {

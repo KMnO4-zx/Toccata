@@ -3,14 +3,17 @@
 - [protocol.md](protocol.md)：后台服务与 Studio 的 IPC、SQLite 表结构、任务语义和统计口径。
 - `layout/magic-keyboard-ansi.json`：妙控键盘布局，定义“键盘活跃”页热力图的键码、标签与几何位置。
 - `branding/`：项目 Logo PNG；运行 `swift scripts/generate-branding.swift` 可重新生成这些图像和 Studio 打包用的 `AppIcon.icns`。
+- `app-version.json`：应用版本与构建号的源文件，供打包脚本和 Studio 的关于、设置界面使用。
 
-修改键盘布局后，在项目根目录运行：
+修改键盘布局或版本信息后，在项目根目录运行：
 
 ```bash
 ./scripts/sync-assets.sh
 ```
 
 脚本将布局同步到 `apps/toccata-studio/Resources/Layout/`。随后重新构建 Studio；应用打包脚本也会执行同步。Studio 从应用资源包读取布局，没有数据目录中的运行时覆盖机制。`shared/layout/` 是布局的源文件目录，应用中的副本供 SwiftPM 打包使用。
+
+版本信息同步到 `apps/toccata-studio/Resources/app-version.json`，请修改这里的源文件，不直接修改资源副本。打包时同一份版本信息写入 App 的 `Info.plist`；Rust 包版本也必须一致，检查脚本会阻止不一致的构建。
 
 ## 布局 JSON
 

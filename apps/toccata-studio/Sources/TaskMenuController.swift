@@ -14,6 +14,7 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var loginItems: LoginItemController?
     private var appearance: AppearanceSettings?
     private var openWorkbenchAction: (() -> Void)?
+    private var openAboutAction: (() -> Void)?
     private var clickMonitor: Any?
     private var globalClickMonitor: Any?
     private var observers: [NSObjectProtocol] = []
@@ -23,7 +24,9 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var editorRevealGeneration = UUID()
 
     func configure(store: TaskStore, loginItems: LoginItemController, appearance: AppearanceSettings,
+                   openAbout: @escaping () -> Void,
                    openWorkbench: @escaping () -> Void) {
+        openAboutAction = openAbout
         openWorkbenchAction = openWorkbench
         guard statusItem == nil else { return }
         self.store = store
@@ -311,6 +314,7 @@ final class TaskMenuController: NSObject, ObservableObject {
         shortcutsItem.submenu = shortcutsMenu
         menu.addItem(shortcutsItem)
         menu.addItem(.separator())
+        menu.addItem(settingsItem("关于 Toccata", action: #selector(openAboutFromSettings)))
         menu.addItem(settingsItem("退出 Toccata", action: #selector(quitFromSettings)))
         NSMenu.popUpContextMenu(menu, with: event, for: button)
     }
@@ -322,6 +326,7 @@ final class TaskMenuController: NSObject, ObservableObject {
     }
 
     @objc private func openWorkbenchFromSettings() { presentation.openWorkbench() }
+    @objc private func openAboutFromSettings() { openAboutAction?() }
 
     @objc private func selectAppearance(_ item: NSMenuItem) {
         guard let value = item.representedObject as? String, let mode = AppearanceMode(rawValue: value) else { return }

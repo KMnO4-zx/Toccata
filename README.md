@@ -6,6 +6,18 @@
 
 名字取自「触键曲」（toccata，词根 toccare = 触碰）。
 
+当前版本：**v0.0.1**，用于正式开源前的开发与体验；正式开源首版计划使用 **v0.1.0**。安装包适用于 Apple Silicon Mac，macOS 13 或更新版本。
+
+## 版本与更新
+
+主界面左侧栏底部提供“关于 Toccata”入口，右侧显示当前版本，点击即可查看版本信息与检查更新。也可以从 macOS 顶部应用菜单、状态栏图标的右键菜单或设置页底部进入。关于窗口显示版本、构建号，并支持复制版本信息，方便反馈问题。
+
+“检查更新”由用户手动触发，读取本仓库公开的 [GitHub Releases](https://github.com/KMnO4-zx/Toccata/releases) 最新正式版本，按主版本、次版本、修订版本的数字比较，不推荐降级，也不推荐草稿或预发布版本。发现新版后可打开对应发布页面，查看更新说明并自行下载、安装；应用不会自动下载安装。
+
+版本查询使用 GitHub 的 [Latest Release API](https://docs.github.com/en/rest/releases/releases#get-the-latest-release)。
+
+检查时只向 GitHub 请求版本信息，不上传任务或键盘记录，也不使用 GitHub 登录凭据。仓库仍为私有、尚无正式发布、网络失败或请求受限时会显示具体提示，不能检查时不会显示“已是最新版”。仓库公开并发布正式版本后，无需重新配置应用即可检查。
+
 ## 任务怎么用
 
 - **想到就记**：在任务列表或菜单栏快速添加任务。新任务默认没有计划日期，也不会自动成为“今天必须完成”的任务；创建时间单独记录，计划日期可按需要设置。
@@ -95,9 +107,25 @@ cargo build --release --locked
 
 产物为 `dist/Toccata-<version>-<arch>.dmg`，版本取自 App 的 `CFBundleShortVersionString`，架构根据工作台与内嵌服务的实际二进制判定（`arm64`、`x86_64` 或 `universal`）。脚本会检查两者的签名和架构一致性，使用 `hdiutil` 生成 UDZO 格式并验证映像，输出 SHA-256 及同名 `.sha256` 文件；重复运行会在新包验证成功后替换同版本、同架构的旧产物。
 
+应用版本与构建号统一维护在 `shared/app-version.json`，当前为 `0.0.1` / 构建 `5`。资源同步脚本将它复制到 SwiftPM 资源中，App 打包时写入 `Info.plist`，侧栏、关于窗口、设置页和 DMG 文件名均使用该版本。Rust 包版本必须与应用版本一致，否则构建会停止；升级时同时更新 `core/toccata-core/Cargo.toml` 与 `Cargo.lock`。构建号独立递增，不参与公开版本更新比较。
+
 DMG 包含 `Toccata.app`、指向“应用程序”的快捷方式和安装说明。打开 DMG 后，由用户将 App 拖入“应用程序”，推出磁盘映像，再从安装位置启动；建议完成安装后再开启“登录时启动”。打包脚本只生成文件，不会安装、启动 App，也不会更改登录项或系统权限。
 
 默认 ad-hoc 包用于本机开发与验证，脚本没有执行 Apple 公证。`TOCCATA_SIGN_IDENTITY` 仅选择代码签名身份；正式对外分发还需配置 Developer ID 签名与 Hardened Runtime，并完成 Apple 公证和票据装订。生成 DMG 本身不代表已经满足这些分发要求。
+
+### 手动发布到 GitHub Releases
+
+工作流位于 `.github/workflows/release.yml`，**仅支持手动触发**，推送提交或标签不会自动发布。工作流文件合并并推送到默认分支后，在 GitHub 的 **Actions → Release Toccata → Run workflow** 中执行：
+
+1. 选择 `main`，填写与版本文件一致的标签，如 `v0.0.1`；其他分支不会执行发布构建。
+2. `mode` 默认是 `draft`：测试、构建并验证 DMG，然后创建带安装包和 SHA-256 文件的 Release 草稿。检查草稿后，由用户在 GitHub 点击发布。
+3. 仅在明确准备发布时选择 `publish`：先创建草稿并上传附件，全部成功后发布为正式版本，标记为 Latest。
+
+工作流在 macOS ARM runner 上构建 Apple Silicon 安装包，运行 Rust 测试及不依赖 WebKit 桌面的 Swift 测试，随后验证签名、架构、磁盘映像和 SHA-256。它按触发时的确切提交构建，发布说明来自 `docs/releases/<tag>.md`；构建任务只有读取权限，发布任务单独使用仓库提供的 `GITHUB_TOKEN` 写入 Releases，不需要在应用内嵌任何令牌。
+
+已有同名 Release 或标签时工作流停止，不覆盖现有附件或移动标签。上传失败可能留下草稿，应先在 GitHub 检查，再决定删除草稿重试或手动处理。正常的草稿审核后发布直接在 GitHub 操作，无需以相同标签重跑工作流。安装包仍采用上述 ad-hoc 签名，工作流不包含 Apple 公证。
+
+版本升级时更新版本文件、Rust 版本与锁文件、同步资源、README 当前版本和对应发布说明，再提交审核。本地打包不会创建标签、发布 Release 或修改仓库可见性。
 
 也可直接通过 SwiftPM 构建界面：
 
@@ -167,6 +195,7 @@ SQLite 使用 WAL 模式。已有 `toccata.db` 和历史记录继续保留；任
 ## 验证
 
 ```bash
+python3 scripts/tests/test_release.py
 cargo test --locked --offline
 cd apps/toccata-studio
 swift test

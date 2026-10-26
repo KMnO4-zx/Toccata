@@ -1,0 +1,92 @@
+name: Release Toccata
+run-name: ${{ inputs.version }} · ${{ inputs.mode }} · by @${{ github.actor }}
+
+# Publishing requires an explicit manual run. Pushes and tags never release an app.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, matching shared/app-version.json (for example v0.0.1)'
+        required: true
+        type: string
+      mode:
+        description: 'Create a draft for review, or explicitly publish after packaging'
+        required: true
+        type: choice
+        default: draft
+        options:
+          - draft
+          - publish
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # Keep release builds on the reviewed main branch.
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ inputs.version }}
+        run: |
+          source scripts/version.sh
+          test "$RELEASE_TAG" = "v$TOCCATA_VERSION"
+          test -s "docs/releases/$RELEASE_TAG.md"
+          test "$(uname -m)" = arm64
+      - name: Prepare toolchains and resources
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          swift --version
+          ./scripts/sync-assets.sh
+          git diff --exit-code -- apps/toccata-studio/Resources/app-version.json
+      - name: Test core and Studio logic
+        run: |
+          python3 scripts/tests/test_release.py
+          cargo test --locked
+          # WebKit integration tests require a local interactive desktop.
+          swift test --package-path apps/toccata-studio --skip MarkdownWebEditorTests
+      - name: Build and verify DMG
+        run: ./scripts/package-dmg.sh
+      - name: Upload verified package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: toccata-dmg
+          path: |
+            dist/Toccata-*.dmg
+            dist/Toccata-*.dmg.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: toccata-dmg
+          path: dist
+      - name: Verify and create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.version }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: bash scripts/create-github-release.sh

@@ -1,11 +1,14 @@
 import SwiftUI
 
 struct SidebarFooterView: View {
+    var openAbout: () -> Void
     @EnvironmentObject private var appearance: AppearanceSettings
     @State private var showsAppearancePicker = false
+    @State private var isAboutHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
+            aboutButton
             appearanceButton
                 .padding(.bottom, 7)
             CaptureStatusView()
@@ -19,6 +22,37 @@ struct SidebarFooterView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
+    }
+
+    private var aboutButton: some View {
+        Button {
+            showsAppearancePicker = false
+            openAbout()
+        } label: {
+            HStack(spacing: 0) {
+                Label("关于 Toccata", systemImage: "info.circle")
+                    .labelStyle(SidebarFooterLabelStyle())
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 4)
+                Text(AppVersion.current.displayVersion)
+                    .font(.system(size: 11))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            .font(.system(size: 12))
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(Color.primary.opacity(isAboutHovered ? 0.055 : 0),
+                        in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .onHover { isAboutHovered = $0 }
+        .accessibilityIdentifier("sidebar-about-toccata")
+        .accessibilityLabel("关于 Toccata")
+        .accessibilityValue(AppVersion.current.displayVersion)
+        .help("查看版本信息与检查更新")
     }
 
     private var appearanceButton: some View {
