@@ -25,23 +25,55 @@ final class ActivityTests: XCTestCase {
             liveEvents: liveEvents, liveConnected: connected)
     }
 
-    func testContinuousInputIncludesGapsAndTrailingGrace() {
+    func testSeparatedPressesDoNotBridgeUncoveredPauses() {
         let result = snapshot([
             event(0, kind: 0), event(100, kind: 1, hold: 100),
             event(20_000, kind: 0), event(20_100, kind: 1, hold: 100)
         ])
-        XCTAssertEqual(result.activeMs, 25_100)
+        XCTAssertEqual(result.activeMs, 10_000)
         XCTAssertEqual(result.keyCount, 2)
         XCTAssertEqual(result.days.reduce(0) { $0 + $1.activeMs }, result.activeMs)
         XCTAssertEqual(result.days.flatMap(\.buckets).reduce(0) { $0 + $1.activeMs }, result.activeMs)
     }
 
-    func testExactIdleThresholdStartsNewInterval() {
+    func testOverlappingWindowsMergeWithoutCountingReleaseAsAnotherWindow() {
         let result = snapshot([
             event(0, kind: 0), event(100, kind: 1, hold: 100),
-            event(60_100, kind: 0), event(60_200, kind: 1, hold: 100)
+            event(3_000, kind: 0), event(3_100, kind: 1, hold: 100)
         ])
-        XCTAssertEqual(result.activeMs, 10_200)
+        XCTAssertEqual(result.activeMs, 8_000)
+        XCTAssertEqual(result.keyCount, 2)
+    }
+
+    func testFortySecondPauseCountsOnlyTwoFiveSecondWindows() {
+        let result = snapshot([
+            event(0, kind: 0), event(100, kind: 1, hold: 100),
+            event(40_000, kind: 0), event(40_100, kind: 1, hold: 100)
+        ])
+        XCTAssertEqual(result.activeMs, 10_000)
+    }
+
+    func testContinuousTypingForTwentySecondsCoversTwentyFiveSeconds() {
+        let events = stride(from: Int64(0), through: 20_000, by: 1_000).flatMap {
+            [event($0, kind: 0), event($0 + 100, kind: 1, hold: 100)]
+        }
+        XCTAssertEqual(snapshot(events).activeMs, 25_000)
+    }
+
+    func testTouchingWindowsMergeAndLongerGapsStayEmpty() {
+        let result = snapshot([
+            event(0, kind: 0), event(100, kind: 1, hold: 100),
+            event(5_000, kind: 0), event(5_100, kind: 1, hold: 100),
+            event(11_000, kind: 0), event(11_100, kind: 1, hold: 100)
+        ])
+        XCTAssertEqual(result.activeMs, 15_000)
+    }
+
+    func testReleaseOnlyContributesItsActualHoldWithoutExtraWindow() {
+        let orphanRelease = snapshot([event(10_000, kind: 1)])
+        XCTAssertEqual(orphanRelease.activeMs, 0)
+        let hold = snapshot([event(10_000, kind: 1, hold: 8_000)])
+        XCTAssertEqual(hold.activeMs, 8_000)
     }
 
     func testConcurrentHoldsAreUnionedAndLongFnHoldSurvivesIdleGaps() {
@@ -50,7 +82,7 @@ final class ActivityTests: XCTestCase {
             event(110_000, key: 12, kind: 1, hold: 109_000),
             event(120_000, key: 63, kind: 1, hold: 120_000)
         ])
-        XCTAssertEqual(result.activeMs, 125_000)
+        XCTAssertEqual(result.activeMs, 120_000)
         XCTAssertEqual(result.fnMs, 120_000)
         XCTAssertEqual(result.keyCount, 2)
     }
@@ -61,7 +93,7 @@ final class ActivityTests: XCTestCase {
             event(120_000, key: 63, kind: 1, hold: 180_000)
         ])
         XCTAssertEqual(result.fnMs, 120_000)
-        XCTAssertEqual(result.activeMs, 125_000)
+        XCTAssertEqual(result.activeMs, 120_000)
         XCTAssertEqual(result.keyCount, 0)
         XCTAssertEqual(result.days[0].buckets[0].fnMs, 120_000)
         XCTAssertEqual(result.days[0].buckets.reduce(0) { $0 + $1.fnMs }, result.fnMs)
@@ -126,7 +158,7 @@ final class ActivityTests: XCTestCase {
         let result = snapshot([down, up], liveEvents: [down, event(20_000, key: 63, kind: 1)], connected: true)
         XCTAssertEqual(result.keyCount, 1)
         XCTAssertEqual(result.fnMs, 10_000)
-        XCTAssertEqual(result.activeMs, 15_000)
+        XCTAssertEqual(result.activeMs, 10_000)
     }
 
     func testPerKeyCountsMergeLiveAndPersistedDownsWithinToday() {
@@ -163,7 +195,7 @@ final class ActivityTests: XCTestCase {
         let down = event(0, key: 63, kind: 0)
         let result = snapshot([], liveEvents: [down, event(120_000, key: 63, kind: 1)], connected: true)
         XCTAssertEqual(result.fnMs, 120_000)
-        XCTAssertEqual(result.activeMs, 125_000)
+        XCTAssertEqual(result.activeMs, 120_000)
     }
 
     func testOldOrphanDownNeverPairsAcrossDaemonConnections() {
@@ -171,7 +203,7 @@ final class ActivityTests: XCTestCase {
         let orphanUp = event(120_000, key: 63, kind: 1)
         let result = snapshot([oldDown], liveEvents: [orphanUp], connected: true)
         XCTAssertEqual(result.fnMs, 0)
-        XCTAssertEqual(result.activeMs, 10_000)
+        XCTAssertEqual(result.activeMs, 5_000)
     }
 
     func testDuplicateFnDownPreservesFirstPress() {
@@ -182,9 +214,19 @@ final class ActivityTests: XCTestCase {
         XCTAssertEqual(result.activeMs, 130_000)
     }
 
-    func testTrailingGraceNeverCountsFutureTime() {
+    func testWindowNeverCountsFutureTime() {
         let result = snapshot([event(10_000, kind: 0)], nowOffset: 11_000)
         XCTAssertEqual(result.activeMs, 1_000)
+    }
+
+    func testShortWindowsAreSplitAtMidnightAndQuarterHourBoundaries() {
+        let result = snapshot([
+            event(-3_000, kind: 0), event(-2_900, kind: 1, hold: 100),
+            event(899_000, kind: 0), event(899_100, kind: 1, hold: 100)
+        ], nowOffset: 1_000_000)
+        XCTAssertEqual(result.activeMs, 7_000)
+        XCTAssertEqual(result.keyCount, 1)
+        XCTAssertEqual(Array(result.days[0].buckets.prefix(2).map(\.activeMs)), [3_000, 4_000])
     }
 
     func testWeekStartsMondayAndRecentSevenDaysIsRolling() {
@@ -342,7 +384,7 @@ final class ActivityTests: XCTestCase {
         XCTAssertNil(result.errorMessage)
         XCTAssertEqual(result.fnMs, 30_000)
         XCTAssertEqual(result.keyCount, 1)
-        XCTAssertEqual(result.activeMs, 40_100, "The cross-day hold and two separate input intervals should be clipped and unioned")
+        XCTAssertEqual(result.activeMs, 35_000, "The cross-day hold and separate key-down window should be clipped and unioned")
     }
 
     func testRepositoryKeepsReleaseAfterHistoricalRangeToRecoverCrossBoundaryHold() throws {
@@ -390,9 +432,17 @@ final class ActivityTests: XCTestCase {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let url = folder.appendingPathComponent("config.json")
-        try Data(#"{"idle_gap_secs":30,"trailing_grace_secs":2}"#.utf8).write(to: url)
-        XCTAssertEqual(ActivityPolicy.load(configURL: url), ActivityPolicy(idleGapMs: 30_000, trailingGraceMs: 2_000))
-        try Data(#"{"idle_gap_secs":true,"trailing_grace_secs":-2}"#.utf8).write(to: url)
-        XCTAssertEqual(ActivityPolicy.load(configURL: url), ActivityPolicy())
+        try Data(#"{"activity_window_secs":3,"idle_gap_secs":60,"trailing_grace_secs":7}"#.utf8).write(to: url)
+        let policy = ActivityPolicy.load(configURL: url)
+        XCTAssertEqual(policy, ActivityPolicy(activityWindowMs: 3_000))
+        let result = ActivityCalculator.snapshot(events: [event(0, kind: 0), event(2_000, kind: 0)],
+            range: .today, now: date().addingTimeInterval(60), calendar: calendar, policy: policy)
+        XCTAssertEqual(result.activeMs, 5_000)
+        for value in ["true", "-2", "2.5", "null", "\"5\"", "1e30", "9223372036854776"] {
+            try Data("{\"activity_window_secs\":\(value)}".utf8).write(to: url)
+            XCTAssertEqual(ActivityPolicy.load(configURL: url), ActivityPolicy())
+        }
+        try Data(#"{"idle_gap_secs":60,"trailing_grace_secs":7}"#.utf8).write(to: url)
+        XCTAssertEqual(ActivityPolicy.load(configURL: url), ActivityPolicy(), "Legacy archive settings cannot restore sixty-second bridging")
     }
 }

@@ -83,9 +83,11 @@ struct AppRank: Identifiable {
 /// 聚合查询层：所有 SQL 现算，数据量小无需缓存。DB 缺失/查询失败一律回退为空数据。
 final class StatsRepository {
     private let url: URL
+    private let policy: ActivityPolicy
 
-    init(url: URL = Database.defaultURL) {
+    init(url: URL = Database.defaultURL, policy: ActivityPolicy = .load()) {
         self.url = url
+        self.policy = policy
     }
 
     private func withDatabase<T>(_ fallback: T, _ work: (Database) throws -> T) -> T {
@@ -115,10 +117,7 @@ final class StatsRepository {
                 "SELECT COALESCE(SUM(hold_ms),0) FROM key_events WHERE kind=1 AND ts_ms>=? AND ts_ms<?",
                 params: [start, end]
             ) { columnInt64($0, 0) }.first ?? 0
-            summary.sessionMs = try db.query(
-                "SELECT COALESCE(SUM(end_ms-start_ms),0) FROM app_sessions WHERE start_ms>=? AND start_ms<?",
-                params: [start, end]
-            ) { columnInt64($0, 0) }.first ?? 0
+            summary.sessionMs = ActivityRepository(url: url, policy: policy).snapshot(range: .today).activeMs
             return summary
         }
     }
@@ -179,27 +178,50 @@ final class StatsRepository {
 
     func topApps(range: TimeRange, limit: Int = 20, now: Date = Date(), calendar: Calendar = .current) -> [AppRank] {
         let interval = range.interval(now: now, calendar: calendar)
-        let rangeStart = Int64(interval.start.timeIntervalSince1970 * 1000)
-        let rangeEnd = Int64(interval.end.timeIntervalSince1970 * 1000)
+        let nowMs = ActivityCalculator.milliseconds(now)
+        let window = ActivitySpan(startMs: ActivityCalculator.milliseconds(interval.start),
+                                  endMs: min(ActivityCalculator.milliseconds(interval.end), nowMs))
+        guard window.endMs > window.startMs, limit > 0 else { return [] }
         return withDatabase([]) { db in
-            // Session counts can span midnight. Count dated key-down events
-            // separately so clipping usage never imports an adjacent day's keys.
-            try db.query(
+            // Reconstruct historical and current rankings from raw events using
+            // the same policy as the keyboard overview, without waiting for an
+            // app_sessions segment to settle. Later releases can carry a hold
+            // that crosses the selected end, so include those through now.
+            // Union in SQLite so a month of raw events does not have to be
+            // materialized as Swift objects on each refresh. The running MAX
+            // handles nested holds as well as ordinary overlapping windows.
+            return try db.query(
                 """
-                WITH app_usage AS (
-                    SELECT app, SUM(MIN(end_ms, ?)-MAX(start_ms, ?)) usage_ms
-                    FROM app_sessions WHERE start_ms<? AND end_ms>?
-                    GROUP BY app
+                WITH selected_events AS (
+                    SELECT DISTINCT app, ts_ms, keycode, kind, hold_ms FROM key_events
+                    WHERE app IS NOT NULL AND ts_ms>=?3 AND ts_ms<=?4
+                        AND (ts_ms<?2 OR (kind=1 AND hold_ms>0 AND ts_ms-hold_ms<?2))
+                ), event_spans AS (
+                    SELECT app,
+                        MAX(?1, CASE WHEN kind=0 THEN ts_ms ELSE ts_ms-hold_ms END) start_ms,
+                        MIN(?2, CASE WHEN kind=0 THEN ts_ms+?5 ELSE ts_ms END) end_ms
+                    FROM selected_events WHERE kind=0 OR (kind=1 AND hold_ms>0)
+                ), covered_spans AS (
+                    SELECT app, start_ms, end_ms,
+                        MAX(end_ms) OVER (PARTITION BY app ORDER BY start_ms, end_ms
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) previous_end
+                    FROM event_spans WHERE end_ms>start_ms
+                ), app_usage AS (
+                    SELECT app, SUM(MAX(0, end_ms-MAX(start_ms, COALESCE(previous_end, start_ms)))) usage_ms
+                    FROM covered_spans GROUP BY app
                 ), app_keys AS (
-                    SELECT app, COUNT(*) key_count FROM key_events
-                    WHERE kind=0 AND ts_ms>=? AND ts_ms<? AND app IS NOT NULL
-                    GROUP BY app
+                    SELECT app, COUNT(*) key_count FROM selected_events
+                    WHERE kind=0 AND ts_ms>=?1 AND ts_ms<?2 GROUP BY app
+                ), apps AS (
+                    SELECT app FROM app_usage UNION SELECT app FROM app_keys
                 )
-                SELECT app_usage.app, app_usage.usage_ms, COALESCE(app_keys.key_count, 0)
-                FROM app_usage LEFT JOIN app_keys ON app_keys.app=app_usage.app
-                ORDER BY app_usage.usage_ms DESC, app_usage.app ASC LIMIT ?
+                SELECT apps.app, COALESCE(app_usage.usage_ms, 0), COALESCE(app_keys.key_count, 0)
+                FROM apps LEFT JOIN app_usage ON app_usage.app=apps.app
+                    LEFT JOIN app_keys ON app_keys.app=apps.app
+                ORDER BY COALESCE(app_usage.usage_ms, 0) DESC, apps.app ASC LIMIT ?6
                 """,
-                params: [rangeEnd, rangeStart, rangeEnd, rangeStart, rangeStart, rangeEnd, Int64(limit)]
+                params: [window.startMs, window.endMs, window.startMs - policy.activityWindowMs,
+                         nowMs, policy.activityWindowMs, Int64(limit)]
             ) { AppRank(app: columnText($0, 0), usageMs: columnInt64($0, 1), keyCount: columnInt64($0, 2)) }
         }
     }

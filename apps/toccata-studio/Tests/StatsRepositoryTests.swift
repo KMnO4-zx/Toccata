@@ -119,9 +119,9 @@ final class StatsRepositoryTests: XCTestCase {
         XCTAssertEqual(ranks.map(\.count), [2] + Array(repeating: 1, count: 25))
     }
 
-    func testTopAppsClipsSessionsToRangeAndExcludesFutureSessions() throws {
-        let now = date(25, hour: 12)
-        let interval = TimeRange.today.interval(now: now, calendar: calendar)
+    func testTopAppsReconstructsCrossBoundaryHoldsAndIgnoresLegacySessions() throws {
+        let now = date(26, hour: 12)
+        let interval = TimeRange.yesterday.interval(now: now, calendar: calendar)
         let rangeStart = milliseconds(interval.start)
         let rangeEnd = milliseconds(interval.end)
         let repository = try makeRepository(seedSQL: """
@@ -130,44 +130,46 @@ final class StatsRepositoryTests: XCTestCase {
             INSERT INTO app_sessions VALUES('inside',\(rangeStart + 1_000),\(rangeStart + 2_000),3);
             INSERT INTO app_sessions VALUES('past',\(rangeStart - 10_000),\(rangeStart),100);
             INSERT INTO app_sessions VALUES('future',\(rangeEnd),\(rangeEnd + 10_000),100);
-            INSERT INTO key_events VALUES(\(rangeStart - 1),0,0,NULL,'cross.start');
-            INSERT INTO key_events VALUES(\(rangeStart),0,0,NULL,'cross.start');
-            INSERT INTO key_events VALUES(\(rangeEnd - 1),0,0,NULL,'cross.end');
-            INSERT INTO key_events VALUES(\(rangeEnd),0,0,NULL,'cross.end');
-            INSERT INTO key_events VALUES(\(rangeStart + 1_000),0,0,NULL,'inside');
-            INSERT INTO key_events VALUES(\(rangeStart + 1_500),0,0,NULL,'inside');
+            INSERT INTO key_events VALUES(\(rangeStart - 10_000),0,0,NULL,'cross.start');
+            INSERT INTO key_events VALUES(\(rangeStart + 5_000),0,1,15000,'cross.start');
+            INSERT INTO key_events VALUES(\(rangeEnd - 3_000),0,0,NULL,'cross.end');
+            INSERT INTO key_events VALUES(\(rangeEnd + 7_000),0,1,10000,'cross.end');
+            INSERT INTO key_events VALUES(\(rangeStart + 10_000),0,0,NULL,'inside');
+            INSERT INTO key_events VALUES(\(rangeStart + 10_100),0,1,100,'inside');
+            INSERT INTO key_events VALUES(\(rangeStart),0,1,10000,'past');
+            INSERT INTO key_events VALUES(\(rangeEnd),0,0,NULL,'future');
             """)
 
-        let ranks = repository.topApps(range: .today, now: now, calendar: calendar)
+        let ranks = repository.topApps(range: .yesterday, now: now, calendar: calendar)
 
-        XCTAssertEqual(ranks.map(\.app), ["cross.start", "cross.end", "inside"])
-        XCTAssertEqual(ranks.map(\.usageMs), [5_000, 3_000, 1_000])
-        XCTAssertEqual(ranks.map(\.keyCount), [1, 1, 2])
+        XCTAssertEqual(ranks.map(\.app), ["cross.start", "inside", "cross.end"])
+        XCTAssertEqual(ranks.map(\.usageMs), [5_000, 5_000, 3_000])
+        XCTAssertEqual(ranks.map(\.keyCount), [0, 1, 1])
     }
 
-    func testTopAppsCountsOnlyMatchingDownEventsWithoutMultiplyingAcrossSessions() throws {
+    func testTopAppsMergesWindowsAndHoldsPerAppWithoutBridgingPauses() throws {
         let now = date(25, hour: 12)
         let interval = TimeRange.today.interval(now: now, calendar: calendar)
         let start = milliseconds(interval.start)
-        let end = milliseconds(interval.end)
         let repository = try makeRepository(seedSQL: """
-            INSERT INTO app_sessions VALUES('multiple.sessions',\(start - 1_000),\(start + 2_000),50);
-            INSERT INTO app_sessions VALUES('multiple.sessions',\(end - 3_000),\(end + 1_000),50);
+            INSERT INTO app_sessions VALUES('multiple.sessions',\(start),\(start + 45_100),50);
             INSERT INTO app_sessions VALUES('no.events',\(start + 2_000),\(start + 3_000),25);
-            INSERT INTO key_events VALUES(\(start - 1),0,0,NULL,'multiple.sessions');
             INSERT INTO key_events VALUES(\(start),0,0,NULL,'multiple.sessions');
             INSERT INTO key_events VALUES(\(start + 500),0,1,500,'multiple.sessions');
-            INSERT INTO key_events VALUES(\(end - 1),0,0,NULL,'multiple.sessions');
-            INSERT INTO key_events VALUES(\(end),0,0,NULL,'multiple.sessions');
+            INSERT INTO key_events VALUES(\(start + 3_000),0,0,NULL,'multiple.sessions');
+            INSERT INTO key_events VALUES(\(start + 3_100),0,1,100,'multiple.sessions');
+            INSERT INTO key_events VALUES(\(start + 40_000),0,0,NULL,'multiple.sessions');
+            INSERT INTO key_events VALUES(\(start + 40_100),0,1,100,'multiple.sessions');
             INSERT INTO key_events VALUES(\(start + 1_000),0,0,NULL,NULL);
             INSERT INTO key_events VALUES(\(start + 1_000),0,0,NULL,'unrelated.app');
+            INSERT INTO key_events VALUES(\(start + 70_000),0,1,NULL,'orphan.up');
             """)
 
         let ranks = repository.topApps(range: .today, now: now, calendar: calendar)
 
-        XCTAssertEqual(ranks.map(\.app), ["multiple.sessions", "no.events"])
-        XCTAssertEqual(ranks.map(\.usageMs), [5_000, 1_000])
-        XCTAssertEqual(ranks.map(\.keyCount), [2, 0])
+        XCTAssertEqual(ranks.map(\.app), ["multiple.sessions", "unrelated.app"])
+        XCTAssertEqual(ranks.map(\.usageMs), [13_000, 5_000])
+        XCTAssertEqual(ranks.map(\.keyCount), [3, 1])
     }
 
     func testTopAppsYesterdayAndSelectedDayUseLocalBounds() throws {
@@ -188,16 +190,20 @@ final class StatsRepositoryTests: XCTestCase {
             INSERT INTO key_events VALUES(\(start),0,0,NULL,'spans.day');
             INSERT INTO key_events VALUES(\(end - 1),0,0,NULL,'spans.day');
             INSERT INTO key_events VALUES(\(end),0,0,NULL,'spans.day');
-            INSERT INTO key_events VALUES(\(start + 100),0,0,NULL,'cross.start');
+            INSERT INTO key_events VALUES(\(end + 10_000),0,1,\(end - start + 20_000),'spans.day');
+            INSERT INTO key_events VALUES(\(start - 3_000),0,0,NULL,'cross.start');
             INSERT INTO key_events VALUES(\(end - 100),0,0,NULL,'cross.end');
+            INSERT INTO key_events VALUES(\(start + 10_000),0,0,NULL,'inside');
+            INSERT INTO key_events VALUES(\(start),0,1,5000,'ends.at.start');
+            INSERT INTO key_events VALUES(\(end),0,0,NULL,'starts.at.end');
             """)
 
         for range in [TimeRange.yesterday, .day(selected)] {
             let ranks = repository.topApps(range: range, now: now, calendar: local)
 
-            XCTAssertEqual(ranks.map(\.app), ["spans.day", "cross.start", "cross.end", "inside"])
-            XCTAssertEqual(ranks.map(\.usageMs), [end - start, 5_000, 3_000, 1_000])
-            XCTAssertEqual(ranks.map(\.keyCount), [2, 1, 1, 0])
+            XCTAssertEqual(ranks.map(\.app), ["spans.day", "inside", "cross.start", "cross.end"])
+            XCTAssertEqual(ranks.map(\.usageMs), [end - start, 5_000, 2_000, 100])
+            XCTAssertEqual(ranks.map(\.keyCount), [2, 1, 0, 1])
         }
     }
 
@@ -217,6 +223,7 @@ final class StatsRepositoryTests: XCTestCase {
                 INSERT INTO key_events VALUES(\(start),0,0,NULL,'spans.day');
                 INSERT INTO key_events VALUES(\(end - 1),0,0,NULL,'spans.day');
                 INSERT INTO key_events VALUES(\(end),0,0,NULL,'spans.day');
+                INSERT INTO key_events VALUES(\(end + 3_600_000),0,1,\(end - start + 7_200_000),'spans.day');
                 """)
 
             let ranks = repository.topApps(range: .day(selected), now: date(20, month: 12), calendar: local)
@@ -227,7 +234,71 @@ final class StatsRepositoryTests: XCTestCase {
         }
     }
 
-    private func makeRepository(seedSQL: String) throws -> StatsRepository {
+    func testTopAppsCapsWindowsAtNowAndIncludesUnsettledApp() throws {
+        let now = date(25, hour: 12)
+        let nowMs = milliseconds(now)
+        let repository = try makeRepository(seedSQL: """
+            INSERT INTO key_events VALUES(\(nowMs - 2_000),0,0,NULL,'current.app');
+            INSERT INTO key_events VALUES(\(nowMs - 1_900),0,1,100,'current.app');
+            INSERT INTO key_events VALUES(\(nowMs + 1_000),0,0,NULL,'future.app');
+            """)
+
+        let ranks = repository.topApps(range: .today, now: now, calendar: calendar)
+        XCTAssertEqual(ranks.map(\.app), ["current.app"])
+        XCTAssertEqual(ranks.map(\.usageMs), [2_000])
+        XCTAssertEqual(ranks.map(\.keyCount), [1])
+        XCTAssertTrue(repository.topApps(range: .today, limit: 0, now: now, calendar: calendar).isEmpty)
+    }
+
+    func testAppAndKeyboardUseSameConfigurableWindowAndHoldUnion() throws {
+        let now = date(25, hour: 12)
+        let start = milliseconds(date(25))
+        let policy = ActivityPolicy(activityWindowMs: 3_000)
+        let repository = try makeRepository(seedSQL: """
+            INSERT INTO key_events VALUES(\(start),0,0,NULL,'test.app');
+            INSERT INTO key_events VALUES(\(start + 2_000),1,0,NULL,'test.app');
+            INSERT INTO key_events VALUES(\(start + 8_000),1,1,6000,'test.app');
+            """, policy: policy)
+        let expected = ActivityCalculator.snapshot(events: [
+            ActivityKeyEvent(timestampMs: start, keycode: 0, kind: 0),
+            ActivityKeyEvent(timestampMs: start + 2_000, keycode: 1, kind: 0),
+            ActivityKeyEvent(timestampMs: start + 8_000, keycode: 1, kind: 1, holdMs: 6_000)
+        ], range: .today, now: now, calendar: calendar, policy: policy)
+
+        let rank = try XCTUnwrap(repository.topApps(range: .today, now: now, calendar: calendar).first)
+        XCTAssertEqual(rank.usageMs, expected.activeMs)
+        XCTAssertEqual(rank.usageMs, 8_000)
+        XCTAssertEqual(rank.keyCount, Int64(expected.keyCount))
+    }
+
+    func testSQLUnionMatchesKeyboardCalculationForNestedAndSeparatedHolds() throws {
+        let now = date(25, hour: 12)
+        let start = milliseconds(date(25))
+        var events: [ActivityKeyEvent] = []
+        for index in 0..<100 {
+            let down = start + Int64((index * 37) % 400) * 1_000 - 10_000
+            let hold = [Int64(100), 2_000, 9_000, 18_000][index % 4]
+            events.append(ActivityKeyEvent(timestampMs: down, keycode: index, kind: 0))
+            events.append(ActivityKeyEvent(timestampMs: down + hold, keycode: index, kind: 1, holdMs: hold))
+        }
+        // Include a hold spanning many nested windows and a later uncovered gap.
+        events.append(ActivityKeyEvent(timestampMs: start + 600_000, keycode: 100, kind: 1, holdMs: 300_000))
+        events.append(ActivityKeyEvent(timestampMs: start + 700_000, keycode: 101, kind: 0))
+        let sql = events.map {
+            "INSERT INTO key_events VALUES(\($0.timestampMs),\($0.keycode),\($0.kind),\($0.holdMs.map(String.init) ?? "NULL"),'test.app');"
+        }.joined(separator: "\n")
+        for seconds in [Int64(0), 3_000, 5_000, 9_000] {
+            let policy = ActivityPolicy(activityWindowMs: seconds)
+            let repository = try makeRepository(seedSQL: sql, policy: policy)
+            let expected = ActivityCalculator.snapshot(events: events, range: .today, now: now,
+                                                       calendar: calendar, policy: policy)
+            let rank = try XCTUnwrap(repository.topApps(range: .today, now: now, calendar: calendar).first)
+            XCTAssertEqual(rank.usageMs, expected.activeMs)
+            XCTAssertEqual(rank.keyCount, Int64(expected.keyCount))
+        }
+    }
+
+    private func makeRepository(seedSQL: String, policy: ActivityPolicy = ActivityPolicy()) throws -> StatsRepository {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("StatsRepositoryTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -249,6 +320,6 @@ final class StatsRepositoryTests: XCTestCase {
             throw NSError(domain: "StatsRepositoryTests", code: Int(result),
                           userInfo: [NSLocalizedDescriptionKey: String(cString: sqlite3_errmsg(database))])
         }
-        return StatsRepository(url: url)
+        return StatsRepository(url: url, policy: policy)
     }
 }

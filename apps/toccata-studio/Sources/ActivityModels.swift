@@ -54,8 +54,7 @@ enum ActivityRange: Hashable, CaseIterable, Identifiable {
 }
 
 struct ActivityPolicy: Equatable {
-    var idleGapMs: Int64 = 60_000
-    var trailingGraceMs: Int64 = 5_000
+    var activityWindowMs: Int64 = 5_000
 
     static func load(configURL: URL? = nil) -> ActivityPolicy {
         let url = configURL ?? AppPaths.supportDirectory.appendingPathComponent("config.json")
@@ -64,18 +63,16 @@ struct ActivityPolicy: Equatable {
             return ActivityPolicy()
         }
         var policy = ActivityPolicy()
-        // Match the daemon's unsigned integer configuration contract. A bad
-        // field leaves the default in place rather than changing the metric.
+        // A bad field leaves the default in place rather than changing the metric.
         func milliseconds(_ key: String, fallback: Int64) -> Int64 {
             guard let number = object[key] as? NSNumber,
                   CFGetTypeID(number) != CFBooleanGetTypeID() else { return fallback }
             let value = number.doubleValue
-            guard value.isFinite, value >= 0, value.rounded() == value,
-                  value <= Double(Int64.max / 1000) else { return fallback }
-            return Int64(value) * 1000
+            guard value.isFinite, value >= 0, let seconds = Int64(exactly: value) else { return fallback }
+            let (result, overflow) = seconds.multipliedReportingOverflow(by: 1000)
+            return overflow ? fallback : result
         }
-        policy.idleGapMs = milliseconds("idle_gap_secs", fallback: policy.idleGapMs)
-        policy.trailingGraceMs = milliseconds("trailing_grace_secs", fallback: policy.trailingGraceMs)
+        policy.activityWindowMs = milliseconds("activity_window_secs", fallback: policy.activityWindowMs)
         return policy
     }
 }
@@ -124,8 +121,22 @@ struct ActivitySnapshot {
 }
 
 /// Pure interval reconstruction. Completed holds and live holds are unioned
-/// with event sessions, so chords never add duplicate time.
+/// with short key-down windows, so chords never add duplicate time.
 enum ActivityCalculator {
+    /// Releases only contribute their actual hold; they never start another
+    /// activity window. App rankings apply the same policy inside SQLite.
+    static func activitySpan(for event: ActivityKeyEvent, policy: ActivityPolicy) -> ActivitySpan? {
+        if event.kind == 0 {
+            let (end, overflow) = event.timestampMs.addingReportingOverflow(max(0, policy.activityWindowMs))
+            return ActivitySpan(startMs: event.timestampMs, endMs: overflow ? Int64.max : end)
+        }
+        if event.kind == 1, let duration = event.holdMs, duration > 0 {
+            let (start, overflow) = event.timestampMs.subtractingReportingOverflow(duration)
+            return ActivitySpan(startMs: overflow ? Int64.min : start, endMs: event.timestampMs)
+        }
+        return nil
+    }
+
     static func merge(_ spans: [ActivitySpan]) -> [ActivitySpan] {
         let ordered = spans.filter { $0.durationMs > 0 }.sorted { $0.startMs < $1.startMs }
         var result: [ActivitySpan] = []
@@ -160,29 +171,12 @@ enum ActivityCalculator {
         let ordered = deduplicated(events + validLive).filter { $0.timestampMs <= nowMs }.sorted(by: eventOrder)
         var active: [ActivitySpan] = []
         var voice: [ActivitySpan] = []
-        var first: Int64?
-        var last: Int64?
-
-        func appendSession() {
-            guard let first, let last else { return }
-            active.append(ActivitySpan(startMs: first, endMs: min(nowMs, last + policy.trailingGraceMs)))
-        }
         for event in ordered {
-            if let previous = last, event.timestampMs - previous >= policy.idleGapMs {
-                appendSession()
-                first = event.timestampMs
-            } else if first == nil { first = event.timestampMs }
-            last = event.timestampMs
-            if event.kind == 1, let duration = event.holdMs, duration >= 0 {
-                let start = event.timestampMs - duration
-                if start <= event.timestampMs {
-                    let hold = ActivitySpan(startMs: start, endMs: event.timestampMs)
-                    active.append(hold)
-                    if event.keycode == 63 { voice.append(hold) }
-                }
+            if let span = activitySpan(for: event, policy: policy) {
+                active.append(span)
+                if event.kind == 1, event.keycode == 63 { voice.append(span) }
             }
         }
-        appendSession()
         // A persisted, orphaned down may be left behind by a daemon crash.
         // Only down events witnessed during this live connection can grow.
         if liveConnected {

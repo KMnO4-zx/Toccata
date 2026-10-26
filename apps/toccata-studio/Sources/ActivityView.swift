@@ -439,7 +439,7 @@ struct ActivityView: View {
         return VStack(alignment: .leading, spacing: 8) {
             Label("关于这些数字", systemImage: "info.circle")
                 .font(.callout.weight(.medium))
-            Text("相邻输入间隔小于 \(policy.idleGapMs / 1000) 秒计为连续活跃，末次输入后补 \(policy.trailingGraceMs / 1000) 秒；持续按住按键的时间也计入，重叠区间只计算一次。")
+            Text("每次有效按下覆盖后续 \(policy.activityWindowMs / 1000) 秒，持续按住按键的时间也计入；重叠区间只计算一次，未被覆盖的停顿不计入。Fn 只统计实际按住时长。")
             Text("键盘活跃时间是一种使用时间估算，阅读、看视频或仅用鼠标时可能没有记录。Fn 时长用于估算你的语音输出，也可能包含快捷键操作；Toccata 不检测录音。")
         }
         .font(.subheadline)

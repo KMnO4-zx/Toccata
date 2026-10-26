@@ -21,9 +21,8 @@ final class ActivityRepository {
         liveEvents: [ActivityKeyEvent] = [], liveConnected: Bool = false
     ) -> ActivitySnapshot {
         let interval = range.interval(now: now, calendar: calendar)
-        // Look behind the selection so a session crossing midnight is clipped
-        // at midnight rather than starting at its first event in the new day.
-        let start = ActivityCalculator.milliseconds(interval.start) - max(policy.idleGapMs, policy.trailingGraceMs)
+        // Include key-down windows that started just before the selected day.
+        let start = ActivityCalculator.milliseconds(interval.start) - policy.activityWindowMs
         // A key released after a historical selection can carry a hold that
         // overlaps it. Read through now, then clip reconstructed spans below.
         let end = ActivityCalculator.milliseconds(now)
