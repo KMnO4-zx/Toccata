@@ -1,6 +1,26 @@
 import AppKit
 import SwiftUI
 
+/// Keep centered content still when asynchronously loaded rows make a scrollbar
+/// appear. SwiftUI initially measures a short document without a scrollbar, then
+/// subtracts the system's legacy gutter when it becomes scrollable.
+struct StableWidthScrollView<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        GeometryReader { viewport in
+            ScrollView {
+                content
+                    .frame(width: max(0, viewport.size.width - NSScroller.scrollerWidth(
+                        for: .regular, scrollerStyle: .legacy
+                    )))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(TaskScrollerStyle())
+        }
+    }
+}
+
 struct TaskScrollerStyle: NSViewRepresentable {
     func makeNSView(context: Context) -> TaskScrollerAnchorView {
         TaskScrollerAnchorView()

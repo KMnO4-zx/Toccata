@@ -6,7 +6,7 @@
 
 名字取自「触键曲」（toccata，词根 toccare = 触碰）。
 
-当前版本：**v0.0.6**，用于正式开源前的开发与体验；正式开源首版计划使用 **v0.1.0**。安装包适用于 Apple Silicon Mac，macOS 13 或更新版本。
+当前版本：**v0.0.7**，用于正式开源前的开发与体验；正式开源首版计划使用 **v0.1.0**。安装包适用于 Apple Silicon Mac，macOS 13 或更新版本。
 
 ## 版本与更新
 
@@ -111,7 +111,7 @@ cargo build --release --locked
 
 产物为 `dist/Toccata-<version>-<arch>.dmg`，版本取自 App 的 `CFBundleShortVersionString`，架构根据工作台与内嵌服务的实际二进制判定（`arm64`、`x86_64` 或 `universal`）。脚本会检查两者的签名和架构一致性，使用 `hdiutil` 生成 UDZO 格式并验证映像，输出 SHA-256 及同名 `.sha256` 文件；重复运行会在新包验证成功后替换同版本、同架构的旧产物。
 
-应用版本与构建号统一维护在 `shared/app-version.json`，当前为 `0.0.6` / 内部构建号 `11`。资源同步脚本将它复制到 SwiftPM 资源中，App 打包时写入 `Info.plist`，侧栏、关于窗口、设置页和 DMG 文件名均使用该版本。Rust 包版本必须与应用版本一致，否则构建会停止；升级时同时更新 `core/toccata-core/Cargo.toml` 与 `Cargo.lock`。构建号独立递增，不参与公开版本更新比较。
+应用版本与构建号统一维护在 `shared/app-version.json`，当前为 `0.0.7` / 内部构建号 `12`。资源同步脚本将它复制到 SwiftPM 资源中，App 打包时写入 `Info.plist`，侧栏、关于窗口、设置页和 DMG 文件名均使用该版本。Rust 包版本必须与应用版本一致，否则构建会停止；升级时同时更新 `core/toccata-core/Cargo.toml` 与 `Cargo.lock`。构建号独立递增，不参与公开版本更新比较。
 
 DMG 包含 `Toccata.app`、指向“应用程序”的快捷方式和安装说明。打开 DMG 后，由用户将 App 拖入“应用程序”，推出磁盘映像，再从安装位置启动；建议完成安装后再开启“登录时启动”。打包脚本只生成文件，不会安装、启动 App，也不会更改登录项或系统权限。
 
@@ -121,7 +121,7 @@ DMG 包含 `Toccata.app`、指向“应用程序”的快捷方式和安装说�
 
 工作流位于 `.github/workflows/release.yml`，**仅支持手动触发**，推送提交或标签不会自动发布。工作流文件合并并推送到默认分支后，在 GitHub 的 **Actions → Release Toccata → Run workflow** 中执行：
 
-1. 选择 `main`，填写与版本文件一致的标签，如 `v0.0.6`；其他分支不会执行发布构建。
+1. 选择 `main`，填写与版本文件一致的标签，如 `v0.0.7`；其他分支不会执行发布构建。
 2. `mode` 默认是 `draft`：测试、构建并验证 DMG，然后创建带安装包和 SHA-256 文件的 Release 草稿。检查草稿后，由用户在 GitHub 点击发布。
 3. 仅在明确准备发布时选择 `publish`：先创建草稿并上传附件，全部成功后发布为正式版本，标记为 Latest。
 

@@ -19,7 +19,7 @@ struct RankingView: View {
     @AppStorage("activity.showCalendar") private var showsCalendar = true
 
     var body: some View {
-        ScrollView {
+        StableWidthScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 calendarSection
                 appSection
@@ -27,9 +27,9 @@ struct RankingView: View {
             .padding(28)
             .frame(maxWidth: 1120, alignment: .leading)
             .frame(maxWidth: .infinity)
+            .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: showsCalendar)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .background(TaskScrollerStyle())
         .onAppear(perform: reload)
         .onReceive(refresher.$generation.dropFirst()) { _ in reload() }
         .onReceive(clock) { now in
@@ -40,9 +40,7 @@ struct RankingView: View {
     private var calendarSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(reduceMotion ? nil : WorkspaceMotion.pageChange) {
-                    showsCalendar.toggle()
-                }
+                showsCalendar.toggle()
             } label: {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 5) {
@@ -63,11 +61,19 @@ struct RankingView: View {
             .accessibilityLabel(showsCalendar ? "收起活跃日历" : "展开活跃日历")
             .accessibilityValue(showsCalendar ? "已展开" : "已收起")
 
-            if showsCalendar {
-                CalendarHeatmapView(embedded: true)
-                    .padding(.top, 18)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+            // Retain the loaded calendar while collapsed, so reopening does not
+            // recreate it with empty counts before the database query finishes.
+            CalendarHeatmapView(embedded: true)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(height: showsCalendar ? nil : 0, alignment: .top)
+                .opacity(showsCalendar ? 1 : 0)
+                // The outline around today extends two points past its cell.
+                .padding(.horizontal, 2)
+                .clipped()
+                .padding(.horizontal, -2)
+                .padding(.top, showsCalendar ? 18 : 0)
+                .allowsHitTesting(showsCalendar)
+                .accessibilityHidden(!showsCalendar)
         }
         .padding(22)
         .background(sectionBackground)
