@@ -153,7 +153,7 @@ SQLite 使用 WAL 模式。已有 `toccata.db` 和历史记录继续保留；任
 
 如需便携数据目录或隔离运行，可在启动工作台与后台服务的进程环境中设置同一个非空 `TOCCATA_DATA_DIR`，建议使用绝对路径。两个进程会从该目录读取 `config.json`，任务库固定放在该目录的 `tasks.sqlite`。非空 `db_path` 和 `socket_path` 可进一步指定键盘数据库与 socket 的绝对路径，Studio 会跟随这些设置。通过终端运行 SwiftPM 可执行文件时可直接继承该环境变量；已运行的应用需重新启动才能切换数据目录。
 
-完整表结构和统计口径见 [shared/protocol.md](shared/protocol.md)。布局标签和日历热力图配色是随包资源，修改后需同步资源并重新构建，见 [shared/README.md](shared/README.md)。
+完整表结构和统计口径见 [shared/protocol.md](shared/protocol.md)。键盘热力图使用随包的妙控键盘布局，修改布局后需同步资源并重新构建；热力图配色由界面代码定义，外观由“月之亮面 / 月之暗面 / 跟随系统”统一控制，见 [shared/README.md](shared/README.md)。
 
 ## 模块
 
@@ -161,7 +161,7 @@ SQLite 使用 WAL 模式。已有 `toccata.db` 和历史记录继续保留；任
 |---|---|
 | `core/toccata-core` | CGEventTap 采集、按键配对、SQLite 批量写入、Unix socket 广播 |
 | `apps/toccata-studio` | SwiftUI 任务工作台、任务月历、菜单栏快速记录与编辑、任务回顾和键盘活动统计 |
-| `shared/` | 协议、数据库契约、键码标签与日历热力图主题资源 |
+| `shared/` | 协议、数据库契约、妙控键盘布局与品牌图像资源 |
 | `scripts/` | 应用打包、资源同步和后台服务启动配置 |
 
 ## 验证

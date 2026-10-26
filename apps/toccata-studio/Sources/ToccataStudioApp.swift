@@ -27,7 +27,6 @@ private enum WorkspaceSection: String, CaseIterable, Identifiable {
     case taskCalendar = "任务日历"
     case review = "任务回顾"
     case activity = "键盘活跃"
-    case activityCalendar = "活跃日历"
     case ranking = "应用与趋势"
 
     var id: String { rawValue }
@@ -38,7 +37,6 @@ private enum WorkspaceSection: String, CaseIterable, Identifiable {
         case .taskCalendar: return "calendar"
         case .review: return "checkmark.circle"
         case .activity: return "waveform.path"
-        case .activityCalendar: return "square.grid.3x3"
         case .ranking: return "chart.bar.xaxis"
         }
     }
@@ -65,7 +63,7 @@ struct ContentView: View {
     private var showsTaskWorkspace: Bool {
         switch section {
         case .tasks, .inbox, .taskCalendar, .review: return true
-        case .activity, .activityCalendar, .ranking: return false
+        case .activity, .ranking: return false
         }
     }
 
@@ -162,7 +160,7 @@ struct ContentView: View {
         case .inbox: TasksView(mode: .inbox, selection: $selectedTaskID)
         case .taskCalendar: TaskCalendarView(selection: $selectedTaskID)
         case .review: TasksView(mode: .review, selection: $selectedTaskID)
-        case .activity, .activityCalendar, .ranking: EmptyView()
+        case .activity, .ranking: EmptyView()
         }
     }
 
@@ -190,7 +188,7 @@ struct ContentView: View {
     private var activityPage: some View {
         switch section {
         case .activity: ActivityView()
-        case .activityCalendar, .ranking: RankingView()
+        case .ranking: RankingView()
         case .tasks, .inbox, .taskCalendar, .review: EmptyView()
         }
     }

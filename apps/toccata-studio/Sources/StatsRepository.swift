@@ -45,30 +45,6 @@ enum TimeRange: Hashable, CaseIterable, Identifiable {
         let end = calendar.date(byAdding: .day, value: 1, to: lastDay) ?? lastDay
         return DateInterval(start: start, end: end)
     }
-
-    /// 本地时区按自然日对齐的 [startMs, endMs) 区间。
-    var intervalMs: (Int64, Int64) {
-        let interval = interval()
-        return (Int64(interval.start.timeIntervalSince1970 * 1000), Int64(interval.end.timeIntervalSince1970 * 1000))
-    }
-}
-
-struct TodaySummary {
-    var totalKeys = 0
-    var holdMs: Int64 = 0
-    var sessionMs: Int64 = 0
-}
-
-struct HourCount: Identifiable {
-    let hour: Int
-    let count: Int
-    var id: Int { hour }
-}
-
-struct KeyRank: Identifiable {
-    let keycode: Int
-    let count: Int
-    var id: Int { keycode }
 }
 
 struct AppRank: Identifiable {
@@ -98,49 +74,6 @@ final class StatsRepository {
         }
     }
 
-    /// key_events 是否有任何记录（用于空态占位判断）。
-    func hasAnyEvents() -> Bool {
-        withDatabase(false) { db in
-            ((try db.query("SELECT COUNT(*) FROM key_events") { columnInt($0, 0) }).first ?? 0) > 0
-        }
-    }
-
-    func todaySummary() -> TodaySummary {
-        let (start, end) = TimeRange.today.intervalMs
-        return withDatabase(TodaySummary()) { db in
-            var summary = TodaySummary()
-            summary.totalKeys = try db.query(
-                "SELECT COUNT(*) FROM key_events WHERE kind=0 AND ts_ms>=? AND ts_ms<?",
-                params: [start, end]
-            ) { columnInt($0, 0) }.first ?? 0
-            summary.holdMs = try db.query(
-                "SELECT COALESCE(SUM(hold_ms),0) FROM key_events WHERE kind=1 AND ts_ms>=? AND ts_ms<?",
-                params: [start, end]
-            ) { columnInt64($0, 0) }.first ?? 0
-            summary.sessionMs = ActivityRepository(url: url, policy: policy).snapshot(range: .today).activeMs
-            return summary
-        }
-    }
-
-    /// 24 小时分布（0..23 全量返回，缺的小时补 0）。
-    func hourlyCounts(range: TimeRange) -> [HourCount] {
-        let (start, end) = range.intervalMs
-        var counts = [Int](repeating: 0, count: 24)
-        withDatabase(()) { db in
-            let rows = try db.query(
-                """
-                SELECT CAST(strftime('%H', ts_ms/1000,'unixepoch','localtime') AS INTEGER) h, COUNT(*) \
-                FROM key_events WHERE kind=0 AND ts_ms>=? AND ts_ms<? GROUP BY h
-                """,
-                params: [start, end]
-            ) { (columnInt($0, 0), columnInt($0, 1)) }
-            for (hour, count) in rows where (0..<24).contains(hour) {
-                counts[hour] = count
-            }
-        }
-        return (0..<24).map { HourCount(hour: $0, count: counts[$0]) }
-    }
-
     /// 每日按键总数，键为本地时区 "yyyy-MM-dd"。
     func dailyCounts() -> [String: Int] {
         withDatabase([:]) { db in
@@ -148,31 +81,6 @@ final class StatsRepository {
                 "SELECT date(ts_ms/1000,'unixepoch','localtime') d, COUNT(*) FROM key_events WHERE kind=0 GROUP BY d"
             ) { (columnText($0, 0), columnInt($0, 1)) }
             return Dictionary(uniqueKeysWithValues: rows)
-        }
-    }
-
-    func topKeys(limit: Int = 20) -> [KeyRank] {
-        withDatabase([]) { db in
-            try db.query(
-                "SELECT keycode, COUNT(*) n FROM key_events WHERE kind=0 GROUP BY keycode ORDER BY n DESC LIMIT ?",
-                params: [Int64(limit)]
-            ) { KeyRank(keycode: columnInt($0, 0), count: columnInt($0, 1)) }
-        }
-    }
-
-    func keyCounts(range: TimeRange = .today, now: Date = Date(), calendar: Calendar = .current) -> [KeyRank] {
-        let interval = range.interval(now: now, calendar: calendar)
-        let start = Int64(interval.start.timeIntervalSince1970 * 1000)
-        let end = Int64(interval.end.timeIntervalSince1970 * 1000)
-        return withDatabase([]) { db in
-            try db.query(
-                """
-                SELECT keycode, COUNT(*) n FROM key_events \
-                WHERE kind=0 AND ts_ms>=? AND ts_ms<? \
-                GROUP BY keycode ORDER BY n DESC, keycode ASC
-                """,
-                params: [start, end]
-            ) { KeyRank(keycode: columnInt($0, 0), count: columnInt($0, 1)) }
         }
     }
 

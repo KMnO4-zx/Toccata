@@ -94,31 +94,6 @@ final class StatsRepositoryTests: XCTestCase {
         XCTAssertEqual(month.end, expectedEnd)
     }
 
-    func testKeyCountsFiltersTodayAggregatesDownsAndDoesNotTruncate() throws {
-        let now = date(25, hour: 12)
-        let interval = TimeRange.today.interval(now: now, calendar: calendar)
-        let start = milliseconds(interval.start)
-        let end = milliseconds(interval.end)
-        var seed = [
-            "INSERT INTO key_events VALUES(\(start),0,0,NULL,'test.app');",
-            "INSERT INTO key_events VALUES(\(start + 100),30,0,NULL,'test.app');",
-            "INSERT INTO key_events VALUES(\(start + 101),30,0,NULL,'test.app');",
-            "INSERT INTO key_events VALUES(\(start + 102),30,1,100,'test.app');",
-            "INSERT INTO key_events VALUES(\(end),30,0,NULL,'test.app');",
-            "INSERT INTO key_events VALUES(\(start - 1),99,0,NULL,'test.app');"
-        ]
-        for keycode in 1...24 {
-            seed.append("INSERT INTO key_events VALUES(\(start + Int64(keycode)),\(keycode),0,NULL,'test.app');")
-        }
-        let repository = try makeRepository(seedSQL: seed.joined(separator: "\n"))
-
-        let ranks = repository.keyCounts(now: now, calendar: calendar)
-
-        XCTAssertEqual(ranks.count, 26)
-        XCTAssertEqual(ranks.map(\.keycode), [30] + Array(0...24))
-        XCTAssertEqual(ranks.map(\.count), [2] + Array(repeating: 1, count: 25))
-    }
-
     func testTopAppsReconstructsCrossBoundaryHoldsAndIgnoresLegacySessions() throws {
         let now = date(26, hour: 12)
         let interval = TimeRange.yesterday.interval(now: now, calendar: calendar)
