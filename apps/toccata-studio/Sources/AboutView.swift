@@ -51,12 +51,8 @@ struct AboutView: View {
                 }
                 Text("Toccata").font(.system(size: 26, weight: .bold))
                 Text("记下想法，看见投入").foregroundStyle(.secondary)
-                HStack(spacing: 8) {
-                    Text(version.displayVersion).fontWeight(.medium)
-                    Text("·").foregroundStyle(.tertiary)
-                    Text("构建 \(version.build)").foregroundStyle(.secondary)
-                }
-                .font(.callout).monospacedDigit().padding(.top, 4)
+                Text(version.displayVersion).font(.callout.weight(.medium))
+                    .monospacedDigit().padding(.top, 4)
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(version.copyableDescription, forType: .string)
@@ -66,6 +62,29 @@ struct AboutView: View {
                 }
                 .buttonStyle(.plain).font(.caption).foregroundStyle(Color.accentColor)
             }
+
+            Link(destination: ToccataReleaseSource.repositoryURL) {
+                HStack(spacing: 12) {
+                    Image(systemName: "chevron.left.forwardslash.chevron.right")
+                        .font(.system(size: 18, weight: .medium))
+                        .frame(width: 32, height: 32)
+                        .foregroundStyle(Color.accentColor)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("项目仓库 · GitHub").font(.caption).foregroundStyle(.secondary)
+                        Text(ToccataReleaseSource.repositoryAddress)
+                            .font(.system(size: 12, weight: .medium)).foregroundStyle(.primary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "arrow.up.right").font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.accentColor.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+                .contentShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            .help("打开 GitHub 仓库：\(ToccataReleaseSource.repository)")
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack {

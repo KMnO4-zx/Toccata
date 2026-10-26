@@ -25,7 +25,8 @@ final class ReleaseVersionTests: XCTestCase {
         XCTAssertGreaterThan(Int(source.build) ?? 0, 0)
         let manifest = try String(contentsOf: root.appendingPathComponent("core/toccata-core/Cargo.toml"))
         XCTAssertTrue(manifest.contains("version = \"\(source.version)\""))
-        XCTAssertTrue(source.copyableDescription.contains("Toccata v\(source.version) (Build \(source.build))"))
+        XCTAssertEqual(source.copyableDescription.components(separatedBy: "\n").first,
+                       "Toccata v\(source.version)")
     }
 }
 

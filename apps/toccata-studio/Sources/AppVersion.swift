@@ -6,7 +6,7 @@ struct AppVersion: Decodable, Equatable {
 
     var displayVersion: String { "v\(version)" }
     var copyableDescription: String {
-        "Toccata \(displayVersion) (Build \(build))\nmacOS \(ProcessInfo.processInfo.operatingSystemVersionString)"
+        "Toccata \(displayVersion)\nmacOS \(ProcessInfo.processInfo.operatingSystemVersionString)"
     }
 
     static let current: AppVersion = {

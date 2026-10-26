@@ -2,8 +2,11 @@ import Combine
 import Foundation
 
 enum ToccataReleaseSource {
-    static let releasesURL = URL(string: "https://github.com/KMnO4-zx/Toccata/releases")!
-    static let latestAPIURL = URL(string: "https://api.github.com/repos/KMnO4-zx/Toccata/releases/latest")!
+    static let repository = "KMnO4-zx/Toccata"
+    static let repositoryAddress = "github.com/\(repository)"
+    static let repositoryURL = URL(string: "https://\(repositoryAddress)")!
+    static let releasesURL = repositoryURL.appendingPathComponent("releases")
+    static let latestAPIURL = URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!
 }
 
 struct AvailableUpdate: Equatable {

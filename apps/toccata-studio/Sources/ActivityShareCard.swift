@@ -18,11 +18,15 @@ struct ActivityShareCard: View {
             keyboard
             timeline
             applications
-            HStack(alignment: .bottom) {
-                Text("本机已保存记录 · 活跃时长为估算")
-                    .font(.system(size: 16)).foregroundStyle(muted)
-                Spacer()
-                Text("看见投入").font(.system(size: 17, weight: .medium)).foregroundStyle(blue)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .bottom) {
+                    Text("本机已保存记录 · 活跃时长为估算")
+                        .font(.system(size: 16)).foregroundStyle(muted)
+                    Spacer()
+                    Text("看见投入").font(.system(size: 17, weight: .medium)).foregroundStyle(blue)
+                }
+                Label(ToccataReleaseSource.repositoryAddress, systemImage: "link")
+                    .font(.system(size: 18, weight: .medium)).foregroundStyle(blue)
             }
             .padding(.horizontal, 2)
         }
