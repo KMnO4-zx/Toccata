@@ -168,19 +168,7 @@ struct ActivityView: View {
 
     private var keyboardSection: some View {
         VStack(alignment: .leading, spacing: 20) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(keyboardTitle).font(.headline)
-                    Text("悬停查看按键次数 · Fn 显示按住时长")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text("\(snapshot.keyCount.formatted()) 次")
-                    .font(.system(.subheadline, design: .rounded).weight(.medium))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
+            KeyboardActivityHeader(title: keyboardTitle, totalCount: snapshot.keyCount, counts: snapshot.keyCounts)
             KeyboardHeatmapView(counts: snapshot.keyCounts, fnMs: snapshot.fnMs, periodDescription: keyboardPeriodDescription)
                 .frame(maxWidth: 700)
                 .frame(maxWidth: .infinity, alignment: .center)

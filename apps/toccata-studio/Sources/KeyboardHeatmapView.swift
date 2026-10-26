@@ -46,7 +46,7 @@ struct KeyboardHeatmapView: View {
                     )
                     KeyboardKeyCap(
                         label: item.key.displayLabel,
-                        name: keyName(for: item.key),
+                        name: item.key.readableLabel,
                         activity: activityDescription(for: item.key),
                         intensity: intensity,
                         size: item.frame.size,
@@ -66,7 +66,7 @@ struct KeyboardHeatmapView: View {
                     let y = above >= halfHeight ? above : item.frame.maxY + halfHeight + 10
 
                     KeyboardKeyTooltip(
-                        name: keyName(for: item.key),
+                        name: item.key.readableLabel,
                         activity: activityDescription(for: item.key)
                     )
                     .frame(width: width, height: height)
@@ -101,31 +101,6 @@ struct KeyboardHeatmapView: View {
         }
         let count = max(0, counts[key.code ?? Int.min] ?? 0)
         return "\(periodDescription)按下 \(count.formatted()) 次"
-    }
-
-    private func keyName(for key: KeyboardLayout.Key) -> String {
-        switch key.code {
-        case 56: return "左 Shift"
-        case 60: return "右 Shift"
-        case 59: return "左 Control"
-        case 58: return "左 Option"
-        case 61: return "右 Option"
-        case 55: return "左 Command"
-        case 54: return "右 Command"
-        case 63: return "Fn / 地球键"
-        case 105: return "锁定"
-        case 49: return "空格"
-        case 53: return "Esc"
-        case 48: return "Tab"
-        case 51: return "退格"
-        case 36: return "回车"
-        case 57: return "大写锁定"
-        case 123: return "左方向键"
-        case 124: return "右方向键"
-        case 125: return "下方向键"
-        case 126: return "上方向键"
-        default: return key.displayLabel
-        }
     }
 }
 

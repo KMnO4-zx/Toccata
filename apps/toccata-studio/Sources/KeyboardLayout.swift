@@ -17,6 +17,32 @@ struct KeyboardLayout {
         var displayLabel: String {
             label.isEmpty ? "Space" : label
         }
+
+        /// Shared names for heatmap tooltips and the selected-range ranking.
+        var readableLabel: String {
+            switch code {
+            case 56: return "左 Shift"
+            case 60: return "右 Shift"
+            case 59: return "左 Control"
+            case 58: return "左 Option"
+            case 61: return "右 Option"
+            case 55: return "左 Command"
+            case 54: return "右 Command"
+            case 63: return "Fn / 地球键"
+            case 105: return "锁定"
+            case 49: return "空格"
+            case 53: return "Esc"
+            case 48: return "Tab"
+            case 51: return "退格"
+            case 36: return "回车"
+            case 57: return "大写锁定"
+            case 123: return "左方向键"
+            case 124: return "右方向键"
+            case 125: return "下方向键"
+            case 126: return "上方向键"
+            default: return displayLabel
+            }
+        }
     }
 
     struct PositionedKey: Identifiable, Equatable {
