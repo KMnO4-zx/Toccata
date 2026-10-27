@@ -161,16 +161,21 @@ struct QuickCaptureView: View {
         .frame(height: 48)
     }
 
+    private var canAddTask: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var captureField: some View {
         HStack(spacing: 5) {
             Button(action: addTask) {
                 Image(systemName: "plus")
                     .font(.system(size: 16))
-                    .foregroundStyle(TaskMenuStyle.muted)
-                    .frame(width: 12, height: 25)
+                    .foregroundStyle(canAddTask ? TaskMenuStyle.accent : TaskMenuStyle.muted)
+                    .frame(width: 20, height: 25)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .buttonStyle(EditActionButtonStyle())
+            .disabled(!canAddTask)
             .accessibilityLabel(L10n.tr("添加任务，不设置计划日期"))
             TextField("", text: $title, prompt: Text(L10n.tr("添加任务")).foregroundColor(TaskMenuStyle.muted))
                 .font(.system(size: 13))
@@ -182,7 +187,8 @@ struct QuickCaptureView: View {
         }
         .padding(.horizontal, 9)
         .frame(height: 35)
-        .background(TaskMenuStyle.input, in: RoundedRectangle(cornerRadius: 10))
+        .editableSurface(isFocused: captureFocused, cornerRadius: 10,
+                         accent: TaskMenuStyle.accent, fill: TaskMenuStyle.input)
         .padding(.horizontal, 16)
     }
 

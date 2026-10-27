@@ -35,6 +35,7 @@ struct TaskDetailView: View {
     }
 
     private var children: [TodoTask] { store.children(of: task.id) }
+    private var canAddChild: Bool { !childTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     private var validTitle: Bool { !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     private var hasChanges: Bool {
         draft.title != baseline.title || draft.details != baseline.details || draft.optionalDate != baseline.optionalDate
@@ -213,7 +214,8 @@ struct TaskDetailView: View {
             )
             .frame(minHeight: 120)
             .accessibilityLabel(L10n.tr("任务详情"))
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 9))
+            .editableSurface(isFocused: detailsFocused, cornerRadius: 9,
+                             fill: Color(nsColor: .controlBackgroundColor).opacity(0.65))
         }
     }
 
@@ -276,19 +278,29 @@ struct TaskDetailView: View {
             // Only top-level tasks can create subtasks.
             if task.parentID == nil {
                 HStack(spacing: 8) {
-                    Image(systemName: "plus").foregroundStyle(.secondary)
+                    Button(action: addChild) {
+                        Image(systemName: "plus")
+                            .foregroundStyle(canAddChild ? Color.accentColor : .secondary)
+                            .frame(width: 18, height: 22)
+                    }
+                    .buttonStyle(EditActionButtonStyle())
+                    .disabled(!canAddChild)
+                    .help(L10n.tr("添加子任务"))
+                    .accessibilityLabel(L10n.tr("添加子任务"))
                     TextField(L10n.tr("添加子任务，按回车确认"), text: $childTitle)
                         .textFieldStyle(.plain)
                         .focused($focusedField, equals: .child)
                         .onSubmit(addChild)
                     Button(action: addChild) { Image(systemName: "return") }
-                        .buttonStyle(.plain)
-                        .disabled(childTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .buttonStyle(EditActionButtonStyle())
+                        .foregroundStyle(canAddChild ? Color.accentColor : .secondary)
+                        .disabled(!canAddChild)
                         .help(L10n.tr("添加子任务"))
                 }
                 .font(.system(size: 13))
                 .padding(11)
-                .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 9))
+                .editableSurface(isFocused: focusedField == .child, cornerRadius: 9,
+                                 fill: Color(nsColor: .controlBackgroundColor).opacity(0.65))
             } else if children.isEmpty {
                 Text(L10n.tr("这是一个子任务，可在这里独立编辑详情。"))
                     .font(.system(size: 12))
@@ -388,6 +400,7 @@ struct TaskDetailView: View {
     }
 
     private func addChild() {
+        guard canAddChild else { return }
         guard task.parentID == nil else { return }
         saveDraft(preservingValidTitle: true)
         guard store.addTask(title: childTitle, parentID: task.id) != nil else { return }

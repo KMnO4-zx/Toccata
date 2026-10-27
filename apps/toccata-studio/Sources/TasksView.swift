@@ -254,26 +254,37 @@ struct TasksView: View {
         .contentShape(Rectangle())
     }
 
+    private var canAddTask: Bool { !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
     private var quickAdd: some View {
         HStack(spacing: 10) {
-            Image(systemName: "plus.circle.fill")
-                .font(.system(size: 19))
-                .foregroundStyle(Color.accentColor)
+            Button(action: addTask) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 19))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(EditActionButtonStyle())
+            .disabled(!canAddTask)
+            .help(L10n.tr("添加任务，不预设日期"))
+            .accessibilityLabel(L10n.tr("添加任务，不预设日期"))
+            .accessibilityIdentifier("workspace-add-task")
             TextField(L10n.tr("添加任务，按回车收进来"), text: $title)
                 .textFieldStyle(.plain)
                 .focused($addingTask)
                 .onSubmit(addTask)
+                .accessibilityIdentifier("workspace-task-title")
             Button(action: addTask) {
                 Image(systemName: "return")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .buttonStyle(EditActionButtonStyle())
+            .foregroundStyle(canAddTask ? Color.accentColor : .secondary)
+            .disabled(!canAddTask)
             .help(L10n.tr("添加任务，不预设日期"))
         }
         .padding(12)
-        .background(Color.accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.accentColor.opacity(0.12)))
+        .editableSurface(isFocused: addingTask, cornerRadius: 10,
+                         fill: Color.accentColor.opacity(0.07), idleBorderOpacity: 0.12)
     }
 
     private var searchField: some View {

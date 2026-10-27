@@ -278,7 +278,13 @@ private struct FloatingTaskEditorContent: View {
             textColor: TaskMenuStyle.textColor
         )
         .frame(height: height)
+        .editableSurface(isFocused: descriptionFocused, accent: TaskMenuStyle.accent,
+                         idleBorderOpacity: 0.07)
         .accessibilityLabel(L10n.tr("任务描述"))
+    }
+
+    private var canAddChild: Bool {
+        task.parentID == nil && !childTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var childList: some View {
@@ -319,9 +325,17 @@ private struct FloatingTaskEditorContent: View {
             }
             if showsChildComposer {
                 HStack(spacing: 9) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12))
-                        .foregroundStyle(TaskMenuStyle.secondary)
+                    Button(action: addChild) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12))
+                            .foregroundStyle(canAddChild ? TaskMenuStyle.accent : TaskMenuStyle.secondary)
+                            .frame(width: 16, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(EditActionButtonStyle())
+                    .disabled(!canAddChild)
+                    .help(L10n.tr("添加子任务"))
+                    .accessibilityLabel(L10n.tr("添加子任务"))
                     TextField(L10n.tr("添加子任务"), text: $childTitle)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12))
@@ -330,8 +344,10 @@ private struct FloatingTaskEditorContent: View {
                         .onSubmit(addChild)
                         .accessibilityLabel(L10n.tr("添加子任务"))
                 }
-                .padding(.leading, 8)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .editableSurface(isFocused: focusedField == .child, accent: TaskMenuStyle.accent,
+                                 idleBorderOpacity: 0.07)
             }
         }
     }
