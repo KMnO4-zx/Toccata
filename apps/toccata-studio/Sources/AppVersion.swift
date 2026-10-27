@@ -3,25 +3,45 @@ import Foundation
 struct AppVersion: Decodable, Equatable {
     let version: String
     let build: String
+    let buildInfo: AppBuildInfo?
+
+    init(version: String, build: String, buildInfo: AppBuildInfo? = nil) {
+        self.version = version
+        self.build = build
+        self.buildInfo = buildInfo
+    }
 
     var displayVersion: String { "v\(version)" }
+    var displayCommit: String { buildInfo?.commit.map { String($0.prefix(7)) } ?? L10n.tr("未记录") }
+    var hasLocalChanges: Bool { buildInfo?.isDirty == true }
     var copyableDescription: String {
-        "Toccata \(displayVersion)\nmacOS \(ProcessInfo.processInfo.operatingSystemVersionString)"
+        let commit = buildInfo?.commit ?? L10n.tr("未记录")
+        let changes = hasLocalChanges ? " (\(L10n.tr("含未提交修改")))" : ""
+        return "Toccata \(displayVersion)\nBuild: \(build)\nCommit: \(commit)\(changes)\nmacOS \(ProcessInfo.processInfo.operatingSystemVersionString)"
     }
 
     static let current: AppVersion = {
+        // Capture source identity during the build, never from the machine on
+        // which an installed app happens to run.
+        let buildInfo = ResourceLoader.jsonData(named: "build-info", subdirectory: "")
+            .flatMap { try? JSONDecoder().decode(AppBuildInfo.self, from: $0) }
         if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
            let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
            Bundle.main.bundleIdentifier == "com.toccata.studio" {
-            return AppVersion(version: version, build: build)
+            return AppVersion(version: version, build: build, buildInfo: buildInfo)
         }
         // SwiftPM launches do not have the app's Info.plist.
         guard let data = ResourceLoader.jsonData(named: "app-version", subdirectory: ""),
               let version = try? JSONDecoder().decode(AppVersion.self, from: data) else {
             preconditionFailure("Missing app-version.json; run scripts/sync-assets.sh")
         }
-        return version
+        return AppVersion(version: version.version, build: version.build, buildInfo: buildInfo)
     }()
+}
+
+struct AppBuildInfo: Decodable, Equatable {
+    let commit: String?
+    let isDirty: Bool
 }
 
 /// Stable releases use numeric major.minor.patch comparison, never lexicographic order.

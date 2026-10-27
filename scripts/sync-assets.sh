@@ -10,5 +10,6 @@ STUDIO_RES="apps/toccata-studio/Resources"
 mkdir -p "$STUDIO_RES/Layout"
 cp shared/layout/*.json "$STUDIO_RES/Layout/"
 cp shared/app-version.json "$STUDIO_RES/app-version.json"
+bash scripts/write-build-info.sh
 
-echo "synced: keyboard layout and app version -> studio Resources"
+echo "synced: keyboard layout, app version and build info -> studio Resources"

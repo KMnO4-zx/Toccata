@@ -8,3 +8,4 @@ dist/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+apps/toccata-studio/Resources/build-info.json

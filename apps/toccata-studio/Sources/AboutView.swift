@@ -67,8 +67,21 @@ struct AboutView: View {
                 }
                 Text("Toccata").font(.system(size: 26, weight: .bold))
                 Text(L10n.tr("记下想法，看见投入")).foregroundStyle(.secondary)
-                Text(version.displayVersion).font(.callout.weight(.medium))
-                    .monospacedDigit().padding(.top, 4)
+                HStack(spacing: 8) {
+                    Text(version.displayVersion)
+                        .font(.callout.weight(.medium)).monospacedDigit()
+                    Text("·").foregroundStyle(.tertiary)
+                    Text("Commit \(version.displayCommit)")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                .textSelection(.enabled)
+                .padding(.top, 4)
+                .accessibilityIdentifier("about-version-info")
+                if version.hasLocalChanges {
+                    Text(L10n.tr("含未提交修改"))
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
                 Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(version.copyableDescription, forType: .string)
@@ -79,28 +92,36 @@ struct AboutView: View {
                 .buttonStyle(.plain).font(.caption).foregroundStyle(Color.accentColor)
             }
 
-            Link(destination: ToccataReleaseSource.repositoryURL) {
-                HStack(spacing: 12) {
-                    Image(systemName: "chevron.left.forwardslash.chevron.right")
-                        .font(.system(size: 18, weight: .medium))
-                        .frame(width: 32, height: 32)
-                        .foregroundStyle(Color.accentColor)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(L10n.tr("项目仓库 · GitHub")).font(.caption).foregroundStyle(.secondary)
-                        Text(ToccataReleaseSource.repositoryAddress)
-                            .font(.system(size: 12, weight: .medium)).foregroundStyle(.primary)
-                            .lineLimit(1)
+            HStack(spacing: 10) {
+                Link(destination: ToccataReleaseSource.repositoryURL) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "chevron.left.forwardslash.chevron.right")
+                            .font(.system(size: 18, weight: .medium))
+                            .frame(width: 24, height: 32)
+                            .foregroundStyle(Color.accentColor)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(L10n.tr("项目仓库 · GitHub")).font(.caption).foregroundStyle(.secondary)
+                            Text(ToccataReleaseSource.repositoryAddress)
+                                .font(.system(size: 11, weight: .medium)).foregroundStyle(.primary)
+                                .lineLimit(1)
+                        }
                     }
-                    Spacer(minLength: 0)
-                    Image(systemName: "arrow.up.right").font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-                .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.accentColor.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
-                .contentShape(RoundedRectangle(cornerRadius: 12))
+                .buttonStyle(.plain)
+                .help(L10n.tr("打开 GitHub 仓库：\(ToccataReleaseSource.repository)"))
+
+                Link(L10n.tr("去点 Star 🌟"), destination: ToccataReleaseSource.repositoryURL)
+                    .font(.system(size: 11, weight: .medium))
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .fixedSize()
+                    .help(L10n.tr("在 GitHub 上为 Toccata 点 Star"))
+                    .accessibilityIdentifier("about-star-github")
             }
-            .buttonStyle(.plain)
-            .help(L10n.tr("打开 GitHub 仓库：\(ToccataReleaseSource.repository)"))
+            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.accentColor.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack {

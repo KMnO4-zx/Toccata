@@ -20,13 +20,54 @@ final class ReleaseVersionTests: XCTestCase {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
         let source = try JSONDecoder().decode(AppVersion.self, from: Data(contentsOf: root.appendingPathComponent("shared/app-version.json")))
-        XCTAssertEqual(AppVersion.current, source)
+        XCTAssertEqual(AppVersion.current.version, source.version)
+        XCTAssertEqual(AppVersion.current.build, source.build)
         XCTAssertNotNil(ReleaseVersion(source.version))
         XCTAssertGreaterThan(Int(source.build) ?? 0, 0)
         let manifest = try String(contentsOf: root.appendingPathComponent("core/toccata-core/Cargo.toml"))
         XCTAssertTrue(manifest.contains("version = \"\(source.version)\""))
         XCTAssertEqual(source.copyableDescription.components(separatedBy: "\n").first,
                        "Toccata v\(source.version)")
+    }
+
+    func testBuildIdentityUsesShortCommitForDisplayAndFullCommitForCopying() throws {
+        let commit = "c82ff149d998d343da9a70cfac38717d83dfb5cc"
+        let info = try JSONDecoder().decode(AppBuildInfo.self,
+            from: Data("{\"commit\":\"\(commit)\",\"isDirty\":false}".utf8))
+        let version = AppVersion(version: "0.0.9", build: "14", buildInfo: info)
+        XCTAssertEqual(version.displayVersion, "v0.0.9")
+        XCTAssertEqual(version.displayCommit, "c82ff14")
+        XCTAssertFalse(version.hasLocalChanges)
+        XCTAssertTrue(version.copyableDescription.contains("Build: 14\nCommit: \(commit)\nmacOS "))
+    }
+
+    func testUncommittedBuildIsClearlyIdentifiedInBothLanguages() {
+        let original = L10n.language
+        defer { L10n.language = original }
+        let version = AppVersion(version: "0.0.9", build: "14",
+            buildInfo: AppBuildInfo(commit: "c82ff149d998d343da9a70cfac38717d83dfb5cc", isDirty: true))
+        XCTAssertTrue(version.hasLocalChanges)
+        for (language, marker) in [(AppLanguage.simplifiedChinese, "含未提交修改"),
+                                   (.english, "Includes uncommitted changes")] {
+            L10n.language = language
+            XCTAssertTrue(version.copyableDescription.contains("(\(marker))"))
+        }
+    }
+
+    func testSourceArchivesAndOlderVersionResourcesDoNotInventACommit() throws {
+        let original = L10n.language
+        defer { L10n.language = original }
+        L10n.language = .english
+        let version = try JSONDecoder().decode(AppVersion.self,
+            from: Data("{\"version\":\"0.0.9\",\"build\":\"14\"}".utf8))
+        XCTAssertNil(version.buildInfo)
+        XCTAssertEqual(version.displayCommit, "Not recorded")
+        XCTAssertFalse(version.hasLocalChanges)
+        let info = try JSONDecoder().decode(AppBuildInfo.self,
+            from: Data("{\"commit\":null,\"isDirty\":false}".utf8))
+        XCTAssertNil(info.commit)
+        XCTAssertTrue(AppVersion(version: "0.0.9", build: "14", buildInfo: info)
+            .copyableDescription.contains("Commit: Not recorded"))
     }
 }
 
