@@ -166,11 +166,21 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder
     private var workspaceDetail: some View {
+        ZStack(alignment: .topLeading) {
+            workspaceDetailContent
+                .id(selectedTaskID)
+                .transition(reduceMotion ? .identity : WorkspaceMotion.detailTransition)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Scope the animation to task selection, not draft edits or completion.
+        .animation(reduceMotion ? nil : WorkspaceMotion.detailChange, value: selectedTaskID)
+    }
+
+    @ViewBuilder
+    private var workspaceDetailContent: some View {
         if let selectedTaskID, let task = tasks.task(id: selectedTaskID) {
             TaskDetailView(task: task, onSelect: { self.selectedTaskID = $0 })
-                .id(task.id)
         } else if section == .taskCalendar {
             TaskPlaceholder(
                 symbol: "calendar.badge.clock",
