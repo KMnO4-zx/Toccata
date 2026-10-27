@@ -9,15 +9,18 @@ struct KeyboardHeatmapView: View {
     private let fnMs: Int64
     private let periodDescription: String
     private let labelScale: CGFloat
+    private let pressedKeys: Set<Int>
     @State private var hoveredKeyID: String?
 
     init(layout: KeyboardLayout = .magicKeyboard, counts: [Int: Int] = [:], fnMs: Int64 = 0,
-         periodDescription: String = L10n.tr("今天"), labelScale: CGFloat = 1) {
+         periodDescription: String = L10n.tr("今天"), labelScale: CGFloat = 1,
+         pressedKeys: Set<Int> = []) {
         self.layout = layout
         self.counts = counts
         self.fnMs = fnMs
         self.periodDescription = periodDescription
         self.labelScale = labelScale
+        self.pressedKeys = pressedKeys
     }
 
     var body: some View {
@@ -55,7 +58,8 @@ struct KeyboardHeatmapView: View {
                         intensity: intensity,
                         size: item.frame.size,
                         labelScale: labelScale,
-                        hovering: hoveredKeyID == item.id
+                        hovering: hoveredKeyID == item.id,
+                        pressed: item.key.code.map { pressedKeys.contains($0) } ?? false
                     )
                     .frame(width: item.frame.width, height: item.frame.height)
                     .position(x: item.frame.midX, y: item.frame.midY)
@@ -149,6 +153,7 @@ private struct KeyboardKeyCap: View {
     let size: CGSize
     let labelScale: CGFloat
     let hovering: Bool
+    let pressed: Bool
 
     private var cornerRadius: CGFloat {
         min(7, min(size.width, size.height) * 0.18)
@@ -180,7 +185,7 @@ private struct KeyboardKeyCap: View {
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(KeyboardHeatmap.color(intensity: intensity, scheme: colorScheme))
-            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.30 : 0.14), radius: 1.2, x: 0, y: 1)
+            .shadow(color: Color.black.opacity(pressed ? 0.04 : (colorScheme == .dark ? 0.30 : 0.14)), radius: 1.2, x: 0, y: 1)
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(
@@ -208,6 +213,14 @@ private struct KeyboardKeyCap: View {
                     .padding(1)
             }
             .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.accentColor.opacity(pressed ? 0.22 : 0))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .strokeBorder(Color.accentColor.opacity(pressed ? 0.95 : 0), lineWidth: 2)
+                    }
+            }
+            .overlay {
                 Text(label)
                     .font(.system(size: fontSize, weight: .medium, design: .rounded))
                     .foregroundColor(labelColor)
@@ -215,6 +228,9 @@ private struct KeyboardKeyCap: View {
                     .minimumScaleFactor(0.55)
                     .padding(2)
             }
+            .scaleEffect(pressed && !reduceMotion ? 0.95 : 1)
+            .offset(y: pressed && !reduceMotion ? 1.5 : 0)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: pressed)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hovering)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(name))

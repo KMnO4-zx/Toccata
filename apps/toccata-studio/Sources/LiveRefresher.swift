@@ -1,9 +1,13 @@
 import Foundation
 import Darwin
+import Combine
 
 /// Receives live keys and committed-data notifications. A small polling fallback
 /// also refreshes after reconnects and when an older daemon is running.
 final class LiveRefresher: ObservableObject {
+    // Transient feedback bypasses the 300 ms statistics batch. Only the visible
+    // keyboard subscribes; key events do not invalidate the workspace here.
+    let keyboardUpdates = PassthroughSubject<LiveKeyboardUpdate, Never>()
     @Published private(set) var generation = 0
     @Published private(set) var liveEvents: [ActivityKeyEvent] = []
     @Published private(set) var isConnected = false
@@ -52,6 +56,7 @@ final class LiveRefresher: ObservableObject {
         pendingUpdates.removeAll()
         if currentFD >= 0 { shutdown(currentFD, SHUT_RDWR) }
         lock.unlock()
+        keyboardUpdates.send(.reset)
     }
 
     private var isStopped: Bool {
@@ -70,11 +75,22 @@ final class LiveRefresher: ObservableObject {
         lock.lock()
         guard !stopFlag else { lock.unlock(); return }
         pendingUpdates.append(update)
-        guard pendingRefresh == nil else { lock.unlock(); return }
-        let item = DispatchWorkItem { [weak self] in self?.publishPendingUpdates() }
-        pendingRefresh = item
+        let item: DispatchWorkItem?
+        if pendingRefresh == nil {
+            item = DispatchWorkItem { [weak self] in self?.publishPendingUpdates() }
+            pendingRefresh = item
+        } else {
+            item = nil
+        }
         lock.unlock()
-        DispatchQueue.main.asyncAfter(deadline: .now() + refreshInterval, execute: item)
+        switch update {
+        case .key(let event): keyboardUpdates.send(.key(event))
+        case .connection, .capture(enabled: false, permissionRequired: _): keyboardUpdates.send(.reset)
+        default: break
+        }
+        if let item {
+            DispatchQueue.main.asyncAfter(deadline: .now() + refreshInterval, execute: item)
+        }
     }
 
     private func publishPendingUpdates() {
