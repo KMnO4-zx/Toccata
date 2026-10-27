@@ -47,7 +47,7 @@ enum TimeRange: Hashable, CaseIterable, Identifiable {
     }
 }
 
-struct AppRank: Identifiable {
+struct AppRank: Identifiable, Codable {
     let app: String
     let usageMs: Int64
     let keyCount: Int64
@@ -56,7 +56,8 @@ struct AppRank: Identifiable {
     var shortName: String { app.split(separator: ".").last.map(String.init) ?? app }
 }
 
-/// 聚合查询层：所有 SQL 现算，数据量小无需缓存。DB 缺失/查询失败一律回退为空数据。
+/// Reuses derived daily summaries for dashboard queries. The original SQL
+/// remains the exact fallback and the consistent-snapshot path for exports.
 final class StatsRepository {
     private let url: URL
     private let policy: ActivityPolicy
@@ -76,6 +77,14 @@ final class StatsRepository {
 
     /// 每日按键总数，键为本地时区 "yyyy-MM-dd"。
     func dailyCounts() -> [String: Int] {
+        if let cached = try? DailyStatisticsCache.shared(for: url).dailyCounts(calendar: .current, policy: policy) {
+            return cached
+        }
+        return uncachedDailyCounts()
+    }
+
+    /// Preserve the original raw down-event count, including duplicate rows.
+    func uncachedDailyCounts() -> [String: Int] {
         withDatabase([:]) { db in
             let rows = try db.query(
                 "SELECT date(ts_ms/1000,'unixepoch','localtime') d, COUNT(*) FROM key_events WHERE kind=0 GROUP BY d"
@@ -86,12 +95,28 @@ final class StatsRepository {
 
     func topApps(range: TimeRange, limit: Int = 20, now: Date = Date(), calendar: Calendar = .current) -> [AppRank] {
         let interval = range.interval(now: now, calendar: calendar)
-        return (try? topApps(interval: interval, limit: limit, now: now)) ?? []
+        return (try? topApps(interval: interval, limit: limit, now: now, calendar: calendar)) ?? []
     }
 
     /// Accept exact bounds so sharing uses the same custom range as the keyboard.
     /// Unlike the dashboard fallback, export callers must surface read failures.
-    func topApps(interval: DateInterval, limit: Int = 20, now: Date = Date(), database: Database? = nil) throws -> [AppRank] {
+    func topApps(interval: DateInterval, limit: Int = 20, now: Date = Date(),
+                 calendar: Calendar = .current, database: Database? = nil) throws -> [AppRank] {
+        // Daily totals can only be summed for whole natural-day boundaries.
+        // Arbitrary export bounds and injected snapshots retain exact SQL.
+        let wholeDays = interval.duration > 0
+            && interval.start == calendar.startOfDay(for: interval.start)
+            && interval.end == calendar.startOfDay(for: interval.end)
+        if database == nil, wholeDays, let cached = try? DailyStatisticsCache.shared(for: url).topApps(
+            interval: interval, limit: limit, now: now, calendar: calendar, policy: policy
+        ) {
+            return cached
+        }
+        return try uncachedTopApps(interval: interval, limit: limit, now: now, database: database)
+    }
+
+    func uncachedTopApps(interval: DateInterval, limit: Int = 20, now: Date = Date(),
+                         database: Database? = nil) throws -> [AppRank] {
         let nowMs = ActivityCalculator.milliseconds(now)
         let window = ActivitySpan(startMs: ActivityCalculator.milliseconds(interval.start),
                                   endMs: min(ActivityCalculator.milliseconds(interval.end), nowMs))

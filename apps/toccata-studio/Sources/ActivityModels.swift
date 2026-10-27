@@ -89,7 +89,7 @@ struct ActivitySpan: Equatable {
     }
 }
 
-struct ActivityBucket: Identifiable {
+struct ActivityBucket: Identifiable, Codable {
     let startMs: Int64
     let endMs: Int64
     let activeMs: Int64
@@ -102,7 +102,7 @@ struct ActivityBucket: Identifiable {
     }
 }
 
-struct ActivityDay: Identifiable {
+struct ActivityDay: Identifiable, Codable {
     let date: Date
     let activeMs: Int64
     let fnMs: Int64

@@ -163,12 +163,15 @@ launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.toccata.core.
 |---|---|
 | `tasks.sqlite` | 任务、子任务、日期、优先级和 Markdown 详情；历史过程表仅为兼容保留，Studio 独立读写 |
 | `toccata.db` | 原始键盘事件与历史应用会话；后台服务独占写入，Studio 只读 |
+| `toccata.statistics-cache.sqlite` | Studio 维护的按天统计缓存，可由原始键盘事件重建 |
 | `toccata.sock` | 后台服务的实时 JSON Lines 订阅接口 |
 | `config.json` | 后台服务配置；Studio 跟随其中的数据库、socket 路径及活跃估算参数 |
 | `toccata.lock` | 后台服务的单实例锁 |
 | `core.log` | 由 App 启动的 helper 的启动、权限与写入错误日志，不记录键名或文本 |
 
 SQLite 使用 WAL 模式。已有 `toccata.db` 和历史记录继续保留；任务存储在单独的 `tasks.sqlite` 中。
+
+历史统计按自然日缓存，首次扫描建立增量索引，已结束日期的汇总按需生成。之后处理新增记录，并在跨天长按等事件补齐时重算受影响日期；当天和受实时按键影响的日期继续现算。时区、统计策略或源数据库身份变化时重建缓存，缓存损坏会尝试重建，不可用时回退原查询。缓存仅用于减少重复计算，不会清理或压缩原始记录。
 
 `config.json` 所有字段均可省略，默认值如下：
 
@@ -189,6 +192,8 @@ SQLite 使用 WAL 模式。已有 `toccata.db` 和历史记录继续保留；任
 后台服务每 2 秒按固定周期批量落盘，达到批量阈值时也会落盘；持续输入不会推迟周期写入。成功提交后通知界面刷新，界面另有定时读取作为兜底。写入失败会保留该批缓冲，供后续重试。
 
 如需便携数据目录或隔离运行，可在启动工作台与后台服务的进程环境中设置同一个非空 `TOCCATA_DATA_DIR`，建议使用绝对路径。两个进程会从该目录读取 `config.json`，任务库固定放在该目录的 `tasks.sqlite`。非空 `db_path` 和 `socket_path` 可进一步指定键盘数据库与 socket 的绝对路径，Studio 会跟随这些设置。通过终端运行 SwiftPM 可执行文件时可直接继承该环境变量；已运行的应用需重新启动才能切换数据目录。
+
+统计缓存与键盘数据库保存在同一目录，文件名由源数据库去掉扩展名后加 `.statistics-cache.sqlite` 得到。
 
 完整表结构和统计口径见 [shared/protocol.md](shared/protocol.md)。键盘热力图使用随包的妙控键盘布局，修改布局后需同步资源并重新构建；热力图配色由界面代码定义，外观由“月之亮面 / 月之暗面 / 跟随系统”统一控制，见 [shared/README.md](shared/README.md)。
 

@@ -20,6 +20,24 @@ final class ActivityRepository {
         range: ActivityRange, now: Date = Date(),
         liveEvents: [ActivityKeyEvent] = [], liveConnected: Bool = false, database: Database? = nil
     ) -> ActivitySnapshot {
+        // Export callers supply one committed database snapshot for all report
+        // sections. Keep that path independent of the shared derived cache.
+        if database == nil, let cached = try? DailyStatisticsCache.shared(for: url).activity(
+            range: range, now: now, calendar: calendar, policy: policy,
+            liveEvents: liveEvents, liveConnected: liveConnected
+        ) {
+            return cached
+        }
+        return uncachedSnapshot(range: range, now: now, liveEvents: liveEvents,
+                                liveConnected: liveConnected, database: database)
+    }
+
+    /// Exact reconstruction remains available if the disposable cache cannot
+    /// be read or written, and as the reference for cache regression tests.
+    func uncachedSnapshot(
+        range: ActivityRange, now: Date = Date(),
+        liveEvents: [ActivityKeyEvent] = [], liveConnected: Bool = false, database: Database? = nil
+    ) -> ActivitySnapshot {
         let interval = range.interval(now: now, calendar: calendar)
         // Include key-down windows that started just before the selected day.
         let start = ActivityCalculator.milliseconds(interval.start) - policy.activityWindowMs
