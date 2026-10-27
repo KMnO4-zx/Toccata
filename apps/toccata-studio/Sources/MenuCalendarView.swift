@@ -45,7 +45,6 @@ struct MenuCalendarView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .animation(reduceMotion ? nil : WorkspaceMotion.menuChange, value: selectedDay)
         }
-        .background(TaskScrollerStyle())
         .onChange(of: selectedDay) { _ in
             collapsedTaskIDs.removeAll()
             presentation.selectedTaskID = nil
@@ -86,6 +85,9 @@ struct MenuCalendarView: View {
                 .padding(.vertical, 2)
             }
             .scrollIndicators(.visible)
+            // Keep the style anchor with the day list's identity, so a new
+            // native scroll view also receives the workbench's thin scrollbar.
+            .background(TaskScrollerStyle())
             .id(selectedDay)
             .transition(WorkspaceMotion.menuTransition)
             .animation(reduceMotion ? nil : WorkspaceMotion.menuChange, value: displayMode)
