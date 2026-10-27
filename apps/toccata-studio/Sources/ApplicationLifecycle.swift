@@ -127,9 +127,9 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
                 isQuitting = false
                 sender.reply(toApplicationShouldTerminate: false)
                 let alert = NSAlert()
-                alert.messageText = "后台记录仍在保存"
-                alert.informativeText = "Toccata 暂时保留运行。请稍后再次退出，确保最后的记录已保存。"
-                alert.addButton(withTitle: "好")
+                alert.messageText = L10n.tr("后台记录仍在保存")
+                alert.informativeText = L10n.tr("Toccata 暂时保留运行。请稍后再次退出，确保最后的记录已保存。")
+                alert.addButton(withTitle: L10n.tr("好"))
                 alert.runModal()
             }
         }
@@ -159,9 +159,9 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
 
     private func showSaveFailure() {
         let alert = NSAlert()
-        alert.messageText = "任务修改尚未保存"
-        alert.informativeText = taskStore.errorMessage ?? "请重试保存，再关闭窗口或退出 Toccata。"
-        alert.addButton(withTitle: "返回任务")
+        alert.messageText = L10n.tr("任务修改尚未保存")
+        alert.informativeText = taskStore.errorMessage ?? L10n.tr("请重试保存，再关闭窗口或退出 Toccata。")
+        alert.addButton(withTitle: L10n.tr("返回任务"))
         alert.runModal()
     }
 }
@@ -178,43 +178,62 @@ private final class WorkbenchWindow: NSWindow {
 
 @MainActor
 struct ApplicationSettingsView: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var loginItems: LoginItemController
     @ObservedObject var appearance: AppearanceSettings
     var openAbout: () -> Void
 
     var body: some View {
+        let _ = interfaceLanguage.language
         VStack(alignment: .leading, spacing: 16) {
-            Text("外观").font(.headline)
-            Picker("外观模式", selection: $appearance.mode) {
+            Text(L10n.tr("语言")).font(.headline)
+            Picker(L10n.tr("界面语言"), selection: Binding(
+                get: { interfaceLanguage.language },
+                set: { interfaceLanguage.select($0, reduceMotion: reduceMotion) }
+            )) {
+                ForEach(AppLanguage.allCases) { language in
+                    Text(language.nativeName).tag(language)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .id(interfaceLanguage.language)
+            Text(L10n.tr("切换中英文，任务内容保持原文。"))
+                .font(.callout).foregroundStyle(.secondary)
+            Divider()
+            Text(L10n.tr("外观")).font(.headline)
+            Picker(L10n.tr("外观模式"), selection: $appearance.mode) {
                 ForEach(AppearanceMode.allCases) { mode in
                     Text(mode.title).tag(mode)
                 }
             }
             .labelsHidden()
             .pickerStyle(.segmented)
-            Text("跟随系统会随 macOS 的浅色或深色外观自动切换。")
+            .id(interfaceLanguage.language)
+            Text(L10n.tr("跟随系统会随 macOS 的浅色或深色外观自动切换。"))
                 .font(.callout).foregroundStyle(.secondary)
             Divider()
-            Text("启动与后台运行").font(.headline)
-            Toggle("登录时启动", isOn: Binding(
+            Text(L10n.tr("启动与后台运行")).font(.headline)
+            Toggle(L10n.tr("登录时启动"), isOn: Binding(
                 get: { loginItems.enabled }, set: { loginItems.setEnabled($0) }
             ))
             Text(loginItems.statusText).font(.callout).foregroundStyle(.secondary)
             if loginItems.requiresApproval {
-                Button("前往系统设置允许启动") { loginItems.openSystemSettings() }
-                Button("取消登录启动申请") { loginItems.setEnabled(false) }
+                Button(L10n.tr("前往系统设置允许启动")) { loginItems.openSystemSettings() }
+                Button(L10n.tr("取消登录启动申请")) { loginItems.setEnabled(false) }
             }
             if let error = loginItems.errorMessage {
                 Text(error).foregroundStyle(.red).font(.callout)
             }
             Divider()
-            Text("关闭工作台后，Toccata 会继续留在菜单栏。登录启动时只显示菜单栏图标；选择“退出 Toccata”可停止运行。")
+            Text(L10n.tr("关闭工作台后，Toccata 会继续留在菜单栏。登录启动时只显示菜单栏图标；选择“退出 Toccata”可停止运行。"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Button(action: openAbout) {
                 HStack {
                     Text("Toccata · \(AppVersion.current.displayVersion)")
                     Spacer()
-                    Text("关于与更新")
+                    Text(L10n.tr("关于与更新"))
                     Image(systemName: "chevron.right")
                 }
                 .font(.caption).foregroundStyle(.secondary)
@@ -222,10 +241,11 @@ struct ApplicationSettingsView: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 4)
-            .help("关于 Toccata 与检查更新")
+            .help(L10n.tr("关于 Toccata 与检查更新"))
         }
         .padding(24)
         .frame(width: 420)
+        .languageChangeTransition()
         .onAppear { loginItems.refresh() }
     }
 }

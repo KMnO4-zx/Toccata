@@ -5,7 +5,7 @@ enum TaskListDisplayMode: String, CaseIterable, Identifiable {
     case details
 
     var id: Self { self }
-    var title: String { self == .titles ? "仅标题" : "标题与描述" }
+    var title: String { self == .titles ? L10n.tr("仅标题") : L10n.tr("标题与描述") }
     var showsDescriptions: Bool { self == .details }
 }
 

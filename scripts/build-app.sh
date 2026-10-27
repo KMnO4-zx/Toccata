@@ -24,6 +24,7 @@ cp "$BIN_DIR/toccata-studio" "$APP/Contents/MacOS/Toccata"
 cp "$ROOT/target/release/toccata-core" "$APP/Contents/MacOS/toccata-core"
 cp -R "$BIN_DIR/toccata-studio_toccata-studio.bundle" "$APP/Contents/Resources/"
 cp "$PACKAGE/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+cp -R "$ROOT/shared/macos-localization/"*.lproj "$APP/Contents/Resources/"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -34,10 +35,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>CFBundleDisplayName</key><string>Toccata</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleLocalizations</key><array><string>en</string><string>zh-Hans</string></array>
 <key>CFBundleShortVersionString</key><string>$TOCCATA_VERSION</string>
 <key>CFBundleVersion</key><string>$TOCCATA_BUILD</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
-<key>NSInputMonitoringUsageDescription</key><string>Toccata 需要监控键盘输入，以统计键盘活跃度、每个按键的使用次数和应用使用时长。键码和活动记录仅保存在本机。</string>
+<key>NSInputMonitoringUsageDescription</key><string>Toccata needs input monitoring to estimate keyboard activity, count key presses, and measure app activity. Key codes and activity records are stored only on this Mac.</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSSupportsAutomaticTermination</key><false/>
 <key>NSSupportsSuddenTermination</key><false/>

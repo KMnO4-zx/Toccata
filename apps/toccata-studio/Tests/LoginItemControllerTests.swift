@@ -5,6 +5,13 @@ import XCTest
 
 @MainActor
 final class LoginItemControllerTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        let original = L10n.language
+        L10n.language = .simplifiedChinese
+        addTeardownBlock { L10n.language = original }
+    }
+
     private final class FakeService: LoginItemServicing {
         var status: SMAppService.Status
         var registeredStatus: SMAppService.Status?

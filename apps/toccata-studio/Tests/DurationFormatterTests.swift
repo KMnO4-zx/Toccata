@@ -2,6 +2,13 @@ import XCTest
 @testable import toccata_studio
 
 final class DurationFormatterTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        let original = L10n.language
+        L10n.language = .simplifiedChinese
+        addTeardownBlock { L10n.language = original }
+    }
+
     func testShortDurationsStayInSecondsWithAtMostOneDecimal() {
         XCTAssertEqual(Formatters.duration(ms: 0), "0秒")
         XCTAssertEqual(Formatters.duration(ms: 99), "0秒")

@@ -4,6 +4,7 @@ import SwiftUI
 /// Unlike activity filters, planning allows dates in the future.
 @MainActor
 struct TaskPlannedDatePicker: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     let initialDate: Date?
     let referenceDate: Date
     let onCancel: () -> Void
@@ -16,7 +17,7 @@ struct TaskPlannedDatePicker: View {
     @State private var hoveredDate: Date?
 
     private let calendar = Calendar.current
-    private let weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+    private var weekdays: [String] { [L10n.tr("一"), L10n.tr("二"), L10n.tr("三"), L10n.tr("四"), L10n.tr("五"), L10n.tr("六"), L10n.tr("日")] }
 
     init(initialDate: Date?, referenceDate: Date = Date(),
          onCancel: @escaping () -> Void, onApply: @escaping (Date) -> Void,
@@ -32,9 +33,10 @@ struct TaskPlannedDatePicker: View {
     }
 
     var body: some View {
+        let _ = interfaceLanguage.language
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("计划日期")
+                Text(L10n.tr("计划日期"))
                     .font(.system(size: 17, weight: .semibold))
                     .accessibilityAddTraits(.isHeader)
                 Text(verbatim: fullDateLabel(selectedDate))
@@ -44,9 +46,9 @@ struct TaskPlannedDatePicker: View {
             }
 
             HStack(spacing: 6) {
-                shortcut("今日", date: today)
-                shortcut("明日", date: calendar.date(byAdding: .day, value: 1, to: today) ?? today)
-                shortcut("下周一", date: nextMonday)
+                shortcut(L10n.tr("今日"), date: today)
+                shortcut(L10n.tr("明日"), date: calendar.date(byAdding: .day, value: 1, to: today) ?? today)
+                shortcut(L10n.tr("下周一"), date: nextMonday)
             }
 
             VStack(spacing: 8) {
@@ -58,16 +60,16 @@ struct TaskPlannedDatePicker: View {
 
             HStack(spacing: 9) {
                 if let onClear {
-                    Button("清除日期", action: onClear)
+                    Button(L10n.tr("清除日期"), action: onClear)
                         .buttonStyle(.plain)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("task-planned-date-clear")
                 }
                 Spacer(minLength: 0)
-                Button("取消", action: onCancel)
+                Button(L10n.tr("取消"), action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                Button("确定") { onApply(calendar.startOfDay(for: selectedDate)) }
+                Button(L10n.tr("确定")) { onApply(calendar.startOfDay(for: selectedDate)) }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier("task-planned-date-apply")
@@ -103,24 +105,24 @@ struct TaskPlannedDatePicker: View {
                 .contentShape(RoundedRectangle(cornerRadius: 7))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("选择\(title)，\(fullDateLabel(date))")
+        .accessibilityLabel(L10n.tr("选择\(title)，\(fullDateLabel(date))"))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private var monthNavigation: some View {
         HStack(spacing: 4) {
-            Text(verbatim: "\(calendar.component(.year, from: displayedMonth))年\(calendar.component(.month, from: displayedMonth))月")
+            Text(verbatim: L10n.monthTitle(displayedMonth, calendar: calendar))
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
-            Button("本月") { showMonth(containing: today) }
+            Button(L10n.tr("本月")) { showMonth(containing: today) }
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Color.accentColor)
                 .buttonStyle(.plain)
                 .padding(.horizontal, 7)
-                .help("回到本月")
-            monthButton(offset: -1, symbol: "chevron.left", label: "上个月")
-            monthButton(offset: 1, symbol: "chevron.right", label: "下个月")
+                .help(L10n.tr("回到本月"))
+            monthButton(offset: -1, symbol: "chevron.left", label: L10n.tr("上个月"))
+            monthButton(offset: 1, symbol: "chevron.right", label: L10n.tr("下个月"))
         }
         .frame(height: 26)
     }
@@ -198,7 +200,7 @@ struct TaskPlannedDatePicker: View {
             else if hoveredDate == cell.date { hoveredDate = nil }
         }
         .accessibilityLabel(fullDateLabel(cell.date))
-        .accessibilityValue(isSelected ? "已选日期" : (isToday ? "今天" : ""))
+        .accessibilityValue(isSelected ? L10n.tr("已选日期") : (isToday ? L10n.tr("今天") : ""))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("task-planned-date-\(dateIdentifier(cell.date))")
     }
@@ -222,8 +224,7 @@ struct TaskPlannedDatePicker: View {
     }
 
     private func fullDateLabel(_ date: Date) -> String {
-        let weekday = ["日", "一", "二", "三", "四", "五", "六"][calendar.component(.weekday, from: date) - 1]
-        return "\(calendar.component(.year, from: date))年\(calendar.component(.month, from: date))月\(calendar.component(.day, from: date))日 · 星期\(weekday)"
+        return L10n.date(date, full: true)
     }
 
     private func dateIdentifier(_ date: Date) -> String {

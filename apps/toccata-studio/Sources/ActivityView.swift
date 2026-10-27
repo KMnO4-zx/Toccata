@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ActivityView: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @EnvironmentObject private var refresher: LiveRefresher
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -23,6 +24,7 @@ struct ActivityView: View {
     @State private var shareReferenceDate = Date()
 
     var body: some View {
+        let _ = interfaceLanguage.language
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 header
@@ -65,24 +67,24 @@ struct ActivityView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("键盘活跃")
+                    Text(L10n.tr("键盘活跃"))
                         .font(.system(size: 28, weight: .bold))
-                    Text("看看专注发生在什么时候。")
+                    Text(L10n.tr("看看专注发生在什么时候。"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 20)
-                CaptureStatusView(connectedText: "正在记录键盘活动")
+                CaptureStatusView(connectedText: L10n.tr("正在记录键盘活动"))
                     .font(.subheadline)
                     .padding(.top, 7)
             }
             HStack(spacing: 12) {
-                Text("时间范围").font(.subheadline).foregroundStyle(.secondary)
+                Text(L10n.tr("时间范围")).font(.subheadline).foregroundStyle(.secondary)
                 HStack(spacing: 2) {
                     ForEach(ActivityRange.allCases) { option in
                         rangeButton(option.rawValue, selected: range == option) { range = option }
                     }
-                    rangeButton("自定义时段", selected: isCustomRange) { showsRangeCalendar = true }
+                    rangeButton(L10n.tr("自定义时段"), selected: isCustomRange) { showsRangeCalendar = true }
                         .popover(isPresented: $showsRangeCalendar, arrowEdge: .bottom) {
                             CalendarDateRangePicker(
                                 initialRange: calendarDates(for: range, relativeTo: Date()),
@@ -102,14 +104,14 @@ struct ActivityView: View {
                     .controlSize(.small)
                     .opacity(isChangingRange ? 1 : 0)
                     .accessibilityHidden(!isChangingRange)
-                    .accessibilityLabel("正在更新所选时段")
+                    .accessibilityLabel(L10n.tr("正在更新所选时段"))
                 Spacer(minLength: 0)
                 Button {
                     shareRange = range
                     shareReferenceDate = Date()
                     showsShare = true
                 } label: {
-                    Label("分享", systemImage: "square.and.arrow.up")
+                    Label(L10n.tr("分享"), systemImage: "square.and.arrow.up")
                         .font(.system(size: 12, weight: .medium))
                         .padding(.horizontal, 12).padding(.vertical, 7)
                         .foregroundStyle(Color.accentColor)
@@ -117,7 +119,7 @@ struct ActivityView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("activity-share")
-                .help("分享所选时段的键盘活动与常用应用")
+                .help(L10n.tr("分享所选时段的键盘活动与常用应用"))
                 .popover(isPresented: $showsShare, arrowEdge: .bottom) {
                     ActivitySharePopover(range: shareRange, referenceDate: shareReferenceDate,
                                          onClose: { showsShare = false })
@@ -167,9 +169,9 @@ struct ActivityView: View {
 
     private var summaryCards: some View {
         HStack(alignment: .top, spacing: 14) {
-            metric(title: "键盘活跃时间", value: Formatters.duration(ms: snapshot.activeMs), hint: "合并连续输入与按住区间")
-            metric(title: "按键次数", value: snapshot.keyCount.formatted(), hint: "包含修饰键，过滤长按重复")
-            metric(title: "语音输出估算 · Fn", value: Formatters.duration(ms: snapshot.fnMs), hint: "按 Fn 累计按住时间估算")
+            metric(title: L10n.tr("键盘活跃时间"), value: Formatters.duration(ms: snapshot.activeMs), hint: L10n.tr("合并连续输入与按住区间"))
+            metric(title: L10n.tr("按键次数"), value: snapshot.keyCount.formatted(), hint: L10n.tr("包含修饰键，过滤长按重复"))
+            metric(title: L10n.tr("语音输出估算 · Fn"), value: Formatters.duration(ms: snapshot.fnMs), hint: L10n.tr("按 Fn 累计按住时间估算"))
         }
     }
 
@@ -193,7 +195,7 @@ struct ActivityView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 4)
             if snapshot.keyCounts.isEmpty {
-                Text(snapshot.errorMessage == nil ? "\(keyboardPeriodDescription)没有按键记录。" : "暂无可读取的键盘记录。")
+                Text(snapshot.errorMessage == nil ? L10n.tr("\(keyboardPeriodDescription)没有按键记录。") : L10n.tr("暂无可读取的键盘记录。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -207,25 +209,25 @@ struct ActivityView: View {
         VStack(alignment: .leading, spacing: 22) {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("活跃时间线")
+                    Text(L10n.tr("活跃时间线"))
                         .font(.headline)
-                    Text("每格 15 分钟，颜色越深表示活跃时间越长")
+                    Text(L10n.tr("每格 15 分钟，颜色越深表示活跃时间越长"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 HStack(spacing: 5) {
-                    Text("少")
+                    Text(L10n.tr("少"))
                     ForEach(0..<5) { level in
                         RoundedRectangle(cornerRadius: 2)
                             .fill(bucketColor(fraction: Double(level) / 4))
                             .frame(width: 11, height: 11)
                     }
-                    Text("多")
+                    Text(L10n.tr("多"))
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .accessibilityLabel("图例：颜色由浅到深表示活跃时间由少到多")
+                .accessibilityLabel(L10n.tr("图例：颜色由浅到深表示活跃时间由少到多"))
             }
 
             timelineControls
@@ -268,13 +270,13 @@ struct ActivityView: View {
 
     private var timelineControls: some View {
         HStack(spacing: 2) {
-            rangeButton("跟随范围", selected: timelineSelection == .followRange) { timelineSelection = .followRange }
+            rangeButton(L10n.tr("跟随范围"), selected: timelineSelection == .followRange) { timelineSelection = .followRange }
             ForEach(ActivityRange.allCases) { option in
                 rangeButton(option.rawValue, selected: timelineSelection == .range(option)) {
                     timelineSelection = .range(option)
                 }
             }
-            rangeButton("自定义时段", selected: isTimelineCustomRange) { showsTimelineCalendar = true }
+            rangeButton(L10n.tr("自定义时段"), selected: isTimelineCustomRange) { showsTimelineCalendar = true }
                 .popover(isPresented: $showsTimelineCalendar, arrowEdge: .bottom) {
                     CalendarDateRangePicker(
                         initialRange: calendarDates(for: requestedTimelineRange, relativeTo: Date()),
@@ -305,9 +307,9 @@ struct ActivityView: View {
                 .monospacedDigit()
             VStack(spacing: 14) {
                 HStack(spacing: 12) {
-                    Text("日期").frame(width: 70, alignment: .leading)
+                    Text(L10n.tr("日期")).frame(width: 70, alignment: .leading)
                     hourLabels
-                    Text("活跃 / Fn").frame(width: 130, alignment: .trailing)
+                    Text(L10n.tr("活跃 / Fn")).frame(width: 130, alignment: .trailing)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -317,7 +319,7 @@ struct ActivityView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(day.date, format: .dateTime.month(.twoDigits).day(.twoDigits))
                                 .font(.system(.callout, design: .rounded).weight(.medium))
-                            Text(Calendar.current.isDateInToday(day.date) ? "今天" : weekday(day.date))
+                            Text(Calendar.current.isDateInToday(day.date) ? L10n.tr("今天") : weekday(day.date))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -341,7 +343,7 @@ struct ActivityView: View {
             }
 
             if timelineSnapshot.keyCount == 0 && timelineSnapshot.activeMs == 0 {
-                Label(timelineSnapshot.errorMessage == nil ? "这段时间还没有键盘活动。任务可以照常记在收集箱。" : "暂无可读取的键盘记录。采集服务运行后，这里会自动更新。", systemImage: "keyboard")
+                Label(timelineSnapshot.errorMessage == nil ? L10n.tr("这段时间还没有键盘活动。任务可以照常记在收集箱。") : L10n.tr("暂无可读取的键盘记录。采集服务运行后，这里会自动更新。"), systemImage: "keyboard")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 8)
@@ -362,8 +364,8 @@ struct ActivityView: View {
                             }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .accessibilityLabel("\(day.date.formatted(date: .abbreviated, time: .omitted))，\(bucketTimeRange(bucket))")
-                        .accessibilityValue("活跃 \(Formatters.duration(ms: bucket.activeMs))，Fn 按住 \(Formatters.duration(ms: bucket.fnMs))，\(bucket.keyCount) 次按键")
+                        .accessibilityLabel("\(L10n.date(day.date, full: true)) · \(bucketTimeRange(bucket))")
+                        .accessibilityValue(L10n.tr("活跃 \(Formatters.duration(ms: bucket.activeMs))，Fn 按住 \(Formatters.duration(ms: bucket.fnMs))，\(bucket.keyCount) 次按键"))
                 }
             }
             .contentShape(Rectangle())
@@ -401,9 +403,9 @@ struct ActivityView: View {
             }
             .font(.system(size: 12, weight: .semibold))
             Divider()
-            tooltipValue("键盘活跃", value: Formatters.duration(ms: bucket.activeMs))
-            tooltipValue("Fn 按住", value: Formatters.duration(ms: bucket.fnMs))
-            tooltipValue("按键次数", value: "\(bucket.keyCount.formatted()) 次")
+            tooltipValue(L10n.tr("键盘活跃"), value: Formatters.duration(ms: bucket.activeMs))
+            tooltipValue(L10n.tr("Fn 按住"), value: Formatters.duration(ms: bucket.fnMs))
+            tooltipValue(L10n.tr("按键次数"), value: L10n.tr("\(bucket.keyCount.formatted()) 次"))
         }
         .font(.system(size: 12))
         .monospacedDigit()
@@ -440,10 +442,10 @@ struct ActivityView: View {
     private var calculationNote: some View {
         let policy = repository.calculationPolicy
         return VStack(alignment: .leading, spacing: 8) {
-            Label("关于这些数字", systemImage: "info.circle")
+            Label(L10n.tr("关于这些数字"), systemImage: "info.circle")
                 .font(.callout.weight(.medium))
-            Text("每次有效按下覆盖后续 \(policy.activityWindowMs / 1000) 秒，持续按住按键的时间也计入；重叠区间只计算一次，未被覆盖的停顿不计入。Fn 只统计实际按住时长。")
-            Text("键盘活跃时间是一种使用时间估算，阅读、看视频或仅用鼠标时可能没有记录。Fn 时长用于估算你的语音输出，也可能包含快捷键操作；Toccata 不检测录音。")
+            Text(L10n.tr("每次有效按下覆盖后续 \(policy.activityWindowMs / 1000) 秒，持续按住按键的时间也计入；重叠区间只计算一次，未被覆盖的停顿不计入。Fn 只统计实际按住时长。"))
+            Text(L10n.tr("键盘活跃时间是一种使用时间估算，阅读、看视频或仅用鼠标时可能没有记录。Fn 时长用于估算你的语音输出，也可能包含快捷键操作；Toccata 不检测录音。"))
         }
         .font(.subheadline)
         .foregroundStyle(.secondary)
@@ -456,7 +458,7 @@ struct ActivityView: View {
     }
 
     private func weekday(_ date: Date) -> String {
-        date.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "zh_CN")))
+        date.formatted(.dateTime.weekday(.wide).locale(L10n.locale))
     }
 
     private func bucketTimeRange(_ bucket: ActivityBucket) -> String {
@@ -470,19 +472,19 @@ struct ActivityView: View {
 
     private var keyboardTitle: String {
         switch displayedRange {
-        case .today: return "今日键盘热力图"
-        case .yesterday: return "昨日键盘热力图"
-        case .lastSevenDays: return "最近 7 天键盘热力图"
-        case .thisWeek: return "本周键盘热力图"
-        case .custom: return "自定义时段键盘热力图"
+        case .today: return L10n.tr("今日键盘热力图")
+        case .yesterday: return L10n.tr("昨日键盘热力图")
+        case .lastSevenDays: return L10n.tr("最近 7 天键盘热力图")
+        case .thisWeek: return L10n.tr("本周键盘热力图")
+        case .custom: return L10n.tr("自定义时段键盘热力图")
         }
     }
 
     private var keyboardPeriodDescription: String {
         switch displayedRange {
-        case .today: return "今天"
-        case .yesterday: return "昨天"
-        default: return "所选时段"
+        case .today: return L10n.tr("今天")
+        case .yesterday: return L10n.tr("昨天")
+        default: return L10n.tr("所选时段")
         }
     }
 
@@ -495,7 +497,7 @@ struct ActivityView: View {
     private func dateDescription(for selectedRange: ActivityRange) -> String {
         let dates = calendarDates(for: selectedRange, relativeTo: loadedDay)
         let style = Date.FormatStyle.dateTime.year().month(.twoDigits).day(.twoDigits)
-            .locale(Locale(identifier: "zh_CN"))
+            .locale(L10n.locale)
         let start = dates.start.formatted(style)
         if dates.start == dates.end { return start }
         return "\(start) — \(dates.end.formatted(style))"

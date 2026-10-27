@@ -4,6 +4,7 @@ import SwiftUI
 /// A narrow, compact poster: text remains readable when fitted to a phone screen.
 @MainActor
 struct ActivityShareCard: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     static let width: CGFloat = 720
     let report: ActivityShareSnapshot
     let identities: [String: ApplicationIdentityCache.Identity]
@@ -12,6 +13,7 @@ struct ActivityShareCard: View {
     private let blue = Color(red: 0.16, green: 0.37, blue: 0.83)
 
     var body: some View {
+        let _ = interfaceLanguage.language
         VStack(alignment: .leading, spacing: 12) {
             header
             metrics
@@ -20,10 +22,10 @@ struct ActivityShareCard: View {
             applications
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .bottom) {
-                    Text("本机已保存记录 · 活跃时长为估算")
+                    Text(L10n.tr("本机已保存记录 · 活跃时长为估算"))
                         .font(.system(size: 16)).foregroundStyle(muted)
                     Spacer()
-                    Text("看见投入").font(.system(size: 17)).foregroundStyle(muted)
+                    Text(L10n.tr("看见投入")).font(.system(size: 17)).foregroundStyle(muted)
                 }
                 Label(ToccataReleaseSource.repositoryAddress, systemImage: "link")
                     .font(.system(size: 18)).foregroundStyle(blue)
@@ -35,7 +37,7 @@ struct ActivityShareCard: View {
         .foregroundStyle(ink)
         .background(Color(red: 0.965, green: 0.972, blue: 0.984))
         .environment(\.colorScheme, .light)
-        .environment(\.locale, Locale(identifier: "zh_CN"))
+        .environment(\.locale, L10n.locale)
         .environment(\.calendar, report.calendar)
         .environment(\.timeZone, report.calendar.timeZone)
         .tint(blue)
@@ -44,7 +46,7 @@ struct ActivityShareCard: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("我的键盘足迹").font(.system(size: 32))
+                Text(L10n.tr("我的键盘足迹")).font(.system(size: 32))
                 Spacer()
                 Label("Toccata", systemImage: "square.3.layers.3d")
                     .font(.system(size: 21, weight: .medium)).foregroundStyle(blue)
@@ -58,7 +60,7 @@ struct ActivityShareCard: View {
     private var metrics: some View {
         VStack(spacing: 8) {
             HStack(alignment: .center) {
-                Text("键盘活跃时间").font(.system(size: 21)).foregroundStyle(muted)
+                Text(L10n.tr("键盘活跃时间")).font(.system(size: 21)).foregroundStyle(muted)
                 Spacer(minLength: 8)
                 Text(Formatters.duration(ms: report.activity.activeMs))
                     .font(.system(size: 35)).monospacedDigit().foregroundStyle(blue)
@@ -67,8 +69,8 @@ struct ActivityShareCard: View {
             .padding(.horizontal, 18).padding(.vertical, 14)
             .background(blue.opacity(0.065), in: RoundedRectangle(cornerRadius: 13))
             HStack(spacing: 8) {
-                metric("按键次数", value: report.activity.keyCount.formatted())
-                metric("语音输出估算 · Fn", value: Formatters.duration(ms: report.activity.fnMs))
+                metric(L10n.tr("按键次数"), value: report.activity.keyCount.formatted())
+                metric(L10n.tr("语音输出估算 · Fn"), value: Formatters.duration(ms: report.activity.fnMs))
             }
         }
     }
@@ -86,21 +88,21 @@ struct ActivityShareCard: View {
 
     private var keyboard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            heading("键盘热力图", detail: "越深，按得越多")
+            heading(L10n.tr("键盘热力图"), detail: L10n.tr("越深，按得越多"))
             KeyboardHeatmapView(counts: report.activity.keyCounts, fnMs: report.activity.fnMs,
-                                periodDescription: "所选时段", labelScale: 1.4)
+                                periodDescription: L10n.tr("所选时段"), labelScale: 1.4)
                 .frame(width: 656, height: 656 / KeyboardLayout.magicKeyboard.aspectRatio)
                 .allowsHitTesting(false)
             let keys = KeyboardUsageRanking.topFive(counts: report.activity.keyCounts)
             if keys.isEmpty {
-                Text("暂无按键记录").font(.system(size: 19)).foregroundStyle(muted)
+                Text(L10n.tr("暂无按键记录")).font(.system(size: 19)).foregroundStyle(muted)
             } else {
                 Rectangle().fill(ink.opacity(0.07)).frame(height: 1)
                 HStack(spacing: 6) {
                     ForEach(keys) { key in
                         VStack(spacing: 4) {
                             keyBadge(shortName(key))
-                            Text("\(key.count.formatted()) 次")
+                            Text(L10n.tr("\(key.count.formatted()) 次"))
                                 .font(.system(size: 19)).monospacedDigit().foregroundStyle(muted)
                                 .lineLimit(1).minimumScaleFactor(0.75)
                         }
@@ -131,14 +133,14 @@ struct ActivityShareCard: View {
 
     private func shortName(_ key: KeyboardUsageRanking.Entry) -> String {
         switch key.keycode {
-        case 55: return "左 ⌘"
-        case 54: return "右 ⌘"
-        case 56: return "左 ⇧"
-        case 60: return "右 ⇧"
-        case 58: return "左 ⌥"
-        case 61: return "右 ⌥"
-        case 59: return "左 ⌃"
-        case 62: return "右 ⌃"
+        case 55: return L10n.tr("左 ⌘")
+        case 54: return L10n.tr("右 ⌘")
+        case 56: return L10n.tr("左 ⇧")
+        case 60: return L10n.tr("右 ⇧")
+        case 58: return L10n.tr("左 ⌥")
+        case 61: return L10n.tr("右 ⌥")
+        case 59: return L10n.tr("左 ⌃")
+        case 62: return L10n.tr("右 ⌃")
         case 63: return "Fn"
         default: return key.name
         }
@@ -146,7 +148,7 @@ struct ActivityShareCard: View {
 
     private var timeline: some View {
         VStack(alignment: .leading, spacing: 10) {
-            heading("活跃时间线", detail: "每格 15 分钟")
+            heading(L10n.tr("活跃时间线"), detail: L10n.tr("每格 15 分钟"))
             HStack {
                 Text("00:00"); Spacer(); Text("06:00"); Spacer(); Text("12:00")
                 Spacer(); Text("18:00"); Spacer(); Text("24:00")
@@ -184,9 +186,9 @@ struct ActivityShareCard: View {
 
     private var applications: some View {
         VStack(alignment: .leading, spacing: 10) {
-            heading("常用应用", detail: "活跃时长前 6 名", weight: .light)
+            heading(L10n.tr("常用应用"), detail: L10n.tr("活跃时长前 6 名"), weight: .light)
             if report.apps.isEmpty {
-                Text("暂无应用记录").font(.system(size: 19)).foregroundStyle(muted)
+                Text(L10n.tr("暂无应用记录")).font(.system(size: 19)).foregroundStyle(muted)
             } else {
                 // Eager stacks ensure all rows are present in the exported image.
                 VStack(spacing: 8) {
@@ -217,7 +219,7 @@ struct ActivityShareCard: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(identity?.name ?? app.shortName).font(.system(size: 21, weight: .light)).lineLimit(1)
                 Text(Formatters.duration(ms: app.usageMs)).font(.system(size: 20, weight: .light))
-                Text("\(app.keyCount.formatted()) 次按键")
+                Text(L10n.tr("\(app.keyCount.formatted()) 次按键"))
                     .font(.system(size: 18, weight: .light)).foregroundStyle(muted)
             }
             .foregroundStyle(Color(red: 0.30, green: 0.33, blue: 0.39))

@@ -3,6 +3,7 @@ import SwiftUI
 /// Edits a local draft; dismissing the popover never changes its caller's range.
 @MainActor
 struct CalendarDateRangePicker: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     let initialRange: CalendarDateRange
     let referenceDate: Date
     let selectionMode: CalendarDateSelectionMode
@@ -13,7 +14,7 @@ struct CalendarDateRangePicker: View {
     @State private var draft: CalendarDateRangeDraft
     @State private var displayedMonth: Date
     private let calendar = Calendar.current
-    private let weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+    private var weekdays: [String] { [L10n.tr("一"), L10n.tr("二"), L10n.tr("三"), L10n.tr("四"), L10n.tr("五"), L10n.tr("六"), L10n.tr("日")] }
 
     init(initialRange: CalendarDateRange, referenceDate: Date,
          selectionMode: CalendarDateSelectionMode = .range,
@@ -30,22 +31,23 @@ struct CalendarDateRangePicker: View {
     }
 
     var body: some View {
+        let _ = interfaceLanguage.language
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(selectionMode == .range ? "自定义时段" : "选择日期")
+                Text(selectionMode == .range ? L10n.tr("自定义时段") : L10n.tr("选择日期"))
                     .font(.system(size: 17, weight: .semibold))
                     .accessibilityAddTraits(.isHeader)
-                Text(selectionMode == .singleDay ? "在日历上选择要查看的日期" :
-                     (draft.end == nil ? "选择结束日期，也可以再次点击同一天" : "选择开始日期，再选择结束日期"))
+                Text(selectionMode == .singleDay ? L10n.tr("在日历上选择要查看的日期") :
+                     (draft.end == nil ? L10n.tr("选择结束日期，也可以再次点击同一天") : L10n.tr("选择开始日期，再选择结束日期")))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
 
             HStack(spacing: 10) {
-                dateSummary(selectionMode == .range ? "开始" : "日期", date: draft.start,
+                dateSummary(selectionMode == .range ? L10n.tr("开始") : L10n.tr("日期"), date: draft.start,
                             active: selectionMode == .singleDay || draft.end != nil)
                 if selectionMode == .range {
-                    dateSummary("结束", date: draft.end, active: draft.end == nil)
+                    dateSummary(L10n.tr("结束"), date: draft.end, active: draft.end == nil)
                 }
             }
 
@@ -59,14 +61,14 @@ struct CalendarDateRangePicker: View {
             HStack(spacing: 10) {
                 if selectionMode == .range, let range = draft.selectedRange(calendar: calendar) {
                     let days = (calendar.dateComponents([.day], from: range.start, to: range.end).day ?? 0) + 1
-                    Text("已选 \(days) 天")
+                    Text(L10n.tr("已选 \(days) 天"))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
-                Button("取消", action: onCancel)
+                Button(L10n.tr("取消"), action: onCancel)
                     .keyboardShortcut(.cancelAction)
-                Button("应用") {
+                Button(L10n.tr("应用")) {
                     if let range = draft.selectedRange(calendar: calendar) { onApply(range) }
                 }
                 .buttonStyle(.borderedProminent)
@@ -87,7 +89,7 @@ struct CalendarDateRangePicker: View {
             Text(title)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
-            Text(date.map(dateLabel) ?? "待选择")
+            Text(date.map(dateLabel) ?? L10n.tr("待选择"))
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(date == nil ? Color.secondary : Color.primary)
@@ -104,18 +106,18 @@ struct CalendarDateRangePicker: View {
 
     private var monthNavigation: some View {
         HStack(spacing: 6) {
-            Text(verbatim: "\(calendar.component(.year, from: displayedMonth))年\(calendar.component(.month, from: displayedMonth))月")
+            Text(verbatim: L10n.monthTitle(displayedMonth, calendar: calendar))
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
-            Button("本月") { showMonth(containing: referenceDate) }
-                .help("回到本月")
+            Button(L10n.tr("本月")) { showMonth(containing: referenceDate) }
+                .help(L10n.tr("回到本月"))
             Button { moveMonth(-1) } label: { Image(systemName: "chevron.left") }
-                .accessibilityLabel("上个月")
-                .help("上个月")
+                .accessibilityLabel(L10n.tr("上个月"))
+                .help(L10n.tr("上个月"))
             Button { moveMonth(1) } label: { Image(systemName: "chevron.right") }
-                .accessibilityLabel("下个月")
-                .help("下个月")
+                .accessibilityLabel(L10n.tr("下个月"))
+                .help(L10n.tr("下个月"))
                 .disabled(displayedMonth >= TaskCalendarModel.month(byAdding: 0, to: referenceDate, calendar: calendar))
         }
         .controlSize(.small)
@@ -160,11 +162,11 @@ struct CalendarDateRangePicker: View {
         let canSelect = day <= calendar.startOfDay(for: referenceDate)
         let hasSpan = draft.end.map { $0 > draft.start } ?? false
         let selectionLabel: String
-        if selectionMode == .singleDay && endpoint { selectionLabel = "已选日期" }
-        else if isStart && isEnd { selectionLabel = "开始和结束日期" }
-        else if isStart { selectionLabel = "开始日期" }
-        else if isEnd { selectionLabel = "结束日期" }
-        else { selectionLabel = inRange ? "已选时段" : "" }
+        if selectionMode == .singleDay && endpoint { selectionLabel = L10n.tr("已选日期") }
+        else if isStart && isEnd { selectionLabel = L10n.tr("开始和结束日期") }
+        else if isStart { selectionLabel = L10n.tr("开始日期") }
+        else if isEnd { selectionLabel = L10n.tr("结束日期") }
+        else { selectionLabel = inRange ? L10n.tr("已选时段") : "" }
 
         return Button {
             guard draft.select(day, through: referenceDate, calendar: calendar) else { return }
@@ -196,8 +198,8 @@ struct CalendarDateRangePicker: View {
         .disabled(!canSelect)
         .accessibilityLabel(fullDateLabel(day))
         .accessibilityValue(selectionLabel)
-        .accessibilityHint(canSelect ? (selectionMode == .singleDay ? "选择此日期" :
-                             (draft.end == nil ? "选择为结束日期" : "选择为开始日期")) : "未来日期不可选")
+        .accessibilityHint(canSelect ? (selectionMode == .singleDay ? L10n.tr("选择此日期") :
+                             (draft.end == nil ? L10n.tr("选择为结束日期") : L10n.tr("选择为开始日期"))) : L10n.tr("未来日期不可选"))
         .accessibilityAddTraits(inRange ? .isSelected : [])
         .accessibilityIdentifier("calendar-date-\(dateLabel(day))")
     }
@@ -224,7 +226,6 @@ struct CalendarDateRangePicker: View {
     }
 
     private func fullDateLabel(_ date: Date) -> String {
-        let weekday = ["日", "一", "二", "三", "四", "五", "六"][calendar.component(.weekday, from: date) - 1]
-        return "\(calendar.component(.year, from: date))年\(calendar.component(.month, from: date))月\(calendar.component(.day, from: date))日，星期\(weekday)"
+        return L10n.date(date, full: true)
     }
 }

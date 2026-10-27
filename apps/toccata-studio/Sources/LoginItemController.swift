@@ -42,15 +42,15 @@ final class LoginItemController: ObservableObject {
     var statusText: String {
         switch status {
         case .notRegistered:
-            return "未开启，登录时不会自动启动"
+            return L10n.tr("未开启，登录时不会自动启动")
         case .enabled:
-            return "已开启，登录后会在菜单栏运行"
+            return L10n.tr("已开启，登录后会在菜单栏运行")
         case .requiresApproval:
-            return "需要在系统设置中允许 Toccata 登录启动"
+            return L10n.tr("需要在系统设置中允许 Toccata 登录启动")
         case .notFound:
-            return "系统未找到此应用的登录项"
+            return L10n.tr("系统未找到此应用的登录项")
         @unknown default:
-            return "登录启动状态暂不可用"
+            return L10n.tr("登录启动状态暂不可用")
         }
     }
 
@@ -74,8 +74,8 @@ final class LoginItemController: ObservableObject {
                 try service.unregister()
             }
         } catch {
-            let action = requested ? "开启" : "关闭"
-            errorMessage = "无法\(action)登录启动：\(error.localizedDescription)"
+            let action = requested ? L10n.tr("开启") : L10n.tr("关闭")
+            errorMessage = L10n.tr("无法\(action)登录启动：\(error.localizedDescription)")
         }
     }
 

@@ -16,7 +16,7 @@ struct ActivityShareSnapshot {
     var filename: String {
         let first = dateText(dates.start)
         let suffix = dates.start == dates.end ? first : "\(first)_\(dateText(dates.end))"
-        return "Toccata-活动-\(suffix).png"
+        return L10n.tr("Toccata-活动-\(suffix).png")
     }
 
     private func dateText(_ date: Date) -> String {
@@ -49,10 +49,10 @@ enum ActivityShareError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .readFailed: return "暂时无法读取活动记录，请稍后重试。"
-        case .renderFailed: return "图片生成失败，请重试。"
-        case .rangeTooLarge: return "所选时段过长，请缩短范围后再生成图片。"
-        case .copyFailed: return "无法写入剪贴板，请重试。"
+        case .readFailed: return L10n.tr("暂时无法读取活动记录，请稍后重试。")
+        case .renderFailed: return L10n.tr("图片生成失败，请重试。")
+        case .rangeTooLarge: return L10n.tr("所选时段过长，请缩短范围后再生成图片。")
+        case .copyFailed: return L10n.tr("无法写入剪贴板，请重试。")
         }
     }
 }

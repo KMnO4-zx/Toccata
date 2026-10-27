@@ -21,25 +21,25 @@ struct KeyboardLayout {
         /// Shared names for heatmap tooltips and the selected-range ranking.
         var readableLabel: String {
             switch code {
-            case 56: return "左 Shift"
-            case 60: return "右 Shift"
-            case 59: return "左 Control"
-            case 58: return "左 Option"
-            case 61: return "右 Option"
-            case 55: return "左 Command"
-            case 54: return "右 Command"
-            case 63: return "Fn / 地球键"
-            case 127: return "锁定"
-            case 49: return "空格"
+            case 56: return L10n.tr("左 Shift")
+            case 60: return L10n.tr("右 Shift")
+            case 59: return L10n.tr("左 Control")
+            case 58: return L10n.tr("左 Option")
+            case 61: return L10n.tr("右 Option")
+            case 55: return L10n.tr("左 Command")
+            case 54: return L10n.tr("右 Command")
+            case 63: return L10n.tr("Fn / 地球键")
+            case 127: return L10n.tr("锁定")
+            case 49: return L10n.tr("空格")
             case 53: return "Esc"
             case 48: return "Tab"
-            case 51: return "退格"
-            case 36: return "回车"
-            case 57: return "大写锁定"
-            case 123: return "左方向键"
-            case 124: return "右方向键"
-            case 125: return "下方向键"
-            case 126: return "上方向键"
+            case 51: return L10n.tr("退格")
+            case 36: return L10n.tr("回车")
+            case 57: return L10n.tr("大写锁定")
+            case 123: return L10n.tr("左方向键")
+            case 124: return L10n.tr("右方向键")
+            case 125: return L10n.tr("下方向键")
+            case 126: return L10n.tr("上方向键")
             default: return displayLabel
             }
         }
@@ -68,7 +68,7 @@ struct KeyboardLayout {
 
     static let magicKeyboard: KeyboardLayout = {
         guard let data = ResourceLoader.jsonData(named: "magic-keyboard-ansi", subdirectory: "Layout") else {
-            return .unavailable("找不到妙控键盘布局资源")
+            return .unavailable(L10n.tr("找不到妙控键盘布局资源"))
         }
         do {
             return try parse(data)
@@ -102,7 +102,7 @@ struct KeyboardLayout {
         let unit = raw.unit ?? 54
         let keyGap = raw.keyGap ?? 6
         guard unit.isFinite, unit > 0, keyGap.isFinite, keyGap >= 0 else {
-            throw KeyboardLayoutError.invalid("unit 和 keyGap 无效")
+            throw KeyboardLayoutError.invalid(L10n.tr("unit 和 keyGap 无效"))
         }
 
         var keys: [Key] = []
@@ -124,12 +124,12 @@ struct KeyboardLayout {
                 guard w.isFinite, h.isFinite, w > 0, h > 0,
                       offsetX.isFinite, offsetY.isFinite,
                       w * unit > keyGap, h * unit > keyGap else {
-                    throw KeyboardLayoutError.invalid("第 \(rowIndex + 1) 行第 \(columnIndex + 1) 项尺寸无效")
+                    throw KeyboardLayoutError.invalid(L10n.tr("第 \(rowIndex + 1) 行第 \(columnIndex + 1) 项尺寸无效"))
                 }
 
                 if let code = item.code {
                     guard code >= 0 else {
-                        throw KeyboardLayoutError.invalid("keycode 不能为负数")
+                        throw KeyboardLayoutError.invalid(L10n.tr("keycode 不能为负数"))
                     }
                     guard keycodes.insert(code).inserted else {
                         throw KeyboardLayoutError.duplicateKeycode(code)
@@ -182,7 +182,7 @@ struct KeyboardLayout {
             loadError: nil
         )
         guard layout.isValid else {
-            throw KeyboardLayoutError.invalid("布局为空或尺寸无效")
+            throw KeyboardLayoutError.invalid(L10n.tr("布局为空或尺寸无效"))
         }
         return layout
     }
@@ -254,11 +254,11 @@ enum KeyboardLayoutError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalid(let message):
-            return "键盘布局无效：\(message)"
+            return L10n.tr("键盘布局无效：\(message)")
         case .duplicateKeycode(let code):
-            return "键盘布局包含重复 keycode：\(code)"
+            return L10n.tr("键盘布局包含重复 keycode：\(code)")
         case .duplicateIdentifier(let identifier):
-            return "键盘布局包含重复 ID：\(identifier)"
+            return L10n.tr("键盘布局包含重复 ID：\(identifier)")
         }
     }
 }

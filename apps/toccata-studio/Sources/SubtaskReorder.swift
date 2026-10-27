@@ -4,15 +4,17 @@ import SwiftUI
 /// Local row dragging avoids the system's file/icon drag preview. Only the grip
 /// captures mouse events; the title and completion button keep their own actions.
 struct SubtaskDragHandle: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @EnvironmentObject private var store: TaskStore
     let task: TodoTask
 
     var body: some View {
+        let _ = interfaceLanguage.language
         if task.parentID != nil {
             SubtaskGrip(taskID: task.id, store: store)
                 .frame(width: 22, height: 22)
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
-                .help("按住拖动：仅调整同一主任务下、同一完成状态的子任务顺序")
+                .help(L10n.tr("按住拖动：仅调整同一主任务下、同一完成状态的子任务顺序"))
         }
     }
 }
@@ -55,8 +57,8 @@ private struct SubtaskReorderModifier: ViewModifier {
                 }
                 .offset(y: isDragging ? session.drag?.offset ?? 0 : 0)
                 .zIndex(isDragging ? 1 : 0)
-                .accessibilityAction(named: "上移子任务") { moveByKeyboard(-1) }
-                .accessibilityAction(named: "下移子任务") { moveByKeyboard(1) }
+                .accessibilityAction(named: L10n.tr("上移子任务")) { moveByKeyboard(-1) }
+                .accessibilityAction(named: L10n.tr("下移子任务")) { moveByKeyboard(1) }
         } else {
             content
         }
@@ -183,6 +185,7 @@ private final class SubtaskRowRegion: NSView {
 }
 
 private struct SubtaskGrip: NSViewRepresentable {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     let taskID: String
     let store: TaskStore
     func makeNSView(context: Context) -> SubtaskGripView { SubtaskGripView() }
@@ -190,7 +193,7 @@ private struct SubtaskGrip: NSViewRepresentable {
         view.taskID = taskID; view.store = store
         view.setAccessibilityElement(true)
         view.setAccessibilityRole(.button)
-        view.setAccessibilityLabel("拖动排序：\(store.task(id: taskID)?.title ?? "子任务")")
+        view.setAccessibilityLabel(L10n.tr("拖动排序：\(store.task(id: taskID)?.title ?? L10n.tr("子任务"))"))
         view.setAccessibilityIdentifier("subtask-drag-\(taskID)")
     }
     static func dismantleNSView(_ view: SubtaskGripView, coordinator: ()) { view.cancelTracking() }

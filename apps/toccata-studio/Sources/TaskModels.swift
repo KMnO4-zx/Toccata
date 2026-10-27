@@ -10,10 +10,10 @@ enum TaskPriority: Int, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .none: return "无优先级"
-        case .low: return "低优先级"
-        case .medium: return "中优先级"
-        case .high: return "高优先级"
+        case .none: return L10n.tr("无优先级")
+        case .low: return L10n.tr("低优先级")
+        case .medium: return L10n.tr("中优先级")
+        case .high: return L10n.tr("高优先级")
         }
     }
 }

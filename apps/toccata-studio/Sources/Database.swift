@@ -8,9 +8,9 @@ enum DatabaseError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .openFailed(let message): return "无法打开数据库: \(message)"
-        case .prepareFailed(let message): return "SQL 编译失败: \(message)"
-        case .stepFailed(let code): return "SQL 执行失败(\(code))"
+        case .openFailed(let message): return L10n.tr("无法打开数据库: \(message)")
+        case .prepareFailed(let message): return L10n.tr("SQL 编译失败: \(message)")
+        case .stepFailed(let code): return L10n.tr("SQL 执行失败(\(code))")
         }
     }
 }

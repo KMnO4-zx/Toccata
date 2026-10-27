@@ -8,9 +8,9 @@ enum TaskViewMode: String, Hashable {
 
     var title: String {
         switch self {
-        case .tasks: return "任务"
-        case .inbox: return "收集箱"
-        case .review: return "任务回顾"
+        case .tasks: return L10n.tr("任务")
+        case .inbox: return L10n.tr("收集箱")
+        case .review: return L10n.tr("任务回顾")
         }
     }
 }
@@ -18,6 +18,7 @@ enum TaskViewMode: String, Hashable {
 /// Lists and reports share task records; changing the range never changes a task's dates.
 @MainActor
 struct TasksView: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @EnvironmentObject private var store: TaskStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let mode: TaskViewMode
@@ -49,9 +50,9 @@ struct TasksView: View {
     }
     private var explanation: String {
         switch mode {
-        case .inbox: return "想到就记下。什么时候做，由你决定。"
+        case .inbox: return L10n.tr("想到就记下。什么时候做，由你决定。")
         case .tasks: return taskScope.titleExplanation
-        case .review: return "回看这段时间完成的事，也带上还没做完的任务。"
+        case .review: return L10n.tr("回看这段时间完成的事，也带上还没做完的任务。")
         }
     }
     private var scopedTasks: [TodoTask] {
@@ -62,6 +63,7 @@ struct TasksView: View {
     }
 
     var body: some View {
+        let _ = interfaceLanguage.language
         VStack(spacing: 0) {
             if let error = store.errorMessage {
                 TaskErrorBanner(message: error) { store.errorMessage = nil }
@@ -108,18 +110,18 @@ struct TasksView: View {
                     Spacer(minLength: 8)
                     if let review {
                         Button(action: copyReview) {
-                            Label(copied ? "已复制" : "复制回顾", systemImage: copied ? "checkmark" : "doc.on.doc")
+                            Label(copied ? L10n.tr("已复制") : L10n.tr("复制回顾"), systemImage: copied ? "checkmark" : "doc.on.doc")
                                 .fixedSize()
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                        .help("复制当前范围和搜索结果，包含完成状态、任务详情与子任务")
+                        .help(L10n.tr("复制当前范围和搜索结果，包含完成状态、任务详情与子任务"))
                         .disabled(review.tasks.isEmpty)
                     }
                 }
 
                 if mode == .tasks {
-                    periodPicker("任务范围", selection: $taskPeriod)
+                    periodPicker(L10n.tr("任务范围"), selection: $taskPeriod)
                     quickAdd
                 } else if mode == .inbox {
                     quickAdd
@@ -127,7 +129,7 @@ struct TasksView: View {
                     reviewRangeControl
                     VStack(alignment: .leading, spacing: 5) {
                         Text(review.dateLabel)
-                        Text("已完成 \(review.completed.count) 项 · 未完成 \(review.pending.count) 项")
+                        Text(L10n.tr("已完成 \(review.completed.count) 项 · 未完成 \(review.pending.count) 项"))
                             .monospacedDigit()
                     }
                     .font(.system(size: 12))
@@ -136,17 +138,18 @@ struct TasksView: View {
 
                 HStack(spacing: 8) {
                     searchField
-                    Picker("显示方式", selection: $displayMode) {
+                    Picker(L10n.tr("显示方式"), selection: $displayMode) {
                         ForEach(TaskListDisplayMode.allCases) { option in
                             Text(option.title).tag(option)
                         }
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
+                    .id(interfaceLanguage.language)
                     .fixedSize()
                     .controlSize(.small)
-                    .help("切换仅标题或标题与描述")
-                    .accessibilityLabel("任务显示方式")
+                    .help(L10n.tr("切换仅标题或标题与描述"))
+                    .accessibilityLabel(L10n.tr("任务显示方式"))
                 }
             }
             .padding(22)
@@ -171,7 +174,7 @@ struct TasksView: View {
             Divider()
             HStack(spacing: 5) {
                 Image(systemName: mode == .review ? "doc.text" : taskScope.symbol)
-                Text(mode == .review ? "按主任务归组；已完成子任务保留在所属任务下" : "视图按时间组织任务，不会自动设置计划日期")
+                Text(mode == .review ? L10n.tr("按主任务归组；已完成子任务保留在所属任务下") : L10n.tr("视图按时间组织任务，不会自动设置计划日期"))
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
@@ -185,11 +188,13 @@ struct TasksView: View {
     private func periodPicker(_ title: String, selection: Binding<TaskReviewPeriod>) -> some View {
         Picker(title, selection: selection) {
             ForEach(TaskReviewPeriod.allCases) { period in
-                Text(period == .thisWeek ? "本周" : "最近 7 天").tag(period)
+                Text(period == .thisWeek ? L10n.tr("本周") : L10n.tr("最近 7 天")).tag(period)
             }
         }
         .labelsHidden()
         .pickerStyle(.segmented)
+        // Rebuild only the native control: AppKit caches segment titles. The binding stays intact.
+        .id(interfaceLanguage.language)
     }
 
     private var reviewRangeControl: some View {
@@ -198,19 +203,19 @@ struct TasksView: View {
                 Button {
                     reviewRange = .preset(period)
                 } label: {
-                    reviewRangeLabel(period == .thisWeek ? "本周" : "最近 7 天",
+                    reviewRangeLabel(period == .thisWeek ? L10n.tr("本周") : L10n.tr("最近 7 天"),
                                      selected: reviewRange == .preset(period))
                 }
-                .accessibilityValue(reviewRange == .preset(period) ? "已选择" : "未选择")
+                .accessibilityValue(reviewRange == .preset(period) ? L10n.tr("已选择") : L10n.tr("未选择"))
             }
             Button {
                 referenceDate = Date()
                 showsCustomReviewRange = true
             } label: {
-                reviewRangeLabel("自定义时段", selected: isCustomReviewRange, symbol: "calendar")
+                reviewRangeLabel(L10n.tr("自定义时段"), selected: isCustomReviewRange, symbol: "calendar")
             }
-            .accessibilityValue(isCustomReviewRange ? "已选择" : "未选择")
-            .help("在日历中选择开始和结束日期")
+            .accessibilityValue(isCustomReviewRange ? L10n.tr("已选择") : L10n.tr("未选择"))
+            .help(L10n.tr("在日历中选择开始和结束日期"))
             .popover(isPresented: $showsCustomReviewRange, arrowEdge: .bottom) {
                 CalendarDateRangePicker(
                     initialRange: reviewRange.dateRange(relativeTo: referenceDate),
@@ -228,7 +233,7 @@ struct TasksView: View {
         .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
         .fixedSize(horizontal: true, vertical: false)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("回顾范围")
+        .accessibilityLabel(L10n.tr("回顾范围"))
     }
 
     private var isCustomReviewRange: Bool {
@@ -254,7 +259,7 @@ struct TasksView: View {
             Image(systemName: "plus.circle.fill")
                 .font(.system(size: 19))
                 .foregroundStyle(Color.accentColor)
-            TextField("添加任务，按回车收进来", text: $title)
+            TextField(L10n.tr("添加任务，按回车收进来"), text: $title)
                 .textFieldStyle(.plain)
                 .focused($addingTask)
                 .onSubmit(addTask)
@@ -264,7 +269,7 @@ struct TasksView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .help("添加任务，不预设日期")
+            .help(L10n.tr("添加任务，不预设日期"))
         }
         .padding(12)
         .background(Color.accentColor.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
@@ -274,14 +279,14 @@ struct TasksView: View {
     private var searchField: some View {
         HStack(spacing: 7) {
             Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("搜索任务名称与详情", text: $query)
+            TextField(L10n.tr("搜索任务名称与详情"), text: $query)
                 .textFieldStyle(.plain)
             if !query.isEmpty {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
-                .help("清除搜索")
+                .help(L10n.tr("清除搜索"))
             }
         }
         .font(.system(size: 13))
@@ -300,13 +305,13 @@ struct TasksView: View {
         let pendingRows = WorkspaceTaskListSnapshot.rows(from: snapshot.pendingRoots, collapsedIDs: collapsed)
         let completedRows = WorkspaceTaskListSnapshot.rows(from: snapshot.completedRoots, collapsedIDs: collapsed)
         if scoped.isEmpty && query.isEmpty {
-            TaskPlaceholder(symbol: taskScope.symbol, title: mode == .inbox ? "先收集，再安排" : "这个视图还没有任务", message: mode == .inbox ? "把想到的事情放进来。\n没有计划日期，也可以安心待在这里。" : "添加一个新任务，或切换范围查看其他记录。")
+            TaskPlaceholder(symbol: taskScope.symbol, title: mode == .inbox ? L10n.tr("先收集，再安排") : L10n.tr("这个视图还没有任务"), message: mode == .inbox ? L10n.tr("把想到的事情放进来。\n没有计划日期，也可以安心待在这里。") : L10n.tr("添加一个新任务，或切换范围查看其他记录。"))
         } else if pendingRows.isEmpty && completedRows.isEmpty {
-            TaskPlaceholder(symbol: "magnifyingglass", title: "没有匹配的任务", message: "试试其他关键词。")
+            TaskPlaceholder(symbol: "magnifyingglass", title: L10n.tr("没有匹配的任务"), message: L10n.tr("试试其他关键词。"))
         } else {
             hierarchyList(
-                firstTitle: "待办 · \(snapshot.pendingRoots.count) 项主任务", firstRows: pendingRows,
-                secondTitle: "已完成 · \(snapshot.completedRoots.count) 项主任务", secondRows: completedRows,
+                firstTitle: L10n.tr("待办 · \(snapshot.pendingRoots.count) 项主任务"), firstRows: pendingRows,
+                secondTitle: L10n.tr("已完成 · \(snapshot.completedRoots.count) 项主任务"), secondRows: completedRows,
                 collapsed: collapsed, collapsesSecondSection: true
             )
         }
@@ -339,13 +344,13 @@ struct TasksView: View {
         if review.tasks.isEmpty {
             TaskPlaceholder(
                 symbol: query.isEmpty ? "doc.text" : "magnifyingglass",
-                title: query.isEmpty ? "这段时间还没有任务可回顾" : "没有匹配的任务",
-                message: query.isEmpty ? "本期完成的任务和当前未完成的事项\n都会出现在这里，方便整理周报。" : "试试其他关键词。"
+                title: query.isEmpty ? L10n.tr("这段时间还没有任务可回顾") : L10n.tr("没有匹配的任务"),
+                message: query.isEmpty ? L10n.tr("本期完成的任务和当前未完成的事项\n都会出现在这里，方便整理周报。") : L10n.tr("试试其他关键词。")
             )
         } else {
             hierarchyList(
-                firstTitle: "已完成主任务 · \(review.completedRoots.count) 组", firstRows: completedRows,
-                secondTitle: "待推进主任务 · \(review.pendingRoots.count) 组", secondRows: pendingRows,
+                firstTitle: L10n.tr("已完成主任务 · \(review.completedRoots.count) 组"), firstRows: completedRows,
+                secondTitle: L10n.tr("待推进主任务 · \(review.pendingRoots.count) 组"), secondRows: pendingRows,
                 collapsed: collapsed
             )
         }
@@ -383,7 +388,7 @@ struct TasksView: View {
                         .padding(.horizontal, 12)
                         .padding(.top, 20)
                         .padding(.bottom, 9)
-                        .help(showsCompleted ? "收起已完成任务" : "展开已完成任务")
+                        .help(showsCompleted ? L10n.tr("收起已完成任务") : L10n.tr("展开已完成任务"))
                     } else {
                         listSectionHeader(secondTitle)
                     }
@@ -463,7 +468,7 @@ struct TasksView: View {
         if NSPasteboard.general.setString(reviewSnapshot.markdown, forType: .string) {
             copied = true
         } else {
-            store.errorMessage = "复制失败，请重试。"
+            store.errorMessage = L10n.tr("复制失败，请重试。")
         }
     }
 }
@@ -504,17 +509,19 @@ struct TaskPlaceholder: View {
 }
 
 private struct TaskErrorBanner: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     let message: String
     let dismiss: () -> Void
 
     var body: some View {
+        let _ = interfaceLanguage.language
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             Text(message).textSelection(.enabled)
             Spacer()
             Button(action: dismiss) { Image(systemName: "xmark") }
                 .buttonStyle(.plain)
-                .help("关闭错误提示")
+                .help(L10n.tr("关闭错误提示"))
         }
         .font(.system(size: 13))
         .padding(12)

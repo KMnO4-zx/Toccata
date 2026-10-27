@@ -44,7 +44,7 @@ struct WorkspaceSplitView<Primary: View, Detail: View>: View {
                 }
                 .frame(width: WorkspaceSplitLayout.dividerWidth, height: proxy.size.height)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("调整任务与详情宽度")
+                .accessibilityLabel(L10n.tr("调整任务与详情宽度"))
                 .accessibilityValue(String(format: "%.0f%%", WorkspaceSplitLayout.fraction(
                     totalWidth: proxy.size.width, fraction: fraction) * 100))
                 .accessibilityAdjustableAction { direction in
@@ -135,7 +135,7 @@ private final class WorkspaceDividerView: NSView {
     }
 
     override func accessibilityRole() -> NSAccessibility.Role? { .slider }
-    override func accessibilityLabel() -> String? { "调整任务与详情宽度" }
+    override func accessibilityLabel() -> String? { L10n.tr("调整任务与详情宽度") }
     override func accessibilityValue() -> Any? {
         String(format: "%.0f%%", effectiveFraction * 100)
     }

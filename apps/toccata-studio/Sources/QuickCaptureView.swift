@@ -4,6 +4,7 @@ import Combine
 
 @MainActor
 struct QuickCaptureView: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @EnvironmentObject private var tasks: TaskStore
     @EnvironmentObject private var presentation: MenuTaskPresentation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -27,6 +28,7 @@ struct QuickCaptureView: View {
     private var visibleRows: [MenuTaskVisibleRow] { flatten(pendingRoots) + flatten(completedRoots) }
 
     var body: some View {
+        let _ = interfaceLanguage.language
         VStack(spacing: 0) {
             header
             if page == .tasks { captureField }
@@ -54,6 +56,7 @@ struct QuickCaptureView: View {
         .frame(width: presentation.panelSize.width, height: presentation.panelSize.height)
         .background(TaskMenuStyle.background)
         .clipShape(RoundedRectangle(cornerRadius: TaskMenuStyle.cornerRadius))
+        .languageChangeTransition()
         .coordinateSpace(name: "taskMenu")
         .onPreferenceChange(MenuTaskRowFrameKey.self) { frames in presentation.rowFrames = frames }
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { referenceDate = $0 }
@@ -87,20 +90,20 @@ struct QuickCaptureView: View {
                 presentation.dismissEditor()
             }
         }
-        .alert("删除这个任务？", isPresented: Binding(
+        .alert(L10n.tr("删除这个任务？"), isPresented: Binding(
             get: { taskToDelete != nil },
             set: { if !$0 { taskToDelete = nil } }
         )) {
-            Button("取消", role: .cancel) { taskToDelete = nil }
-            Button("删除任务", role: .destructive) {
+            Button(L10n.tr("取消"), role: .cancel) { taskToDelete = nil }
+            Button(L10n.tr("删除任务"), role: .destructive) {
                 if let task = taskToDelete { _ = tasks.deleteTask(id: task.id) }
                 taskToDelete = nil
             }
         } message: {
             if let task = taskToDelete, !tasks.children(of: task.id).isEmpty {
-                Text("任务、所有子任务及其详情都会删除。此操作无法撤销。")
+                Text(L10n.tr("任务、所有子任务及其详情都会删除。此操作无法撤销。"))
             } else {
-                Text("任务的详情也会删除。此操作无法撤销。")
+                Text(L10n.tr("任务的详情也会删除。此操作无法撤销。"))
             }
         }
     }
@@ -108,15 +111,16 @@ struct QuickCaptureView: View {
     private var header: some View {
         HStack {
             if page == .calendar {
-                Text("任务日历")
+                Text(L10n.tr("任务日历"))
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(TaskMenuStyle.primary)
             } else {
                 Menu {
-                    Picker("任务视图", selection: $scope) {
+                    Picker(L10n.tr("任务视图"), selection: $scope) {
                         ForEach(MenuTaskScope.allCases) { item in Text(item.title).tag(item) }
                     }
                     .pickerStyle(.inline)
+                    .id(interfaceLanguage.language)
                 } label: {
                     HStack(spacing: 8) {
                         Text(scope.title)
@@ -130,16 +134,17 @@ struct QuickCaptureView: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .accessibilityLabel("切换任务视图，当前：\(scope.title)")
+                .accessibilityLabel(L10n.tr("切换任务视图，当前：\(scope.title)"))
             }
 
             Spacer()
             if page == .tasks {
                 Menu {
-                    Picker("排序", selection: $sortOrder) {
-                        ForEach(MenuTaskSortOrder.allCases) { order in Text(order.rawValue).tag(order) }
+                    Picker(L10n.tr("排序"), selection: $sortOrder) {
+                        ForEach(MenuTaskSortOrder.allCases) { order in Text(L10n.key(order.rawValue)).tag(order) }
                     }
                     .pickerStyle(.inline)
+                    .id(interfaceLanguage.language)
                 } label: {
                     Image(systemName: "arrow.up.arrow.down")
                         .font(.system(size: 14))
@@ -149,7 +154,7 @@ struct QuickCaptureView: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
-                .accessibilityLabel("任务排序")
+                .accessibilityLabel(L10n.tr("任务排序"))
             }
         }
         .padding(.horizontal, 16)
@@ -166,14 +171,14 @@ struct QuickCaptureView: View {
             }
             .buttonStyle(.plain)
             .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .accessibilityLabel("添加任务，不设置计划日期")
-            TextField("", text: $title, prompt: Text("添加任务").foregroundColor(TaskMenuStyle.muted))
+            .accessibilityLabel(L10n.tr("添加任务，不设置计划日期"))
+            TextField("", text: $title, prompt: Text(L10n.tr("添加任务")).foregroundColor(TaskMenuStyle.muted))
                 .font(.system(size: 13))
                 .foregroundStyle(TaskMenuStyle.text)
                 .textFieldStyle(.plain)
                 .focused($captureFocused)
                 .onSubmit(addTask)
-                .accessibilityLabel("快速添加任务")
+                .accessibilityLabel(L10n.tr("快速添加任务"))
         }
         .padding(.horizontal, 9)
         .frame(height: 35)
@@ -184,7 +189,7 @@ struct QuickCaptureView: View {
     @ViewBuilder
     private var taskList: some View {
         if treeRoots.isEmpty {
-            Text("暂无任务")
+            Text(L10n.tr("暂无任务"))
                 .font(.system(size: 13))
                 .foregroundStyle(TaskMenuStyle.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -194,7 +199,7 @@ struct QuickCaptureView: View {
                     VStack(spacing: 0) {
                         taskRows(pendingRoots)
                         if !completedRoots.isEmpty {
-                            Text("已完成")
+                            Text(L10n.tr("已完成"))
                                 .font(.system(size: 10))
                                 .foregroundStyle(TaskMenuStyle.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -236,7 +241,7 @@ struct QuickCaptureView: View {
                 _ = tasks.setCompleted(id: task.id, completed: !task.isCompleted)
             }
             .frame(width: 12, height: 32)
-            .accessibilityLabel("\(task.isCompleted ? "恢复为待办" : "完成")：\(task.title)")
+            .accessibilityLabel("\(task.isCompleted ? L10n.tr("恢复为待办") : L10n.tr("完成"))：\(task.title)")
 
             Button { toggleTask(task.id) } label: {
                 HStack(spacing: 6) {
@@ -252,7 +257,7 @@ struct QuickCaptureView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("编辑任务：\(task.title)")
+            .accessibilityLabel(L10n.tr("编辑任务：\(task.title)"))
             .accessibilityIdentifier("menu-task-\(task.id)")
             SubtaskDragHandle(task: task)
         }
@@ -272,7 +277,7 @@ struct QuickCaptureView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.leading, 7 + indentation)
-                .accessibilityLabel("\(isExpanded ? "收起" : "展开")子任务：\(task.title)")
+                .accessibilityLabel(L10n.tr("\(isExpanded ? L10n.tr("收起") : L10n.tr("展开"))子任务：\(task.title)"))
             }
         }
         .background {
@@ -297,7 +302,7 @@ struct QuickCaptureView: View {
         if let date = task.plannedDate {
             HStack(spacing: 3) {
                 Image(systemName: "calendar").font(.system(size: 9))
-                Text(date.formatted(.dateTime.month().day().locale(Locale(identifier: "zh_CN"))))
+                Text(date.formatted(.dateTime.month().day().locale(L10n.locale)))
                     .font(.system(size: 10))
                     .fixedSize()
             }
@@ -323,7 +328,7 @@ struct QuickCaptureView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("任务")
+            .accessibilityLabel(L10n.tr("任务"))
             .accessibilityAddTraits(page == .tasks ? .isSelected : [])
 
             Button { page = .calendar } label: {
@@ -334,7 +339,7 @@ struct QuickCaptureView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("日历")
+            .accessibilityLabel(L10n.tr("日历"))
             .accessibilityAddTraits(page == .calendar ? .isSelected : [])
 
             Button { presentation.openWorkbench() } label: {
@@ -345,8 +350,8 @@ struct QuickCaptureView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("打开工作台")
-            .accessibilityLabel("打开工作台")
+            .help(L10n.tr("打开工作台"))
+            .accessibilityLabel(L10n.tr("打开工作台"))
         }
         .frame(height: 48)
     }
@@ -354,20 +359,20 @@ struct QuickCaptureView: View {
     @ViewBuilder
     private func taskActions(_ task: TodoTask) -> some View {
         Button { selectTask(task.id, focus: .description) } label: {
-            Label("编辑描述", systemImage: "text.alignleft")
+            Label(L10n.tr("编辑描述"), systemImage: "text.alignleft")
         }
         if task.parentID == nil {
             Button { selectTask(task.id, focus: .child) } label: {
-                Label("添加子任务", systemImage: "plus")
+                Label(L10n.tr("添加子任务"), systemImage: "plus")
             }
         }
         Button { _ = tasks.setCompleted(id: task.id, completed: !task.isCompleted) } label: {
-            Label(task.isCompleted ? "恢复为待办" : "标记完成",
+            Label(task.isCompleted ? L10n.tr("恢复为待办") : L10n.tr("标记完成"),
                   systemImage: task.isCompleted ? "arrow.uturn.backward" : "checkmark.circle")
         }
         Divider()
         Button(role: .destructive) { taskToDelete = task } label: {
-            Label("删除任务…", systemImage: "trash")
+            Label(L10n.tr("删除任务…"), systemImage: "trash")
         }
     }
 

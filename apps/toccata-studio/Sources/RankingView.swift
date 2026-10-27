@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor
 struct RankingView: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @EnvironmentObject private var refresher: LiveRefresher
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -19,6 +20,7 @@ struct RankingView: View {
     @AppStorage("activity.showCalendar") private var showsCalendar = true
 
     var body: some View {
+        let _ = interfaceLanguage.language
         StableWidthScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 calendarSection
@@ -44,8 +46,8 @@ struct RankingView: View {
             } label: {
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("活跃日历").font(.headline)
-                        Text("最近 26 周 · 颜色越深，按键次数越多")
+                        Text(L10n.tr("活跃日历")).font(.headline)
+                        Text(L10n.tr("最近 26 周 · 颜色越深，按键次数越多"))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -58,8 +60,8 @@ struct RankingView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(showsCalendar ? "收起活跃日历" : "展开活跃日历")
-            .accessibilityValue(showsCalendar ? "已展开" : "已收起")
+            .accessibilityLabel(showsCalendar ? L10n.tr("收起活跃日历") : L10n.tr("展开活跃日历"))
+            .accessibilityValue(showsCalendar ? L10n.tr("已展开") : L10n.tr("已收起"))
 
             // Retain the loaded calendar while collapsed, so reopening does not
             // recreate it with empty counts before the database query finishes.
@@ -83,8 +85,8 @@ struct RankingView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("应用活跃度").font(.headline)
-                    Text("按键盘活动估算使用时间")
+                    Text(L10n.tr("应用活跃度")).font(.headline)
+                    Text(L10n.tr("按键盘活动估算使用时间"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -92,7 +94,7 @@ struct RankingView: View {
                 if isReloading {
                     ProgressView()
                         .controlSize(.small)
-                        .accessibilityLabel("正在更新应用活跃度")
+                        .accessibilityLabel(L10n.tr("正在更新应用活跃度"))
                 }
             }
 
@@ -138,7 +140,7 @@ struct RankingView: View {
                 pickerReferenceDate = Date()
                 showsDayPicker = true
             } label: {
-                Label("指定日", systemImage: "calendar")
+                Label(L10n.tr("指定日"), systemImage: "calendar")
                     .font(.subheadline.weight(.medium))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
@@ -165,7 +167,7 @@ struct RankingView: View {
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("应用统计范围")
+        .accessibilityLabel(L10n.tr("应用统计范围"))
     }
 
     private var isSpecificDay: Bool {
@@ -191,13 +193,13 @@ struct RankingView: View {
                 .monospacedDigit()
 
             if !hasLoaded {
-                Text("正在读取应用使用记录…")
+                Text(L10n.tr("正在读取应用使用记录…"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 18)
             } else if result.apps.isEmpty {
-                Label("暂无应用使用记录", systemImage: "app.dashed")
+                Label(L10n.tr("暂无应用使用记录"), systemImage: "app.dashed")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -252,7 +254,7 @@ struct RankingView: View {
                         .font(.system(.subheadline, design: .rounded).weight(.semibold))
                         .monospacedDigit()
                         .fixedSize()
-                    Text("\(app.keyCount.formatted()) 次按键")
+                    Text(L10n.tr("\(app.keyCount.formatted()) 次按键"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()

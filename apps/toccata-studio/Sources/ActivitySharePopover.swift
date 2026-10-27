@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 struct ActivitySharePopover: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     let range: ActivityRange
     let referenceDate: Date
     let onClose: () -> Void
@@ -15,35 +16,36 @@ struct ActivitySharePopover: View {
     @State private var isSaving = false
 
     var body: some View {
+        let _ = interfaceLanguage.language
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("分享键盘足迹").font(.system(size: 17, weight: .semibold))
-                    Text(report?.dateLabel ?? "正在准备所选时段…")
+                    Text(L10n.tr("分享键盘足迹")).font(.system(size: 17, weight: .semibold))
+                    Text(report?.dateLabel ?? L10n.tr("正在准备所选时段…"))
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button(action: onClose) { Image(systemName: "xmark").frame(width: 22, height: 22) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary).help("关闭分享预览")
-                    .accessibilityLabel("关闭分享预览").disabled(isSaving)
+                    .buttonStyle(.plain).foregroundStyle(.secondary).help(L10n.tr("关闭分享预览"))
+                    .accessibilityLabel(L10n.tr("关闭分享预览")).disabled(isSaving)
             }
             Group {
                 if let rendered {
                     ScrollView {
                         Image(nsImage: rendered.image).resizable().interpolation(.high).scaledToFit()
-                            .accessibilityLabel("所选时段的概览、键盘热力图、活跃时间线和常用应用分享图片")
+                            .accessibilityLabel(L10n.tr("所选时段的概览、键盘热力图、活跃时间线和常用应用分享图片"))
                     }
                 } else if isLoading {
                     VStack(spacing: 12) {
                         ProgressView().controlSize(.small)
-                        Text("正在生成图片…").font(.callout).foregroundStyle(.secondary)
+                        Text(L10n.tr("正在生成图片…")).font(.callout).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     VStack(spacing: 12) {
                         Image(systemName: "photo.badge.exclamationmark").font(.title).foregroundStyle(.secondary)
-                        Text(errorMessage ?? "暂时无法生成图片").font(.callout).multilineTextAlignment(.center)
-                        Button("重试") { Task { await generate() } }
+                        Text(errorMessage ?? L10n.tr("暂时无法生成图片")).font(.callout).multilineTextAlignment(.center)
+                        Button(L10n.tr("重试")) { Task { await generate() } }
                     }
                     .padding(24).frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -57,18 +59,18 @@ struct ActivitySharePopover: View {
                 Text(errorMessage).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
             }
             HStack(spacing: 10) {
-                Text(feedback ?? "PNG 图片 · 已保存记录 · 仅在本机生成")
+                Text(feedback ?? L10n.tr("PNG 图片 · 已保存记录 · 仅在本机生成"))
                     .font(.system(size: 10)).foregroundStyle(.secondary)
                 Spacer(minLength: 0)
                 Button {
                     do {
                         try rendered?.copy()
                         errorMessage = nil
-                        feedback = "已复制图片"
+                        feedback = L10n.tr("已复制图片")
                     } catch { errorMessage = error.localizedDescription }
-                } label: { Label("复制", systemImage: "doc.on.doc") }
+                } label: { Label(L10n.tr("复制"), systemImage: "doc.on.doc") }
                 .accessibilityIdentifier("activity-share-copy")
-                Button(action: download) { Label("下载", systemImage: "arrow.down.to.line") }
+                Button(action: download) { Label(L10n.tr("下载"), systemImage: "arrow.down.to.line") }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("activity-share-download")
             }
@@ -78,6 +80,16 @@ struct ActivitySharePopover: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .interactiveDismissDisabled(isSaving)
         .task { await generate() }
+        .onChange(of: interfaceLanguage.language) { _ in
+            feedback = nil
+            guard let report else { return }
+            do {
+                let identities = Dictionary(uniqueKeysWithValues: report.apps.map {
+                    ($0.app, ApplicationIdentityCache.shared.identity(for: $0.app))
+                })
+                rendered = try ActivityShareImage.render(report: report, identities: identities)
+            } catch { errorMessage = error.localizedDescription }
+        }
     }
 
     private func generate() async {
@@ -107,8 +119,8 @@ struct ActivitySharePopover: View {
     private func download() {
         guard let rendered, let report, !isSaving else { return }
         let panel = NSSavePanel()
-        panel.title = "保存键盘足迹"
-        panel.prompt = "保存"
+        panel.title = L10n.tr("保存键盘足迹")
+        panel.prompt = L10n.tr("保存")
         panel.allowedContentTypes = [.png]
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = report.filename
@@ -120,8 +132,8 @@ struct ActivitySharePopover: View {
             do {
                 try rendered.save(to: url)
                 errorMessage = nil
-                feedback = "图片已保存"
-            } catch { errorMessage = "保存失败：\(error.localizedDescription)" }
+                feedback = L10n.tr("图片已保存")
+            } catch { errorMessage = L10n.tr("保存失败：\(error.localizedDescription)") }
         }
         if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: completion) }
         else { panel.begin(completionHandler: completion) }

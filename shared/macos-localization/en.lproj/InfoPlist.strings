@@ -1,0 +1,1 @@
+"NSInputMonitoringUsageDescription" = "Toccata needs input monitoring to estimate keyboard activity, count key presses, and measure app activity. Key codes and activity records are stored only on this Mac.";

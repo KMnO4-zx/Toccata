@@ -91,7 +91,7 @@ final class TaskStore: ObservableObject {
     @discardableResult
     func addTask(title: String, details: String = "", plannedDate: Date? = nil,
                  parentID: String? = nil) -> String? {
-        guard let title = validatedText(title, error: "请先填写任务名称。") else { return nil }
+        guard let title = validatedText(title, error: L10n.tr("请先填写任务名称。")) else { return nil }
         let id = UUID().uuidString
         let timestamp = now()
         let succeeded = write { database in
@@ -112,7 +112,7 @@ final class TaskStore: ObservableObject {
 
     @discardableResult
     func updateTask(id: String, title: String, details: String, plannedDate: Date?) -> Bool {
-        guard let title = validatedText(title, error: "任务名称不能为空。") else { return false }
+        guard let title = validatedText(title, error: L10n.tr("任务名称不能为空。")) else { return false }
         let timestamp = now()
         return write { database in
             guard try database.taskExists(id: id) else { throw TaskStoreError.taskMissing }
@@ -203,11 +203,11 @@ private enum TaskStoreError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .unavailable: return "任务数据库暂不可用，请检查存储位置后重新打开应用。"
-        case .taskMissing: return "任务不存在，可能已被删除。"
-        case .nestedSubtask: return "子任务下不能再创建子任务。"
-        case .invalidSubtaskMove: return "只能在同一主任务、同一完成状态的子任务之间排序。"
-        case .database(let message): return "任务保存失败：\(message)"
+        case .unavailable: return L10n.tr("任务数据库暂不可用，请检查存储位置后重新打开应用。")
+        case .taskMissing: return L10n.tr("任务不存在，可能已被删除。")
+        case .nestedSubtask: return L10n.tr("子任务下不能再创建子任务。")
+        case .invalidSubtaskMove: return L10n.tr("只能在同一主任务、同一完成状态的子任务之间排序。")
+        case .database(let message): return L10n.tr("任务保存失败：\(message)")
         }
     }
 }
@@ -231,7 +231,7 @@ private final class TaskDatabase {
         var opened: OpaquePointer?
         let result = sqlite3_open_v2(url.path, &opened, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil)
         guard result == SQLITE_OK, let opened else {
-            let message = opened.map { String(cString: sqlite3_errmsg($0)) } ?? "无法创建任务数据库"
+            let message = opened.map { String(cString: sqlite3_errmsg($0)) } ?? L10n.tr("无法创建任务数据库")
             if let opened { sqlite3_close(opened) }
             throw TaskStoreError.database(message)
         }

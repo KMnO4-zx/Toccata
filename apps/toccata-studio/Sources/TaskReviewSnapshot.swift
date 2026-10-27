@@ -9,7 +9,8 @@ struct TaskReviewSnapshot {
     let tasks: [TodoTask]
     let completedRoots: [MenuTaskTreeNode]
     let pendingRoots: [MenuTaskTreeNode]
-    let title: String
+    private let range: TaskReviewRange
+    var title: String { range.title }
     let dateLabel: String
 
     /// Export is only formatted when requested, so ordinary view updates avoid
@@ -59,7 +60,6 @@ struct TaskReviewSnapshot {
             if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
             return $0.id < $1.id
         }
-        let title = range.title
         let dateFormatter = Self.formatter("yyyy-MM-dd", calendar: calendar)
         let dateLabel = "\(dateFormatter.string(from: dates.start)) — \(dateFormatter.string(from: dates.end))"
         let parentTitles = byID.mapValues(\.title)
@@ -84,7 +84,7 @@ struct TaskReviewSnapshot {
             let right = latestCompletion($1)
             return left == right ? $0.id < $1.id : left > right
         }
-        self.title = title
+        self.range = range
         self.dateLabel = dateLabel
         self.parentTitles = parentTitles
         self.calendar = calendar
@@ -109,13 +109,13 @@ struct TaskReviewSnapshot {
         let timestampFormatter = formatter("yyyy-MM-dd HH:mm", calendar: calendar)
         var lines = [
             "# \(title)", "", dateLabel, "",
-            "已完成 \(completed.count) 项 · 未完成 \(pending.count) 项（含子任务）", ""
+            L10n.tr("已完成 \(completed.count) 项 · 未完成 \(pending.count) 项（含子任务）"), ""
         ]
 
-        for (heading, sectionTasks, isCompleted) in [("已完成", completed, true), ("未完成", pending, false)] {
+        for (heading, sectionTasks, isCompleted) in [(L10n.tr("已完成"), completed, true), (L10n.tr("未完成"), pending, false)] {
             lines += ["## \(heading)", ""]
             if sectionTasks.isEmpty {
-                lines += [isCompleted ? "暂无已完成任务。" : "暂无未完成任务。", ""]
+                lines += [isCompleted ? L10n.tr("暂无已完成任务。") : L10n.tr("暂无未完成任务。"), ""]
                 continue
             }
             for task in sectionTasks {
@@ -123,14 +123,14 @@ struct TaskReviewSnapshot {
                 let name = parent.map { "\(inlineText($0)) / \(inlineText(task.title))" } ?? inlineText(task.title)
                 let metadata: String
                 if let completedAt = task.completedAt {
-                    metadata = "完成于 \(timestampFormatter.string(from: completedAt))"
+                    metadata = L10n.tr("完成于 \(timestampFormatter.string(from: completedAt))")
                 } else {
-                    let plan = task.plannedDate.map { " · 计划 \(dateFormatter.string(from: $0))" } ?? ""
-                    metadata = "创建于 \(timestampFormatter.string(from: task.createdAt))\(plan)"
+                    let plan = task.plannedDate.map { L10n.tr(" · 计划 \(dateFormatter.string(from: $0))") } ?? ""
+                    metadata = L10n.tr("创建于 \(timestampFormatter.string(from: task.createdAt))\(plan)")
                 }
                 lines.append("- [\(isCompleted ? "x" : " ")] \(name)（\(metadata)）")
                 if !task.details.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    lines += ["", "  详情："]
+                    lines += ["", L10n.tr("  详情：")]
                     let details = task.details.replacingOccurrences(of: "\r\n", with: "\n")
                         .replacingOccurrences(of: "\r", with: "\n")
                     lines += details.components(separatedBy: "\n").map { "  \($0)" }

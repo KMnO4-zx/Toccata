@@ -1,0 +1,1 @@
+"NSInputMonitoringUsageDescription" = "Toccata 需要监控键盘输入，以统计键盘活跃度、每个按键的使用次数和应用使用时长。键码和活动记录仅保存在本机。";

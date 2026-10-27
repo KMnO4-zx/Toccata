@@ -9,9 +9,9 @@ enum MenuTaskScope: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .inbox: return "收集箱"
-        case .lastSevenDays: return "最近 7 天"
-        case .thisWeek: return "本周任务"
+        case .inbox: return L10n.tr("收集箱")
+        case .lastSevenDays: return L10n.tr("最近 7 天")
+        case .thisWeek: return L10n.tr("本周任务")
         }
     }
 
@@ -25,9 +25,9 @@ enum MenuTaskScope: String, CaseIterable, Identifiable {
 
     var titleExplanation: String {
         switch self {
-        case .inbox: return "想到的任务都留在这里，计划日期可以留空。"
-        case .lastSevenDays: return "最近 7 天创建的任务，包含已完成事项。"
-        case .thisWeek: return "本周新建、之前未完成，以及本周完成的任务。"
+        case .inbox: return L10n.tr("想到的任务都留在这里，计划日期可以留空。")
+        case .lastSevenDays: return L10n.tr("最近 7 天创建的任务，包含已完成事项。")
+        case .thisWeek: return L10n.tr("本周新建、之前未完成，以及本周完成的任务。")
         }
     }
 

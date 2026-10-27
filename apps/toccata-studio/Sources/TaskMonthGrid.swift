@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor
 struct TaskMonthGrid: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     let tasks: [TodoTask]
     @Binding var displayedMonth: Date
     @Binding var selectedDay: Date
@@ -9,29 +10,30 @@ struct TaskMonthGrid: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let calendar = Calendar.current
-    private let weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"]
+    private var weekdayLabels: [String] { [L10n.tr("一"), L10n.tr("二"), L10n.tr("三"), L10n.tr("四"), L10n.tr("五"), L10n.tr("六"), L10n.tr("日")] }
     private var columns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: compact ? 1 : 4), count: 7)
     }
 
     var body: some View {
+        let _ = interfaceLanguage.language
         VStack(spacing: compact ? 9 : 14) {
             HStack(spacing: compact ? 5 : 9) {
                 Text(monthLabel)
                     .font(.system(size: compact ? 14 : 18, weight: .semibold, design: .rounded))
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
-                Button("今天", action: showToday)
+                Button(L10n.tr("今天"), action: showToday)
                     .controlSize(.small)
-                    .help("回到今天")
+                    .help(L10n.tr("回到今天"))
                 Button { moveMonth(-1) } label: { Image(systemName: "chevron.left") }
                     .controlSize(.small)
-                    .help("上个月")
-                    .accessibilityLabel("上个月")
+                    .help(L10n.tr("上个月"))
+                    .accessibilityLabel(L10n.tr("上个月"))
                 Button { moveMonth(1) } label: { Image(systemName: "chevron.right") }
                     .controlSize(.small)
-                    .help("下个月")
-                    .accessibilityLabel("下个月")
+                    .help(L10n.tr("下个月"))
+                    .accessibilityLabel(L10n.tr("下个月"))
             }
 
             LazyVGrid(columns: columns, spacing: 4) {
@@ -53,9 +55,9 @@ struct TaskMonthGrid: View {
 
             if !compact {
                 HStack(spacing: 15) {
-                    eventLegend("创建", color: .blue)
-                    eventLegend("计划", color: .orange)
-                    eventLegend("完成", color: .green)
+                    eventLegend(L10n.tr("创建"), color: .blue)
+                    eventLegend(L10n.tr("计划"), color: .orange)
+                    eventLegend(L10n.tr("完成"), color: .green)
                     Spacer(minLength: 0)
                 }
             }
@@ -96,9 +98,9 @@ struct TaskMonthGrid: View {
             .opacity(cell.isInDisplayedMonth ? 1 : 0.36)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(dateLabel(cell.date))，创建 \(counts.created) 项，计划 \(counts.planned) 项，完成 \(counts.completed) 项")
+        .accessibilityLabel(L10n.tr("\(dateLabel(cell.date))，创建 \(counts.created) 项，计划 \(counts.planned) 项，完成 \(counts.completed) 项"))
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .help("\(dateLabel(cell.date)) · 创建 \(counts.created) · 计划 \(counts.planned) · 完成 \(counts.completed)")
+        .help(L10n.tr("\(dateLabel(cell.date)) · 创建 \(counts.created) · 计划 \(counts.planned) · 完成 \(counts.completed)"))
     }
 
     private func eventLegend(_ title: String, color: Color) -> some View {
@@ -115,11 +117,11 @@ struct TaskMonthGrid: View {
     }
 
     private var monthLabel: String {
-        "\(calendar.component(.year, from: displayedMonth))年\(calendar.component(.month, from: displayedMonth))月"
+        L10n.monthTitle(displayedMonth, calendar: calendar)
     }
 
     private func dateLabel(_ date: Date) -> String {
-        "\(calendar.component(.month, from: date))月\(calendar.component(.day, from: date))日"
+        L10n.tr("\(calendar.component(.month, from: date))月\(calendar.component(.day, from: date))日")
     }
 
     private func moveMonth(_ amount: Int) {

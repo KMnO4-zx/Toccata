@@ -7,9 +7,9 @@ enum TaskReviewRange: Hashable {
 
     var title: String {
         switch self {
-        case .preset(.thisWeek): return "本周任务回顾"
-        case .preset(.lastSevenDays): return "最近 7 天任务回顾"
-        case .custom: return "自定义时段任务回顾"
+        case .preset(.thisWeek): return L10n.tr("本周任务回顾")
+        case .preset(.lastSevenDays): return L10n.tr("最近 7 天任务回顾")
+        case .custom: return L10n.tr("自定义时段任务回顾")
         }
     }
 

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct KeyboardHeatmapView: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let layout: KeyboardLayout
@@ -11,7 +12,7 @@ struct KeyboardHeatmapView: View {
     @State private var hoveredKeyID: String?
 
     init(layout: KeyboardLayout = .magicKeyboard, counts: [Int: Int] = [:], fnMs: Int64 = 0,
-         periodDescription: String = "今天", labelScale: CGFloat = 1) {
+         periodDescription: String = L10n.tr("今天"), labelScale: CGFloat = 1) {
         self.layout = layout
         self.counts = counts
         self.fnMs = fnMs
@@ -20,11 +21,12 @@ struct KeyboardHeatmapView: View {
     }
 
     var body: some View {
+        let _ = interfaceLanguage.language
         Group {
             if layout.isValid {
                 keyboard
             } else {
-                Text("键盘布局不可用")
+                Text(L10n.tr("键盘布局不可用"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 120)
@@ -94,16 +96,16 @@ struct KeyboardHeatmapView: View {
         }
         .aspectRatio(layout.aspectRatio, contentMode: .fit)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("\(periodDescription)逐键键盘热度"))
+        .accessibilityLabel(Text(L10n.tr("\(periodDescription)逐键键盘热度")))
         .onDisappear { hoveredKeyID = nil }
     }
 
     private func activityDescription(for key: KeyboardLayout.Key) -> String {
         if key.code == 63 {
-            return "\(periodDescription)按住 \(Formatters.duration(ms: fnMs))"
+            return L10n.tr("\(periodDescription)按住 \(Formatters.duration(ms: fnMs))")
         }
         let count = max(0, counts[key.code ?? Int.min] ?? 0)
-        return "\(periodDescription)按下 \(count.formatted()) 次"
+        return L10n.tr("\(periodDescription)按下 \(count.formatted()) 次")
     }
 }
 

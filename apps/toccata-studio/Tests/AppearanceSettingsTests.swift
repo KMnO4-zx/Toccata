@@ -4,6 +4,13 @@ import XCTest
 
 @MainActor
 final class AppearanceSettingsTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        let original = L10n.language
+        L10n.language = .simplifiedChinese
+        addTeardownBlock { L10n.language = original }
+    }
+
     func testMissingPreferenceDefaultsToSystemAndAppliesWithoutWriting() throws {
         let defaults = try fixture()
         var applied: [AppearanceMode] = []

@@ -22,19 +22,19 @@ enum UpdateCheckFailure: Error, Equatable {
 
     var title: String {
         switch self {
-        case .noAccessibleRelease: return "尚无可访问的正式版本"
-        case .rateLimited: return "检查过于频繁，请稍后重试"
-        case .invalidResponse: return "暂时无法读取版本信息"
-        case .connectionFailed: return "暂时无法连接 GitHub"
+        case .noAccessibleRelease: return L10n.tr("尚无可访问的正式版本")
+        case .rateLimited: return L10n.tr("检查过于频繁，请稍后重试")
+        case .invalidResponse: return L10n.tr("暂时无法读取版本信息")
+        case .connectionFailed: return L10n.tr("暂时无法连接 GitHub")
         }
     }
 
     var detail: String {
         switch self {
-        case .noAccessibleRelease: return "可能尚未发布，或仓库仍为私有。可在 GitHub 登录后查看。"
-        case .rateLimited: return "GitHub 暂时限制了请求次数。你也可以直接查看发布页面。"
-        case .invalidResponse: return "发布信息暂不可用，请稍后重试或查看发布页面。"
-        case .connectionFailed: return "请检查网络后重试，也可以在浏览器中打开发布页面。"
+        case .noAccessibleRelease: return L10n.tr("可能尚未发布，或仓库仍为私有。可在 GitHub 登录后查看。")
+        case .rateLimited: return L10n.tr("GitHub 暂时限制了请求次数。你也可以直接查看发布页面。")
+        case .invalidResponse: return L10n.tr("发布信息暂不可用，请稍后重试或查看发布页面。")
+        case .connectionFailed: return L10n.tr("请检查网络后重试，也可以在浏览器中打开发布页面。")
         }
     }
 }

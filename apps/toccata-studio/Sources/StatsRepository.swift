@@ -13,11 +13,11 @@ enum TimeRange: Hashable, CaseIterable, Identifiable {
 
     var rawValue: String {
         switch self {
-        case .today: return "今日"
-        case .yesterday: return "昨日"
-        case .week: return "近 7 日"
-        case .month: return "近 30 日"
-        case .day: return "指定日"
+        case .today: return L10n.tr("今日")
+        case .yesterday: return L10n.tr("昨日")
+        case .week: return L10n.tr("近 7 日")
+        case .month: return L10n.tr("近 30 日")
+        case .day: return L10n.tr("指定日")
         }
     }
 
@@ -164,14 +164,14 @@ enum Formatters {
             let tenths = milliseconds / 100
             let seconds = tenths / 10
             let remainder = tenths % 10
-            return remainder == 0 ? "\(seconds)秒" : "\(seconds).\(remainder)秒"
+            return remainder == 0 ? L10n.tr("\(seconds)秒") : L10n.tr("\(seconds).\(remainder)秒")
         }
 
         let totalSeconds = milliseconds / 1000
         let h = totalSeconds / 3600
         let m = (totalSeconds % 3600) / 60
         let s = totalSeconds % 60
-        if h > 0 { return "\(h)小时\(m)分\(s)秒" }
-        return "\(m)分\(s)秒"
+        if h > 0 { return L10n.tr("\(h)小时\(m)分\(s)秒") }
+        return L10n.tr("\(m)分\(s)秒")
     }
 }

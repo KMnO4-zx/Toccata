@@ -11,9 +11,9 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .system: return "跟随系统"
-        case .light: return "月之亮面"
-        case .dark: return "月之暗面"
+        case .system: return L10n.tr("跟随系统")
+        case .light: return L10n.tr("月之亮面")
+        case .dark: return L10n.tr("月之暗面")
         }
     }
 

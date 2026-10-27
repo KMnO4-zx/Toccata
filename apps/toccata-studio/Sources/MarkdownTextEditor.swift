@@ -20,7 +20,7 @@ struct MarkdownTextEditor: NSViewRepresentable {
 
     func updateNSView(_ view: WKWebView, context: Context) {
         context.coordinator.update(text: text, isFocused: isFocused, fontSize: fontSize,
-                                   textColor: textColor, colorScheme: colorScheme)
+                                   textColor: textColor, colorScheme: colorScheme, placeholder: placeholder)
     }
 
     func makeCoordinator() -> MarkdownEditorCoordinator {
@@ -788,6 +788,8 @@ final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptM
     private var requestedFocus: Bool
     private var lastFocus: Bool?
     private var lastStyle: MarkdownEditorStyle?
+    private var placeholder = ""
+    private var lastPlaceholder: String?
     private var fontSize: CGFloat = 12
     private var textColor = NSColor.labelColor
     private var colorScheme: ColorScheme = .light
@@ -800,6 +802,7 @@ final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptM
 
     func attach(to webView: WKWebView, placeholder: String) {
         self.webView = webView
+        self.placeholder = placeholder
         PendingEdits.shared.registerEditor(self)
         webView.navigationDelegate = self
         webView.configuration.userContentController.add(self, name: "markdownChanged")
@@ -808,11 +811,12 @@ final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptM
     }
 
     func update(text: String, isFocused: Bool, fontSize: CGFloat, textColor: NSColor,
-                colorScheme: ColorScheme = .light) {
+                colorScheme: ColorScheme = .light, placeholder: String? = nil) {
         requestedFocus = isFocused
         self.fontSize = fontSize
         self.textColor = textColor
         self.colorScheme = colorScheme
+        if let placeholder { self.placeholder = placeholder }
         let appearanceName: NSAppearance.Name = colorScheme == .dark ? .darkAqua : .aqua
         if webView?.appearance?.name != appearanceName {
             webView?.appearance = NSAppearance(named: appearanceName)
@@ -822,6 +826,7 @@ final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptM
         // the final edit. Do not replace that edit with a stale external render.
         if !isFlushing, lastMarkdown != text { setMarkdown(text) }
         updateStyle()
+        updatePlaceholder()
         if !isFlushing { updateFocus(isFocused) }
     }
 
@@ -871,6 +876,7 @@ final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptM
         isReady = true
         setMarkdown(text)
         updateStyle()
+        updatePlaceholder()
         updateFocus(requestedFocus)
     }
 
@@ -905,6 +911,13 @@ final class MarkdownEditorCoordinator: NSObject, WKNavigationDelegate, WKScriptM
         // Only CSS changes: no HTML reload, normalization, or focus mutation.
         // Composition state, native binding, DOM nodes, and selection stay intact.
         webView?.evaluateJavaScript(style.javascript)
+    }
+
+    private func updatePlaceholder() {
+        guard lastPlaceholder != placeholder else { return }
+        lastPlaceholder = placeholder
+        // Only the hint changes. Preserve the DOM, composition, caret and draft.
+        webView?.evaluateJavaScript("document.getElementById('editor').dataset.placeholder = \(MarkdownTextEditor.javascriptString(placeholder));")
     }
 }
 

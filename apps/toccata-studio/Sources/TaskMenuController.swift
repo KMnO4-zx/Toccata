@@ -19,6 +19,7 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var globalClickMonitor: Any?
     private var observers: [NSObjectProtocol] = []
     private var storeSubscription: AnyCancellable?
+    private var languageSubscription: AnyCancellable?
     private var isDismissing = false
     private var isEditorRevealing = false
     private var editorRevealGeneration = UUID()
@@ -34,17 +35,24 @@ final class TaskMenuController: NSObject, ObservableObject {
         self.appearance = appearance
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            button.image = NSImage(systemSymbolName: "square.stack.3d.up.fill", accessibilityDescription: "Toccata 任务")
+            button.image = NSImage(systemSymbolName: "square.stack.3d.up.fill", accessibilityDescription: L10n.tr("Toccata 任务"))
             button.image?.isTemplate = true
             button.imagePosition = .imageLeading
             button.font = .systemFont(ofSize: 13)
-            button.toolTip = "Toccata 任务 · 右键打开设置"
+            button.toolTip = L10n.tr("Toccata 任务 · 右键打开设置")
             button.target = self
             button.action = #selector(toggleMenu)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-            button.setAccessibilityLabel("Toccata 任务")
+            button.setAccessibilityLabel(L10n.tr("Toccata 任务"))
         }
         statusItem = item
+        languageSubscription = LanguageSettings.shared.$language.dropFirst()
+            .receive(on: RunLoop.main).sink { [weak self] _ in
+                self?.statusItem?.button?.toolTip = L10n.tr("Toccata 任务 · 右键打开设置")
+                self?.statusItem?.button?.setAccessibilityLabel(L10n.tr("Toccata 任务"))
+                self?.listPanel?.title = L10n.tr("Toccata 任务列表")
+                self?.editorPanel?.title = L10n.tr("Toccata 任务详情")
+            }
         presentation.onShowEditor = { [weak self] _, focus in self?.showEditor(focus: focus) }
         presentation.onDismissEditor = { [weak self] in self?.hideEditor() }
         presentation.onFocusList = { [weak self] in self?.listPanel?.makeKeyAndOrderFront(nil) }
@@ -109,7 +117,7 @@ final class TaskMenuController: NSObject, ObservableObject {
         let frame = MenuPanelLayout.listFrame(anchor: anchor, screen: screen.visibleFrame)
         presentation.panelSize = frame.size
         if listPanel == nil {
-            let panel = makePanel(title: "Toccata 任务列表")
+            let panel = makePanel(title: L10n.tr("Toccata 任务列表"))
             panel.contentView = NSHostingView(rootView:
                 QuickCaptureView()
                     .environmentObject(store)
@@ -170,7 +178,7 @@ final class TaskMenuController: NSObject, ObservableObject {
             return
         }
         if editorPanel == nil {
-            let panel = makePanel(title: "Toccata 任务详情")
+            let panel = makePanel(title: L10n.tr("Toccata 任务详情"))
             panel.contentView = nil
             editorPanel = panel
         }
@@ -278,9 +286,9 @@ final class TaskMenuController: NSObject, ObservableObject {
         dismiss()
         loginItems.refresh()
         let menu = NSMenu()
-        menu.addItem(settingsItem("打开工作台", action: #selector(openWorkbenchFromSettings)))
+        menu.addItem(settingsItem(L10n.tr("打开工作台"), action: #selector(openWorkbenchFromSettings)))
 
-        let appearanceItem = NSMenuItem(title: "外观", action: nil, keyEquivalent: "")
+        let appearanceItem = NSMenuItem(title: L10n.tr("外观"), action: nil, keyEquivalent: "")
         let appearanceMenu = NSMenu()
         for mode in AppearanceMode.allCases {
             let item = settingsItem(mode.title, action: #selector(selectAppearance(_:)))
@@ -292,12 +300,12 @@ final class TaskMenuController: NSObject, ObservableObject {
         menu.addItem(appearanceItem)
         menu.addItem(.separator())
 
-        let loginItem = settingsItem("登录时启动", action: #selector(toggleLoginItem))
+        let loginItem = settingsItem(L10n.tr("登录时启动"), action: #selector(toggleLoginItem))
         loginItem.state = loginItems.enabled ? .on : .off
         menu.addItem(loginItem)
         if loginItems.requiresApproval {
-            menu.addItem(settingsItem("前往系统设置允许启动", action: #selector(openLoginSettings)))
-            menu.addItem(settingsItem("取消登录启动申请", action: #selector(disableLoginItem)))
+            menu.addItem(settingsItem(L10n.tr("前往系统设置允许启动"), action: #selector(openLoginSettings)))
+            menu.addItem(settingsItem(L10n.tr("取消登录启动申请"), action: #selector(disableLoginItem)))
         }
         if let error = loginItems.errorMessage {
             let item = NSMenuItem(title: error, action: nil, keyEquivalent: "")
@@ -306,16 +314,16 @@ final class TaskMenuController: NSObject, ObservableObject {
         }
         menu.addItem(.separator())
 
-        let shortcutsItem = NSMenuItem(title: "快捷键", action: nil, keyEquivalent: "")
+        let shortcutsItem = NSMenuItem(title: L10n.tr("快捷键"), action: nil, keyEquivalent: "")
         let shortcutsMenu = NSMenu()
-        for title in ["Tab：编辑所选任务的描述", "Enter：为顶层任务添加子任务", "↑ / ↓：选择任务", "Esc：收起编辑浮窗"] {
+        for title in [L10n.tr("Tab：编辑所选任务的描述"), L10n.tr("Enter：为顶层任务添加子任务"), L10n.tr("↑ / ↓：选择任务"), L10n.tr("Esc：收起编辑浮窗")] {
             shortcutsMenu.addItem(NSMenuItem(title: title, action: nil, keyEquivalent: ""))
         }
         shortcutsItem.submenu = shortcutsMenu
         menu.addItem(shortcutsItem)
         menu.addItem(.separator())
-        menu.addItem(settingsItem("关于 Toccata", action: #selector(openAboutFromSettings)))
-        menu.addItem(settingsItem("退出 Toccata", action: #selector(quitFromSettings)))
+        menu.addItem(settingsItem(L10n.tr("关于 Toccata"), action: #selector(openAboutFromSettings)))
+        menu.addItem(settingsItem(L10n.tr("退出 Toccata"), action: #selector(quitFromSettings)))
         NSMenu.popUpContextMenu(menu, with: event, for: button)
     }
 

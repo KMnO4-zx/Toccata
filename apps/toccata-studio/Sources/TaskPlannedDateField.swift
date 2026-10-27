@@ -3,6 +3,7 @@ import SwiftUI
 /// A readable date control. Calendar edits stay local until the user confirms.
 @MainActor
 struct TaskPlannedDateField: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     let date: Date?
     let onChange: (Date?) -> Void
 
@@ -11,6 +12,7 @@ struct TaskPlannedDateField: View {
     @State private var referenceDate = Date()
 
     var body: some View {
+        let _ = interfaceLanguage.language
         Button {
             initialDate = date
             referenceDate = Date()
@@ -24,10 +26,10 @@ struct TaskPlannedDateField: View {
                     .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 10))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(date.map(dateLabel) ?? "安排日期")
+                    Text(date.map(dateLabel) ?? L10n.tr("安排日期"))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.primary)
-                    Text(date.map { weekdayLabel($0) + " · 点击调整" } ?? "暂未安排，点击选择")
+                    Text(date.map { weekdayLabel($0) + L10n.tr(" · 点击调整") } ?? L10n.tr("暂未安排，点击选择"))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
@@ -46,8 +48,8 @@ struct TaskPlannedDateField: View {
             .contentShape(RoundedRectangle(cornerRadius: 11))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("设置计划日期")
-        .accessibilityValue(date.map { dateLabel($0) + "，" + weekdayLabel($0) } ?? "未安排日期")
+        .accessibilityLabel(L10n.tr("设置计划日期"))
+        .accessibilityValue(date.map { dateLabel($0) + "，" + weekdayLabel($0) } ?? L10n.tr("未安排日期"))
         .popover(isPresented: $showsCalendar, arrowEdge: .bottom) {
             TaskPlannedDatePicker(
                 initialDate: initialDate,
@@ -67,11 +69,10 @@ struct TaskPlannedDateField: View {
     }
 
     private func dateLabel(_ date: Date) -> String {
-        let calendar = Calendar.current
-        return "\(calendar.component(.year, from: date))年\(calendar.component(.month, from: date))月\(calendar.component(.day, from: date))日"
+        return date.formatted(.dateTime.year().month().day().locale(L10n.locale))
     }
 
     private func weekdayLabel(_ date: Date) -> String {
-        ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][Calendar.current.component(.weekday, from: date) - 1]
+        [L10n.tr("周日"), L10n.tr("周一"), L10n.tr("周二"), L10n.tr("周三"), L10n.tr("周四"), L10n.tr("周五"), L10n.tr("周六")][Calendar.current.component(.weekday, from: date) - 1]
     }
 }

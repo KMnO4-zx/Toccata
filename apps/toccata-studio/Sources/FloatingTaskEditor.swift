@@ -16,11 +16,13 @@ struct FloatingTaskEditor: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(TaskMenuStyle.background)
+        .languageChangeTransition()
     }
 }
 
 @MainActor
 private struct FloatingTaskEditorContent: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @EnvironmentObject private var store: TaskStore
     @EnvironmentObject private var presentation: MenuTaskPresentation
     let task: TodoTask
@@ -52,6 +54,7 @@ private struct FloatingTaskEditorContent: View {
     private var validTitle: Bool { !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
+        let _ = interfaceLanguage.language
         VStack(spacing: 0) {
             topBar
             Rectangle().fill(TaskMenuStyle.input).frame(height: 0.5)
@@ -112,16 +115,16 @@ private struct FloatingTaskEditorContent: View {
             if isChoosingDate { isChoosingDate = false }
             else { closeEditor() }
         }
-        .alert("删除这个任务？", isPresented: $confirmsDeletion) {
-            Button("取消", role: .cancel) {}
-            Button("删除任务", role: .destructive) {
+        .alert(L10n.tr("删除这个任务？"), isPresented: $confirmsDeletion) {
+            Button(L10n.tr("取消"), role: .cancel) {}
+            Button(L10n.tr("删除任务"), role: .destructive) {
                 if store.deleteTask(id: task.id) {
                     presentation.dismissEditor()
                     presentation.requestListFocus()
                 }
             }
         } message: {
-            Text(children.isEmpty ? "任务详情也会删除。此操作无法撤销。" : "任务、所有子任务及其详情都会删除。此操作无法撤销。")
+            Text(children.isEmpty ? L10n.tr("任务详情也会删除。此操作无法撤销。") : L10n.tr("任务、所有子任务及其详情都会删除。此操作无法撤销。"))
         }
     }
 
@@ -131,7 +134,7 @@ private struct FloatingTaskEditorContent: View {
                 saveDraft()
                 _ = store.setCompleted(id: task.id, completed: !task.isCompleted)
             }
-            .accessibilityLabel(task.isCompleted ? "恢复任务" : "完成任务")
+            .accessibilityLabel(task.isCompleted ? L10n.tr("恢复任务") : L10n.tr("完成任务"))
             Rectangle().fill(TaskMenuStyle.muted).frame(width: 0.5, height: 16)
             Button {
                 dateChoice = draft.plannedDate
@@ -140,13 +143,13 @@ private struct FloatingTaskEditorContent: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "calendar").font(.system(size: 14))
-                    Text(draft.plannedDate.map { $0.formatted(.dateTime.month().day()) } ?? "设置日期")
+                    Text(draft.plannedDate.map { $0.formatted(.dateTime.month().day().locale(L10n.locale)) } ?? L10n.tr("设置日期"))
                         .font(.system(size: 13))
                 }
                 .foregroundStyle(draft.plannedDate == nil ? TaskMenuStyle.secondary : TaskMenuStyle.accent)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("设置计划日期")
+            .accessibilityLabel(L10n.tr("设置计划日期"))
             .popover(isPresented: $isChoosingDate, arrowEdge: .bottom) {
                 dateChooser.background(MenuCompanionWindow(presentation: presentation))
             }
@@ -180,8 +183,8 @@ private struct FloatingTaskEditorContent: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .accessibilityLabel("任务优先级")
-        .help("设置任务优先级")
+        .accessibilityLabel(L10n.tr("任务优先级"))
+        .help(L10n.tr("设置任务优先级"))
     }
 
     private var priorityColor: Color {
@@ -224,19 +227,19 @@ private struct FloatingTaskEditorContent: View {
                     .lineLimit(1)
             }
             .buttonStyle(.plain)
-            .help("返回父任务")
+            .help(L10n.tr("返回父任务"))
         }
     }
 
     private var titleEditor: some View {
         HStack(alignment: .top, spacing: 8) {
-            TextField("任务名称", text: $draft.title, axis: .vertical)
+            TextField(L10n.tr("任务名称"), text: $draft.title, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 17, weight: .bold))
                 .foregroundStyle(TaskMenuStyle.primary)
                 .lineLimit(1...4)
                 .focused($focusedField, equals: .title)
-                .accessibilityLabel("任务名称")
+                .accessibilityLabel(L10n.tr("任务名称"))
             if task.parentID == nil {
                 Button(action: focusChild) {
                     Image(systemName: "list.bullet")
@@ -246,8 +249,8 @@ private struct FloatingTaskEditorContent: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("添加子任务")
-                .accessibilityLabel("展开子任务输入")
+                .help(L10n.tr("添加子任务"))
+                .accessibilityLabel(L10n.tr("展开子任务输入"))
             }
         }
     }
@@ -264,7 +267,7 @@ private struct FloatingTaskEditorContent: View {
     private func descriptionEditor(height: CGFloat) -> some View {
         MarkdownTextEditor(
             text: $draft.details,
-            placeholder: "写下任务描述…",
+            placeholder: L10n.tr("写下任务描述…"),
             isFocused: Binding(
                 get: { descriptionFocused },
                 set: { focused in
@@ -275,7 +278,7 @@ private struct FloatingTaskEditorContent: View {
             textColor: TaskMenuStyle.textColor
         )
         .frame(height: height)
-        .accessibilityLabel("任务描述")
+        .accessibilityLabel(L10n.tr("任务描述"))
     }
 
     private var childList: some View {
@@ -285,7 +288,7 @@ private struct FloatingTaskEditorContent: View {
                     TaskMenuCheckbox(isCompleted: child.isCompleted, size: 12) {
                         _ = store.setCompleted(id: child.id, completed: !child.isCompleted)
                     }
-                    .accessibilityLabel(child.isCompleted ? "恢复子任务：\(child.title)" : "完成子任务：\(child.title)")
+                    .accessibilityLabel(child.isCompleted ? L10n.tr("恢复子任务：\(child.title)") : L10n.tr("完成子任务：\(child.title)"))
                     Button {
                         saveDraft()
                         presentation.selectTask(child.id)
@@ -298,7 +301,7 @@ private struct FloatingTaskEditorContent: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("编辑子任务：\(child.title)")
+                    .accessibilityLabel(L10n.tr("编辑子任务：\(child.title)"))
                     if !child.details.isEmpty {
                         Image(systemName: "text.alignleft")
                             .font(.system(size: 10))
@@ -319,13 +322,13 @@ private struct FloatingTaskEditorContent: View {
                     Image(systemName: "plus")
                         .font(.system(size: 12))
                         .foregroundStyle(TaskMenuStyle.secondary)
-                    TextField("添加子任务", text: $childTitle)
+                    TextField(L10n.tr("添加子任务"), text: $childTitle)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12))
                         .foregroundStyle(TaskMenuStyle.text)
                         .focused($focusedField, equals: .child)
                         .onSubmit(addChild)
-                        .accessibilityLabel("添加子任务")
+                        .accessibilityLabel(L10n.tr("添加子任务"))
                 }
                 .padding(.leading, 8)
                 .padding(.vertical, 8)
@@ -335,14 +338,14 @@ private struct FloatingTaskEditorContent: View {
 
     private var footer: some View {
         HStack(spacing: 13) {
-            Label("收集箱", systemImage: "tray.and.arrow.forward")
+            Label(L10n.tr("收集箱"), systemImage: "tray.and.arrow.forward")
                 .font(.system(size: 13))
                 .foregroundStyle(TaskMenuStyle.primary)
             Spacer(minLength: 4)
             if !validTitle {
-                Text("名称不能为空").font(.system(size: 10)).foregroundStyle(.orange)
+                Text(L10n.tr("名称不能为空")).font(.system(size: 10)).foregroundStyle(.orange)
             } else if saveFailed {
-                Button("保存失败，重试", action: saveDraft)
+                Button(L10n.tr("保存失败，重试"), action: saveDraft)
                     .font(.system(size: 10))
                     .buttonStyle(.plain)
                     .foregroundStyle(.orange)
@@ -354,8 +357,8 @@ private struct FloatingTaskEditorContent: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("编辑任务描述")
-            .help("编辑任务描述")
+            .accessibilityLabel(L10n.tr("编辑任务描述"))
+            .help(L10n.tr("编辑任务描述"))
             moreMenu
         }
         .foregroundStyle(TaskMenuStyle.primary)
@@ -365,13 +368,13 @@ private struct FloatingTaskEditorContent: View {
 
     private var moreMenu: some View {
         Menu {
-            Button("编辑描述", action: focusDescription)
+            Button(L10n.tr("编辑描述"), action: focusDescription)
             if task.parentID == nil {
-                Button("添加子任务", action: focusChild)
+                Button(L10n.tr("添加子任务"), action: focusChild)
             }
             Divider()
-            Button("关闭详情", action: closeEditor)
-            Button("删除任务…", role: .destructive) { confirmsDeletion = true }
+            Button(L10n.tr("关闭详情"), action: closeEditor)
+            Button(L10n.tr("删除任务…"), role: .destructive) { confirmsDeletion = true }
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 16))
@@ -381,7 +384,7 @@ private struct FloatingTaskEditorContent: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .accessibilityLabel("更多任务操作")
+        .accessibilityLabel(L10n.tr("更多任务操作"))
     }
 
     private func applyFocusRequest(_ request: MenuEditorFocusRequest?) {

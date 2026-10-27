@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor
 struct MenuCalendarView: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @EnvironmentObject private var tasks: TaskStore
     @EnvironmentObject private var presentation: MenuTaskPresentation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -16,6 +17,7 @@ struct MenuCalendarView: View {
     }
 
     var body: some View {
+        let _ = interfaceLanguage.language
         let matchingTasks = dayTasks
         let snapshot = WorkspaceTaskListSnapshot(allTasks: tasks.tasks, scopedTasks: matchingTasks)
         let rows = WorkspaceTaskListSnapshot.rows(from: snapshot.pendingRoots + snapshot.completedRoots,
@@ -31,7 +33,7 @@ struct MenuCalendarView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(TaskMenuStyle.primary)
                 Spacer()
-                Text("\(matchingTasks.count) 项")
+                Text(L10n.tr("\(matchingTasks.count) 项"))
                     .font(.system(size: 10))
                     .foregroundStyle(TaskMenuStyle.secondary)
             }
@@ -58,10 +60,10 @@ struct MenuCalendarView: View {
                 Image(systemName: "calendar")
                     .font(.system(size: 22, weight: .light))
                     .foregroundStyle(TaskMenuStyle.muted)
-                Text("这一天还没有任务记录")
+                Text(L10n.tr("这一天还没有任务记录"))
                     .font(.system(size: 11))
                     .foregroundStyle(TaskMenuStyle.secondary)
-                Text("创建、计划或完成的任务\n会按实际日期显示在这里。")
+                Text(L10n.tr("创建、计划或完成的任务\n会按实际日期显示在这里。"))
                     .font(.system(size: 10))
                     .foregroundStyle(TaskMenuStyle.muted)
                     .multilineTextAlignment(.center)
@@ -97,7 +99,7 @@ struct MenuCalendarView: View {
                 _ = tasks.setCompleted(id: task.id, completed: !task.isCompleted)
             }
             .frame(width: 12, height: 32)
-            .accessibilityLabel("\(task.isCompleted ? "恢复为待办" : "完成")：\(task.title)")
+            .accessibilityLabel("\(task.isCompleted ? L10n.tr("恢复为待办") : L10n.tr("完成"))：\(task.title)")
 
             Button { presentation.toggleTask(task.id) } label: {
                 VStack(alignment: .leading, spacing: 3) {
@@ -119,15 +121,15 @@ struct MenuCalendarView: View {
                         if !row.node.isContextOnly {
                             HStack(spacing: 5) {
                                 if calendar.isDate(task.createdAt, inSameDayAs: selectedDay) {
-                                    eventLabel("创建", color: .blue)
+                                    eventLabel(L10n.tr("创建"), color: .blue)
                                 }
                                 if let plannedDate = task.plannedDate,
                                    calendar.isDate(plannedDate, inSameDayAs: selectedDay) {
-                                    eventLabel("计划", color: .orange)
+                                    eventLabel(L10n.tr("计划"), color: .orange)
                                 }
                                 if let completedAt = task.completedAt,
                                    calendar.isDate(completedAt, inSameDayAs: selectedDay) {
-                                    eventLabel("完成", color: .green)
+                                    eventLabel(L10n.tr("完成"), color: .green)
                                 }
                             }
                         }
@@ -139,8 +141,8 @@ struct MenuCalendarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("编辑任务：\(task.title)")
-            .accessibilityValue(row.node.isContextOnly ? "父任务上下文" : "")
+            .accessibilityLabel(L10n.tr("编辑任务：\(task.title)"))
+            .accessibilityValue(row.node.isContextOnly ? L10n.tr("父任务上下文") : "")
             .accessibilityIdentifier("menu-calendar-task-\(task.id)")
             .help(taskHelp(row))
             SubtaskDragHandle(task: task)
@@ -164,8 +166,8 @@ struct MenuCalendarView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.leading, 7 + indentation)
-                .accessibilityLabel(isCollapsed ? "展开\(task.title)的子任务" : "收起\(task.title)的子任务")
-                .accessibilityValue(isCollapsed ? "已收起" : "已展开")
+                .accessibilityLabel(isCollapsed ? L10n.tr("展开\(task.title)的子任务") : L10n.tr("收起\(task.title)的子任务"))
+                .accessibilityValue(isCollapsed ? L10n.tr("已收起") : L10n.tr("已展开"))
             }
         }
         .background {
@@ -183,11 +185,11 @@ struct MenuCalendarView: View {
 
     private func taskHelp(_ row: WorkspaceTaskListRow) -> String {
         let task = row.task
-        if row.node.isContextOnly { return "\(task.title) · 父任务上下文" }
+        if row.node.isContextOnly { return L10n.tr("\(task.title) · 父任务上下文") }
         var events: [String] = []
-        if calendar.isDate(task.createdAt, inSameDayAs: selectedDay) { events.append("创建") }
-        if let date = task.plannedDate, calendar.isDate(date, inSameDayAs: selectedDay) { events.append("计划") }
-        if let date = task.completedAt, calendar.isDate(date, inSameDayAs: selectedDay) { events.append("完成") }
+        if calendar.isDate(task.createdAt, inSameDayAs: selectedDay) { events.append(L10n.tr("创建")) }
+        if let date = task.plannedDate, calendar.isDate(date, inSameDayAs: selectedDay) { events.append(L10n.tr("计划")) }
+        if let date = task.completedAt, calendar.isDate(date, inSameDayAs: selectedDay) { events.append(L10n.tr("完成")) }
         return "\(task.title) · \(events.joined(separator: "、"))"
     }
 
@@ -198,8 +200,8 @@ struct MenuCalendarView: View {
     }
 
     private var dateLabel: String {
-        let weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+        let weekdays = [L10n.tr("周日"), L10n.tr("周一"), L10n.tr("周二"), L10n.tr("周三"), L10n.tr("周四"), L10n.tr("周五"), L10n.tr("周六")]
         let weekday = weekdays[calendar.component(.weekday, from: selectedDay) - 1]
-        return "\(calendar.component(.month, from: selectedDay))月\(calendar.component(.day, from: selectedDay))日 · \(weekday)"
+        return L10n.tr("\(calendar.component(.month, from: selectedDay))月\(calendar.component(.day, from: selectedDay))日 · \(weekday)")
     }
 }

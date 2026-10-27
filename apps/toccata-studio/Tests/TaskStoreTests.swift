@@ -5,6 +5,13 @@ import XCTest
 
 @MainActor
 final class TaskStoreTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        let original = L10n.language
+        L10n.language = .simplifiedChinese
+        addTeardownBlock { L10n.language = original }
+    }
+
     private final class Clock {
         var date: Date
         init(_ date: Date) { self.date = date }

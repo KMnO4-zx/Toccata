@@ -4,6 +4,13 @@ import XCTest
 @testable import toccata_studio
 
 final class ActivityShareTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        let original = L10n.language
+        L10n.language = .simplifiedChinese
+        addTeardownBlock { L10n.language = original }
+    }
+
     private var calendar: Calendar {
         var result = Calendar(identifier: .gregorian)
         result.timeZone = TimeZone(identifier: "Asia/Shanghai")!

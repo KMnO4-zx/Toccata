@@ -10,10 +10,10 @@ enum TaskCalendarMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: return "全部记录"
-        case .planned: return "计划"
-        case .created: return "创建"
-        case .completed: return "完成"
+        case .all: return L10n.tr("全部记录")
+        case .planned: return L10n.tr("计划")
+        case .created: return L10n.tr("创建")
+        case .completed: return L10n.tr("完成")
         }
     }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 /// A light row shared by task lists. Child placement carries the relationship,
 /// so children do not need to repeat their parent's title below every name.
 struct WorkspaceTaskRow: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let task: TodoTask
     let displayMode: TaskListDisplayMode
@@ -14,6 +15,7 @@ struct WorkspaceTaskRow: View {
     var onToggleExpanded: (() -> Void)?
 
     var body: some View {
+        let _ = interfaceLanguage.language
         HStack(alignment: .top, spacing: 10) {
             Button(action: onToggle) {
                 Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
@@ -22,7 +24,7 @@ struct WorkspaceTaskRow: View {
                     .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(task.isCompleted ? "将\(task.title)恢复为待办" : "完成\(task.title)")
+            .accessibilityLabel(task.isCompleted ? L10n.tr("将\(task.title)恢复为待办") : L10n.tr("完成\(task.title)"))
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(task.title)
@@ -61,9 +63,9 @@ struct WorkspaceTaskRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(isExpanded ? "收起 \(childCount) 个子任务" : "展开 \(childCount) 个子任务")
-                .accessibilityLabel(isExpanded ? "收起\(task.title)的子任务" : "展开\(task.title)的子任务")
-                .accessibilityValue(isExpanded ? "已展开" : "已收起")
+                .help(isExpanded ? L10n.tr("收起 \(childCount) 个子任务") : L10n.tr("展开 \(childCount) 个子任务"))
+                .accessibilityLabel(isExpanded ? L10n.tr("收起\(task.title)的子任务") : L10n.tr("展开\(task.title)的子任务"))
+                .accessibilityValue(isExpanded ? L10n.tr("已展开") : L10n.tr("已收起"))
             }
         }
         .padding(.leading, CGFloat(depth) * 26)

@@ -23,16 +23,18 @@ enum KeyboardUsageRanking {
 }
 
 struct KeyboardActivityHeader: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     let title: String
     let totalCount: Int
     let counts: [Int: Int]
 
     var body: some View {
+        let _ = interfaceLanguage.language
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title).font(.headline)
                 Spacer(minLength: 12)
-                Text("\(totalCount.formatted()) 次")
+                Text(L10n.tr("\(totalCount.formatted()) 次"))
                     .font(.system(.subheadline, design: .rounded).weight(.medium))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
@@ -52,7 +54,7 @@ struct KeyboardActivityHeader: View {
     }
 
     private var hint: some View {
-        Text("悬停查看按键次数 · Fn 显示按住时长")
+        Text(L10n.tr("悬停查看按键次数 · Fn 显示按住时长"))
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: true, vertical: false)
@@ -64,11 +66,11 @@ struct KeyboardActivityHeader: View {
         if !entries.isEmpty {
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .firstTextBaseline, spacing: 14) {
-                    Text("常用按键").foregroundStyle(.secondary)
+                    Text(L10n.tr("常用按键")).foregroundStyle(.secondary)
                     ForEach(entries) { entry in keyUsage(entry) }
                 }
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("常用按键").foregroundStyle(.secondary)
+                    Text(L10n.tr("常用按键")).foregroundStyle(.secondary)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), alignment: .leading)], alignment: .leading, spacing: 8) {
                         ForEach(entries) { entry in keyUsage(entry) }
                     }
@@ -76,8 +78,8 @@ struct KeyboardActivityHeader: View {
             }
             .font(.system(size: 11))
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("所选时段按键次数前五名")
-            .accessibilityValue(entries.map { "\($0.name)，\($0.count) 次" }.joined(separator: "；"))
+            .accessibilityLabel(L10n.tr("所选时段按键次数前五名"))
+            .accessibilityValue(entries.map { L10n.tr("\($0.name)，\($0.count) 次") }.joined(separator: "；"))
         }
     }
 
@@ -89,7 +91,7 @@ struct KeyboardActivityHeader: View {
                 .padding(.vertical, 3)
                 .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 4))
                 .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5))
-            Text("\(entry.count.formatted()) 次")
+            Text(L10n.tr("\(entry.count.formatted()) 次"))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }

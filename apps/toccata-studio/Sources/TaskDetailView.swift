@@ -9,6 +9,7 @@ struct TaskDetailFocusRequest: Equatable {
 
 @MainActor
 struct TaskDetailView: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @EnvironmentObject private var store: TaskStore
     let task: TodoTask
     let onSelect: (String) -> Void
@@ -40,6 +41,7 @@ struct TaskDetailView: View {
     }
 
     var body: some View {
+        let _ = interfaceLanguage.language
         VStack(spacing: 0) {
             topBar
             Divider()
@@ -106,11 +108,11 @@ struct TaskDetailView: View {
             }
             saveDraft(preservingValidTitle: true)
         }
-        .alert("删除这个任务？", isPresented: $confirmsDeletion) {
-            Button("取消", role: .cancel) {}
-            Button("删除任务", role: .destructive) { _ = store.deleteTask(id: task.id) }
+        .alert(L10n.tr("删除这个任务？"), isPresented: $confirmsDeletion) {
+            Button(L10n.tr("取消"), role: .cancel) {}
+            Button(L10n.tr("删除任务"), role: .destructive) { _ = store.deleteTask(id: task.id) }
         } message: {
-            Text(children.isEmpty ? "任务详情也会删除。此操作无法撤销。" : "任务、所有子任务及其详情都会删除。此操作无法撤销。")
+            Text(children.isEmpty ? L10n.tr("任务详情也会删除。此操作无法撤销。") : L10n.tr("任务、所有子任务及其详情都会删除。此操作无法撤销。"))
         }
     }
 
@@ -126,13 +128,13 @@ struct TaskDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("返回父任务")
+                .help(L10n.tr("返回父任务"))
             } else {
-                Label("任务详情", systemImage: "text.alignleft")
+                Label(L10n.tr("任务详情"), systemImage: "text.alignleft")
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 5)
-            Text(hasChanges ? (validTitle ? (saveFailed ? "保存失败，请重试" : "正在保存…") : "标题不能为空") : "已保存")
+            Text(hasChanges ? (validTitle ? (saveFailed ? L10n.tr("保存失败，请重试") : L10n.tr("正在保存…")) : L10n.tr("标题不能为空")) : L10n.tr("已保存"))
                 .font(.system(size: 11))
                 .foregroundStyle(validTitle && !saveFailed ? Color.secondary : Color.orange)
             Button {
@@ -140,13 +142,13 @@ struct TaskDetailView: View {
             } label: {
                 Image(systemName: "square.and.arrow.down")
             }
-            .help("保存修改（⌘S）；修改也会自动保存")
+            .help(L10n.tr("保存修改（⌘S）；修改也会自动保存"))
             .keyboardShortcut("s", modifiers: .command)
             .disabled(!hasChanges || !validTitle)
             Button(role: .destructive) { confirmsDeletion = true } label: {
                 Image(systemName: "trash")
             }
-            .help("删除任务")
+            .help(L10n.tr("删除任务"))
         }
         .font(.system(size: 12))
         .padding(.horizontal, 20)
@@ -160,31 +162,31 @@ struct TaskDetailView: View {
                     saveDraft(preservingValidTitle: true)
                     _ = store.setCompleted(id: task.id, completed: !task.isCompleted)
                 } label: {
-                    Label(task.isCompleted ? "已完成 · 点击恢复待办" : "标记完成", systemImage: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                    Label(task.isCompleted ? L10n.tr("已完成 · 点击恢复待办") : L10n.tr("标记完成"), systemImage: task.isCompleted ? "checkmark.circle.fill" : "circle")
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(task.isCompleted ? Color.accentColor : Color.secondary)
                 if let completedAt = task.completedAt {
                     Spacer(minLength: 0)
-                    Text(completedAt.formatted(.dateTime.month().day().hour().minute()))
+                    Text(completedAt.formatted(.dateTime.month().day().hour().minute().locale(L10n.locale)))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
             }
             .font(.system(size: 12))
 
-            TextField("任务名称", text: $draft.title, axis: .vertical)
+            TextField(L10n.tr("任务名称"), text: $draft.title, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 22, weight: .semibold))
                 .lineLimit(1...5)
                 .focused($focusedField, equals: .title)
-                .accessibilityLabel("任务名称")
+                .accessibilityLabel(L10n.tr("任务名称"))
         }
     }
 
     private var planDateSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("计划日期")
+            Text(L10n.tr("计划日期"))
                 .font(.system(size: 13, weight: .medium))
             TaskPlannedDateField(date: draft.optionalDate) { date in
                 draft.hasDate = date != nil
@@ -196,10 +198,10 @@ struct TaskDetailView: View {
 
     private var detailsSection: some View {
         VStack(alignment: .leading, spacing: 11) {
-            sectionHeading("详情", symbol: "text.alignleft")
+            sectionHeading(L10n.tr("详情"), symbol: "text.alignleft")
             MarkdownTextEditor(
                 text: $draft.details,
-                placeholder: "补充背景、链接，或写下你打算怎么做…",
+                placeholder: L10n.tr("补充背景、链接，或写下你打算怎么做…"),
                 isFocused: Binding(
                     get: { detailsFocused },
                     set: { focused in
@@ -210,7 +212,7 @@ struct TaskDetailView: View {
                 fontSize: 13
             )
             .frame(minHeight: 120)
-            .accessibilityLabel("任务详情")
+            .accessibilityLabel(L10n.tr("任务详情"))
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 9))
         }
     }
@@ -218,7 +220,7 @@ struct TaskDetailView: View {
     private var subtasksSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                sectionHeading("子任务", symbol: "checklist")
+                sectionHeading(L10n.tr("子任务"), symbol: "checklist")
                 Spacer()
                 if !children.isEmpty {
                     Text("\(children.filter(\.isCompleted).count) / \(children.count)")
@@ -238,7 +240,7 @@ struct TaskDetailView: View {
                                     .foregroundStyle(child.isCompleted ? Color.accentColor : Color.secondary)
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel(child.isCompleted ? "恢复子任务\(child.title)" : "完成子任务\(child.title)")
+                            .accessibilityLabel(child.isCompleted ? L10n.tr("恢复子任务\(child.title)") : L10n.tr("完成子任务\(child.title)"))
                             Button {
                                 saveDraft(preservingValidTitle: true)
                                 onSelect(child.id)
@@ -258,7 +260,7 @@ struct TaskDetailView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .help("编辑子任务详情")
+                            .help(L10n.tr("编辑子任务详情"))
                             SubtaskDragHandle(task: child)
                         }
                         .font(.system(size: 13))
@@ -275,20 +277,20 @@ struct TaskDetailView: View {
             if task.parentID == nil {
                 HStack(spacing: 8) {
                     Image(systemName: "plus").foregroundStyle(.secondary)
-                    TextField("添加子任务，按回车确认", text: $childTitle)
+                    TextField(L10n.tr("添加子任务，按回车确认"), text: $childTitle)
                         .textFieldStyle(.plain)
                         .focused($focusedField, equals: .child)
                         .onSubmit(addChild)
                     Button(action: addChild) { Image(systemName: "return") }
                         .buttonStyle(.plain)
                         .disabled(childTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .help("添加子任务")
+                        .help(L10n.tr("添加子任务"))
                 }
                 .font(.system(size: 13))
                 .padding(11)
                 .background(Color(nsColor: .controlBackgroundColor).opacity(0.65), in: RoundedRectangle(cornerRadius: 9))
             } else if children.isEmpty {
-                Text("这是一个子任务，可在这里独立编辑详情。")
+                Text(L10n.tr("这是一个子任务，可在这里独立编辑详情。"))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
@@ -298,9 +300,9 @@ struct TaskDetailView: View {
     private var metadata: some View {
         VStack(alignment: .leading, spacing: 6) {
             Divider().padding(.bottom, 7)
-            Text("创建于 \(task.createdAt.formatted(.dateTime.year().month().day().hour().minute()))")
+            Text(L10n.tr("创建于 \(task.createdAt.formatted(.dateTime.year().month().day().hour().minute().locale(L10n.locale)))"))
             if let completedAt = task.completedAt {
-                Text("完成于 \(completedAt.formatted(.dateTime.year().month().day().hour().minute()))")
+                Text(L10n.tr("完成于 \(completedAt.formatted(.dateTime.year().month().day().hour().minute().locale(L10n.locale)))"))
             }
         }
         .font(.system(size: 11))

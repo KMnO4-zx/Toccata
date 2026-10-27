@@ -23,11 +23,11 @@ enum ActivityRange: Hashable, CaseIterable, Identifiable {
 
     var rawValue: String {
         switch self {
-        case .today: return "今日"
-        case .yesterday: return "昨日"
-        case .lastSevenDays: return "最近 7 天"
-        case .thisWeek: return "本周"
-        case .custom: return "自定义时段"
+        case .today: return L10n.tr("今日")
+        case .yesterday: return L10n.tr("昨日")
+        case .lastSevenDays: return L10n.tr("最近 7 天")
+        case .thisWeek: return L10n.tr("本周")
+        case .custom: return L10n.tr("自定义时段")
         }
     }
 

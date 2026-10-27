@@ -3,6 +3,7 @@ import SwiftUI
 /// A calendar follows a task's actual dates. An absent plan date never becomes today's plan.
 @MainActor
 struct TaskCalendarView: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @EnvironmentObject private var store: TaskStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("tasks.listDisplayMode") private var displayMode: TaskListDisplayMode = .titles
@@ -33,6 +34,7 @@ struct TaskCalendarView: View {
         }
     }
     var body: some View {
+        let _ = interfaceLanguage.language
         VStack(spacing: 0) {
             if let error = store.errorMessage {
                 HStack(alignment: .top, spacing: 8) {
@@ -41,7 +43,7 @@ struct TaskCalendarView: View {
                     Spacer()
                     Button { store.errorMessage = nil } label: { Image(systemName: "xmark") }
                         .buttonStyle(.plain)
-                        .help("关闭错误提示")
+                        .help(L10n.tr("关闭错误提示"))
                 }
                 .font(.system(size: 13))
                 .padding(12)
@@ -87,9 +89,9 @@ struct TaskCalendarView: View {
 
     private var heading: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("任务日历")
+            Text(L10n.tr("任务日历"))
                 .font(.system(size: 25, weight: .bold, design: .rounded))
-            Text("创建、安排、完成，各自保留真实日期。")
+            Text(L10n.tr("创建、安排、完成，各自保留真实日期。"))
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
         }
@@ -106,17 +108,17 @@ struct TaskCalendarView: View {
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
-                Text("\(matchingTasks.count) 项任务")
+                Text(L10n.tr("\(matchingTasks.count) 项任务"))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    Text("查看记录")
+                    Text(L10n.tr("查看记录"))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
-                    Picker("按哪种日期查看", selection: Binding(
+                    Picker(L10n.tr("按哪种日期查看"), selection: Binding(
                         get: { mode },
                         set: { mode = $0; selection = nil; collapsedTaskIDs.removeAll() }
                     )) {
@@ -126,20 +128,22 @@ struct TaskCalendarView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
-                    .accessibilityLabel("按哪种日期查看")
+                    .id(interfaceLanguage.language)
+                    .accessibilityLabel(L10n.tr("按哪种日期查看"))
                 }
                 HStack(spacing: 8) {
-                    Text("显示方式")
+                    Text(L10n.tr("显示方式"))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
-                    Picker("任务显示方式", selection: $displayMode) {
+                    Picker(L10n.tr("任务显示方式"), selection: $displayMode) {
                         ForEach(TaskListDisplayMode.allCases) { item in
                             Text(item.title).tag(item)
                         }
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
-                    .accessibilityLabel("任务显示方式")
+                    .id(interfaceLanguage.language)
+                    .accessibilityLabel(L10n.tr("任务显示方式"))
                 }
             }
 
@@ -147,7 +151,7 @@ struct TaskCalendarView: View {
                 VStack(spacing: 7) {
                     Text(emptyDayTitle)
                         .font(.system(size: 13, weight: .medium))
-                    Text("没有指定计划日期的任务，会留在下方“未安排日期”。")
+                    Text(L10n.tr("没有指定计划日期的任务，会留在下方“未安排日期”。"))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -174,18 +178,18 @@ struct TaskCalendarView: View {
             HStack(spacing: 8) {
                 Image(systemName: "calendar.badge.plus")
                     .foregroundStyle(Color.accentColor)
-                TextField("在选中日期安排一项任务", text: $newTitle)
+                TextField(L10n.tr("在选中日期安排一项任务"), text: $newTitle)
                     .textFieldStyle(.plain)
                     .focused($addingTask)
                     .onSubmit(addPlannedTask)
-                    .accessibilityLabel("新建带计划日期的任务")
+                    .accessibilityLabel(L10n.tr("新建带计划日期的任务"))
             }
             HStack {
-                Text("会明确设置计划日期")
+                Text(L10n.tr("会明确设置计划日期"))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 2)
-                Button("安排到 \(dateLabel(selectedDay))", action: addPlannedTask)
+                Button(L10n.tr("安排到 \(dateLabel(selectedDay))"), action: addPlannedTask)
                     .controlSize(.small)
                     .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -204,13 +208,13 @@ struct TaskCalendarView: View {
             Divider()
             DisclosureGroup(isExpanded: $showsUnscheduled) {
                 LazyVStack(alignment: .leading, spacing: 7) {
-                    Text("这些任务未设计划日期，不会自动安排到今天。点击任务可设置日期；已完成记录仍保留。")
+                    Text(L10n.tr("这些任务未设计划日期，不会自动安排到今天。点击任务可设置日期；已完成记录仍保留。"))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.vertical, 6)
                     if matchingTasks.isEmpty {
-                        Text("当前没有未安排日期的任务。")
+                        Text(L10n.tr("当前没有未安排日期的任务。"))
                             .font(.system(size: 13))
                             .foregroundStyle(.secondary)
                             .padding(.vertical, 8)
@@ -224,10 +228,10 @@ struct TaskCalendarView: View {
                 .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: collapsedTaskIDs)
             } label: {
                 HStack(spacing: 7) {
-                    Label("未安排日期", systemImage: "tray")
+                    Label(L10n.tr("未安排日期"), systemImage: "tray")
                         .font(.system(size: 13, weight: .medium))
                     Spacer(minLength: 0)
-                    Text("\(matchingTasks.filter { !$0.isCompleted }.count) 项待办 · \(matchingTasks.count) 项共计")
+                    Text(L10n.tr("\(matchingTasks.filter { !$0.isCompleted }.count) 项待办 · \(matchingTasks.count) 项共计"))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
@@ -256,8 +260,8 @@ struct TaskCalendarView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(collapsedTaskIDs.contains(task.id) ? "展开\(task.title)的子任务" : "收起\(task.title)的子任务")
-                .accessibilityValue(collapsedTaskIDs.contains(task.id) ? "已收起" : "已展开")
+                .accessibilityLabel(collapsedTaskIDs.contains(task.id) ? L10n.tr("展开\(task.title)的子任务") : L10n.tr("收起\(task.title)的子任务"))
+                .accessibilityValue(collapsedTaskIDs.contains(task.id) ? L10n.tr("已收起") : L10n.tr("已展开"))
             }
 
             Button {
@@ -269,7 +273,7 @@ struct TaskCalendarView: View {
             }
             .buttonStyle(.plain)
             .padding(.top, 2)
-            .accessibilityLabel(task.isCompleted ? "将\(task.title)恢复待办" : "完成\(task.title)")
+            .accessibilityLabel(task.isCompleted ? L10n.tr("将\(task.title)恢复待办") : L10n.tr("完成\(task.title)"))
 
             Button {
                 selection = task.id
@@ -290,18 +294,18 @@ struct TaskCalendarView: View {
                     if showsDayEvents, !row.node.isContextOnly, displayMode.showsDescriptions {
                         HStack(spacing: 6) {
                             if calendar.isDate(task.createdAt, inSameDayAs: selectedDay) {
-                                eventBadge("创建", color: .blue)
+                                eventBadge(L10n.tr("创建"), color: .blue)
                             }
                             if let plannedDate = task.plannedDate, calendar.isDate(plannedDate, inSameDayAs: selectedDay) {
-                                eventBadge("计划", color: .orange)
+                                eventBadge(L10n.tr("计划"), color: .orange)
                             }
                             if let completedAt = task.completedAt, calendar.isDate(completedAt, inSameDayAs: selectedDay) {
-                                eventBadge("完成", color: .green)
+                                eventBadge(L10n.tr("完成"), color: .green)
                             }
                             Spacer(minLength: 0)
                         }
                     } else if !showsDayEvents, !row.node.isContextOnly, displayMode.showsDescriptions {
-                        Text(task.isCompleted ? "已完成 · 未设置计划日期" : "待办 · 未设置计划日期")
+                        Text(task.isCompleted ? L10n.tr("已完成 · 未设置计划日期") : L10n.tr("待办 · 未设置计划日期"))
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
@@ -310,7 +314,7 @@ struct TaskCalendarView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("编辑任务详情")
+            .help(L10n.tr("编辑任务详情"))
             if task.parentID != nil {
                 SubtaskDragHandle(task: task)
             } else {
@@ -343,17 +347,17 @@ struct TaskCalendarView: View {
 
     private var emptyDayTitle: String {
         switch mode {
-        case .all: return "当天还没有创建、计划或完成记录"
-        case .created: return "当天没有创建任务"
-        case .planned: return "当天没有安排任务"
-        case .completed: return "当天没有完成记录"
+        case .all: return L10n.tr("当天还没有创建、计划或完成记录")
+        case .created: return L10n.tr("当天没有创建任务")
+        case .planned: return L10n.tr("当天没有安排任务")
+        case .completed: return L10n.tr("当天没有完成记录")
         }
     }
 
     private func dateLabel(_ date: Date, includesWeekday: Bool = false) -> String {
-        let day = "\(calendar.component(.month, from: date))月\(calendar.component(.day, from: date))日"
+        let day = L10n.tr("\(calendar.component(.month, from: date))月\(calendar.component(.day, from: date))日")
         guard includesWeekday else { return day }
-        let weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+        let weekdays = [L10n.tr("周日"), L10n.tr("周一"), L10n.tr("周二"), L10n.tr("周三"), L10n.tr("周四"), L10n.tr("周五"), L10n.tr("周六")]
         return "\(day) · \(weekdays[calendar.component(.weekday, from: date) - 1])"
     }
 

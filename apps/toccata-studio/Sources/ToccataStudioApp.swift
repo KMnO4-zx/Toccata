@@ -4,19 +4,21 @@ import AppKit
 @main
 @MainActor
 struct ToccataStudioApp: App {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @NSApplicationDelegateAdaptor(ToccataApplicationDelegate.self) private var application
 
     var body: some Scene {
+        let _ = interfaceLanguage.language
         Settings {
             ApplicationSettingsView(loginItems: application.loginItems, appearance: application.appearance,
                                     openAbout: application.openAbout)
         }
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button("关于 Toccata") { application.openAbout() }
+                Button(L10n.tr("关于 Toccata")) { application.openAbout() }
             }
             CommandGroup(replacing: .newItem) {
-                Button("打开工作台") {
+                Button(L10n.tr("打开工作台")) {
                     application.openWorkbench()
                 }
                 .keyboardShortcut("1", modifiers: .command)
@@ -48,6 +50,7 @@ private enum WorkspaceSection: String, CaseIterable, Identifiable {
 
 @MainActor
 struct ContentView: View {
+    @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     @EnvironmentObject private var tasks: TaskStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selection: WorkspaceSection? = .tasks
@@ -73,6 +76,7 @@ struct ContentView: View {
     }
 
     var body: some View {
+        let _ = interfaceLanguage.language
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 0) {
                 Button(action: openTasks) {
@@ -82,7 +86,7 @@ struct ContentView: View {
                             .foregroundStyle(Color.accentColor)
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Toccata").font(.title3.weight(.semibold))
-                            Text("记下想法，看见投入").font(.caption).foregroundStyle(.secondary)
+                            Text(L10n.tr("记下想法，看见投入")).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 0)
                     }
@@ -90,17 +94,17 @@ struct ContentView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("回到任务")
-                .accessibilityLabel("Toccata，回到任务")
+                .help(L10n.tr("回到任务"))
+                .accessibilityLabel(L10n.tr("Toccata，回到任务"))
 
                 List(selection: $selection) {
-                    Section("任务") {
+                    Section(L10n.tr("任务")) {
                         sidebarRow(.tasks)
                         sidebarRow(.inbox, count: openCount)
                         sidebarRow(.taskCalendar)
                         sidebarRow(.review)
                     }
-                    Section("时间与活动") {
+                    Section(L10n.tr("时间与活动")) {
                         sidebarRow(.activity)
                         sidebarRow(.ranking)
                     }
@@ -138,15 +142,16 @@ struct ContentView: View {
         .font(.system(size: 13))
         .tint(.indigo)
         .background(TaskScrollerStyle())
+        .languageChangeTransition()
         .onAppear(perform: openRequestedSection)
         .onChange(of: requestedSection) { _ in openRequestedSection() }
         .onChange(of: tasks.tasks.map(\.id)) { ids in
             if let selectedTaskID, !ids.contains(selectedTaskID) { self.selectedTaskID = nil }
         }
-        .alert("任务修改尚未保存", isPresented: $homeNavigationFailed) {
-            Button("好", role: .cancel) {}
+        .alert(L10n.tr("任务修改尚未保存"), isPresented: $homeNavigationFailed) {
+            Button(L10n.tr("好"), role: .cancel) {}
         } message: {
-            Text("请先重试保存，再返回任务页面。")
+            Text(L10n.tr("请先重试保存，再返回任务页面。"))
         }
     }
 
@@ -169,14 +174,14 @@ struct ContentView: View {
         } else if section == .taskCalendar {
             TaskPlaceholder(
                 symbol: "calendar.badge.clock",
-                title: "把任务放回时间里",
-                message: "选择日期查看当天的记录，\n点击任务即可编辑详情与子任务。"
+                title: L10n.tr("把任务放回时间里"),
+                message: L10n.tr("选择日期查看当天的记录，\n点击任务即可编辑详情与子任务。")
             )
         } else {
             TaskPlaceholder(
                 symbol: "text.alignleft",
-                title: "留一点空间给思路",
-                message: "选择任务，补充详情、拆分子任务，\n或用 Markdown 整理背景与想法。"
+                title: L10n.tr("留一点空间给思路"),
+                message: L10n.tr("选择任务，补充详情、拆分子任务，\n或用 Markdown 整理背景与想法。")
             )
         }
     }
@@ -234,7 +239,7 @@ struct ContentView: View {
 
     private func sidebarRow(_ item: WorkspaceSection, count: Int? = nil) -> some View {
         HStack {
-            Label(item.rawValue, systemImage: item.symbol)
+            Label(L10n.key(item.rawValue), systemImage: item.symbol)
             Spacer()
             if let count, count > 0 {
                 Text("\(count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)

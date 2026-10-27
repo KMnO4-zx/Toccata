@@ -2,6 +2,13 @@ import XCTest
 @testable import toccata_studio
 
 final class KeyboardUsageRankingTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        let original = L10n.language
+        L10n.language = .simplifiedChinese
+        addTeardownBlock { L10n.language = original }
+    }
+
     func testTopFiveUsesPositiveCountsAndKeepsExactTotals() {
         let entries = KeyboardUsageRanking.topFive(counts: [
             49: 4_281, 14: 1_234, 51: 1_008, 0: 999, 1: 50, 2: 40, 53: 0, 12: -1
