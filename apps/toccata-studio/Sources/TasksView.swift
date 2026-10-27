@@ -138,18 +138,7 @@ struct TasksView: View {
 
                 HStack(spacing: 8) {
                     searchField
-                    Picker(L10n.tr("显示方式"), selection: $displayMode) {
-                        ForEach(TaskListDisplayMode.allCases) { option in
-                            Text(option.title).tag(option)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .id(interfaceLanguage.language)
-                    .fixedSize()
-                    .controlSize(.small)
-                    .help(L10n.tr("切换仅标题或标题与描述"))
-                    .accessibilityLabel(L10n.tr("任务显示方式"))
+                    TaskListDisplayModePicker(selection: $displayMode)
                 }
             }
             .padding(22)
