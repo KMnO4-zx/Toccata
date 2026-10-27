@@ -166,16 +166,6 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
     }
 }
 
-/// NavigationSplitView may restore the native title while updating its toolbar.
-/// Keep its window identity for menus and accessibility without drawing the title.
-@MainActor
-private final class WorkbenchWindow: NSWindow {
-    override var titleVisibility: NSWindow.TitleVisibility {
-        get { super.titleVisibility }
-        set { super.titleVisibility = .hidden }
-    }
-}
-
 @MainActor
 struct ApplicationSettingsView: View {
     @ObservedObject private var interfaceLanguage = LanguageSettings.shared

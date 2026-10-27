@@ -142,6 +142,7 @@ struct ContentView: View {
         .font(.system(size: 13))
         .tint(.indigo)
         .background(TaskScrollerStyle())
+        .background(ActivityKeyboardInputScope(isActive: section == .activity))
         .languageChangeTransition()
         .onAppear(perform: openRequestedSection)
         .onChange(of: requestedSection) { _ in openRequestedSection() }
