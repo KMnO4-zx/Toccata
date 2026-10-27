@@ -142,9 +142,7 @@ struct ActivityView: View {
     private var requestedTimelineRange: ActivityRange {
         switch timelineSelection {
         case .followRange: return range
-        case .today: return .today
-        case .yesterday: return .yesterday
-        case .day(let dates): return .custom(dates)
+        case .range(let selectedRange): return selectedRange
         }
     }
 
@@ -271,17 +269,19 @@ struct ActivityView: View {
     private var timelineControls: some View {
         HStack(spacing: 2) {
             rangeButton("跟随范围", selected: timelineSelection == .followRange) { timelineSelection = .followRange }
-            rangeButton("今日", selected: timelineSelection == .today) { timelineSelection = .today }
-            rangeButton("昨日", selected: timelineSelection == .yesterday) { timelineSelection = .yesterday }
-            rangeButton("指定日", selected: isTimelineSpecificDay) { showsTimelineCalendar = true }
+            ForEach(ActivityRange.allCases) { option in
+                rangeButton(option.rawValue, selected: timelineSelection == .range(option)) {
+                    timelineSelection = .range(option)
+                }
+            }
+            rangeButton("自定义时段", selected: isTimelineCustomRange) { showsTimelineCalendar = true }
                 .popover(isPresented: $showsTimelineCalendar, arrowEdge: .bottom) {
                     CalendarDateRangePicker(
-                        initialRange: timelineCalendarDates,
+                        initialRange: calendarDates(for: requestedTimelineRange, relativeTo: Date()),
                         referenceDate: Date(),
-                        selectionMode: .singleDay,
                         onCancel: { showsTimelineCalendar = false },
                         onApply: { dates in
-                            timelineSelection = .day(dates)
+                            timelineSelection = .range(.custom(dates))
                             showsTimelineCalendar = false
                         }
                     )
@@ -292,15 +292,9 @@ struct ActivityView: View {
         .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: timelineSelection)
     }
 
-    private var isTimelineSpecificDay: Bool {
-        if case .day = timelineSelection { return true }
+    private var isTimelineCustomRange: Bool {
+        if case .range(.custom) = timelineSelection { return true }
         return false
-    }
-
-    private var timelineCalendarDates: CalendarDateRange {
-        if case .day(let dates) = timelineSelection { return dates }
-        let dates = calendarDates(for: requestedTimelineRange, relativeTo: Date())
-        return CalendarDateRange(start: dates.end, end: dates.end)
     }
 
     private var timelineRows: some View {
@@ -553,9 +547,7 @@ struct ActivityView: View {
 
 private enum ActivityTimelineSelection: Hashable {
     case followRange
-    case today
-    case yesterday
-    case day(CalendarDateRange)
+    case range(ActivityRange)
 }
 
 private struct ActivityTimelineBoundsKey: PreferenceKey {
