@@ -62,7 +62,9 @@ struct TaskCalendarView: View {
 
     private var calendarPane: some View {
         ScrollViewReader { proxy in
-            ScrollView {
+            // Keep the calendar columns fixed as the selected day's task list
+            // gains or loses the legacy scrollbar gutter.
+            StableWidthScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     heading
                     TaskMonthGrid(tasks: store.tasks, displayedMonth: $displayedMonth,
@@ -159,7 +161,9 @@ struct TaskCalendarView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 22)
             } else {
-                LazyVStack(spacing: 4) {
+                // Branch animations change both row count and height. Resolve
+                // their native-backed rows eagerly, as in the main task list.
+                VStack(spacing: 4) {
                     ForEach(rows) { row in
                         taskRow(row, showsDayEvents: true)
                             .transition(reduceMotion ? .identity : WorkspaceMotion.branchTransition)
@@ -207,7 +211,7 @@ struct TaskCalendarView: View {
         return VStack(alignment: .leading, spacing: 10) {
             Divider()
             DisclosureGroup(isExpanded: $showsUnscheduled) {
-                LazyVStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: 7) {
                     Text(L10n.tr("这些任务未设计划日期，不会自动安排到今天。点击任务可设置日期；已完成记录仍保留。"))
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)

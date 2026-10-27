@@ -3,10 +3,14 @@
 //! 此后广播按键、落盘更新与 capture 状态消息。
 
 use std::io::{BufRead, BufReader, Write};
+use std::net::Shutdown;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+const CLIENT_WRITE_TIMEOUT: Duration = Duration::from_millis(250);
 
 pub fn hello() -> String {
     hello_json(
@@ -56,6 +60,9 @@ impl Broadcaster {
             if c.stream.write_all(line.as_bytes()).is_err()
                 || c.stream.write_all(b"\n").is_err()
             {
+                // The reader owns a clone. Closing this stream alone would
+                // leave its thread and descriptor waiting for a stalled peer.
+                let _ = c.stream.shutdown(Shutdown::Both);
                 dead.push(c.id);
             }
         }
@@ -106,6 +113,11 @@ fn accept_loop(listener: UnixListener, broadcaster: Broadcaster) {
 }
 
 fn client_loop(id: u64, stream: UnixStream, broadcaster: Broadcaster) {
+    // Broadcasting shares the persistence writer. A paused subscriber must not
+    // indefinitely prevent recording keys, serving other clients, or shutdown.
+    if stream.set_write_timeout(Some(CLIENT_WRITE_TIMEOUT)).is_err() {
+        return;
+    }
     let mut reader = BufReader::new(match stream.try_clone() {
         Ok(s) => s,
         Err(_) => return,
@@ -151,6 +163,83 @@ fn client_loop(id: u64, stream: UnixStream, broadcaster: Broadcaster) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc;
+
+    #[test]
+    fn stalled_subscriber_cannot_block_broadcast_or_healthy_subscribers() {
+        let broadcaster = Broadcaster::empty();
+        let (slow_peer, slow_control, slow_handler) = subscribed_pair(1, broadcaster.clone());
+        let (healthy_peer, healthy_control, healthy_handler) = subscribed_pair(2, broadcaster.clone());
+        let healthy_reader = healthy_peer.try_clone().unwrap();
+        // Exceed the Unix socket send buffer while the slow peer stops reading.
+        // The healthy peer keeps draining concurrently, as Studio normally does.
+        let payload = "x".repeat(2 * 1024 * 1024);
+        let expected = payload.clone();
+        let reader = std::thread::spawn(move || {
+            let mut line = String::new();
+            let result = BufReader::new(healthy_reader).read_line(&mut line);
+            (result, line)
+        });
+        let (finished, completion) = mpsc::channel();
+        let sender = broadcaster.clone();
+        let writer = std::thread::spawn(move || {
+            sender.broadcast(&payload);
+            let _ = finished.send(());
+        });
+
+        let completed = completion.recv_timeout(Duration::from_secs(2)).is_ok();
+        // Unblock even the old implementation before asserting. A failed
+        // regression must not strand the test runner inside write_all or join.
+        if !completed {
+            let _ = slow_control.shutdown(Shutdown::Both);
+            let _ = healthy_control.shutdown(Shutdown::Both);
+            let _ = slow_peer.shutdown(Shutdown::Both);
+            let _ = healthy_peer.shutdown(Shutdown::Both);
+        }
+        writer.join().unwrap();
+        let (read_result, received) = reader.join().unwrap();
+        let registered: Vec<_> = broadcaster.clients.lock().unwrap().iter().map(|c| c.id).collect();
+        let disconnected = (0..100).any(|_| {
+            if slow_handler.is_finished() { return true; }
+            std::thread::sleep(Duration::from_millis(5));
+            false
+        });
+        let _ = slow_control.shutdown(Shutdown::Both);
+        let _ = healthy_control.shutdown(Shutdown::Both);
+        let _ = slow_peer.shutdown(Shutdown::Both);
+        let _ = healthy_peer.shutdown(Shutdown::Both);
+        slow_handler.join().unwrap();
+        healthy_handler.join().unwrap();
+
+        assert!(completed, "a non-reading subscriber blocked the writer for more than two seconds");
+        assert!(read_result.is_ok(), "healthy subscriber must remain readable: {read_result:?}");
+        assert_eq!(received.len(), expected.len() + 1);
+        assert!(received.ends_with('\n') && received[..received.len() - 1] == expected);
+        assert!(!registered.contains(&1), "stalled subscriber must be disconnected");
+        assert!(registered.contains(&2), "healthy subscriber must stay registered");
+        assert!(disconnected, "disconnect must also release the stalled subscriber's reader thread");
+    }
+
+    fn subscribed_pair(id: u64, broadcaster: Broadcaster) -> (UnixStream, UnixStream, std::thread::JoinHandle<()>) {
+        let (server, mut peer) = UnixStream::pair().unwrap();
+        let control = server.try_clone().unwrap();
+        peer.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+        let handler_broadcaster = broadcaster.clone();
+        let handler = std::thread::spawn(move || client_loop(id, server, handler_broadcaster));
+        peer.write_all(b"{\"cmd\":\"subscribe\"}\n").unwrap();
+        let mut hello = String::new();
+        BufReader::new(peer.try_clone().unwrap()).read_line(&mut hello).unwrap();
+        assert!(hello.contains("\"hello\""));
+        for _ in 0..100 {
+            if broadcaster.clients.lock().unwrap().iter().any(|c| c.id == id) {
+                return (peer, control, handler);
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let _ = peer.shutdown(Shutdown::Both);
+        handler.join().unwrap();
+        panic!("subscriber did not register");
+    }
 
     #[test]
     fn hello_keeps_version_and_reports_capture_status() {

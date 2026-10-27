@@ -74,7 +74,9 @@ struct MenuCalendarView: View {
             .transition(WorkspaceMotion.menuTransition)
         } else {
             ScrollView {
-                LazyVStack(spacing: 3) {
+                // Match the workbench: animated branches with native drag grips
+                // must have concrete row heights throughout the transition.
+                VStack(spacing: 3) {
                     ForEach(rows) { row in
                         taskRow(row)
                             .transition(reduceMotion ? .identity : WorkspaceMotion.branchTransition)

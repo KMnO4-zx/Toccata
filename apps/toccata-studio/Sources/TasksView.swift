@@ -398,7 +398,10 @@ struct TasksView: View {
             + [.secondHeader] + (secondVisible ? secondRows.map(HierarchyListItem.task) : [])
         return ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
+                // Expanded branches change row count and height together. Eager
+                // layout avoids the lazy stack repeatedly estimating animated
+                // native-backed rows during expansion (a main-thread hang).
+                VStack(alignment: .leading, spacing: 0) {
                     // A task keeps one ForEach identity when completion moves it
                     // across the section header. Separate ForEach containers with
                     // the same explicit row ID can reuse a stale pending view.
