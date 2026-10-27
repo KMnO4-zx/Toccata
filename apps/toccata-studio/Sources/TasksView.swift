@@ -356,6 +356,26 @@ struct TasksView: View {
         }
     }
 
+    private enum HierarchyListItem: Identifiable {
+        case firstHeader
+        case secondHeader
+        case task(WorkspaceTaskListRow)
+
+        enum ID: Hashable {
+            case firstHeader
+            case secondHeader
+            case task(String)
+        }
+
+        var id: ID {
+            switch self {
+            case .firstHeader: return .firstHeader
+            case .secondHeader: return .secondHeader
+            case .task(let row): return .task(row.id)
+            }
+        }
+    }
+
     /// SwiftUI owns the row layout so insertion/removal animates its height as
     /// well as opacity; AppKit-backed List reloads used to snap collapsed rows.
     private func hierarchyList(firstTitle: String, firstRows: [WorkspaceTaskListRow],
@@ -363,37 +383,46 @@ struct TasksView: View {
                                collapsed: Set<String>, collapsesSecondSection: Bool = false) -> some View {
         let secondVisible = !collapsesSecondSection || showsCompleted
         let visibleRows = firstRows + (secondVisible ? secondRows : [])
+        let items: [HierarchyListItem] = [.firstHeader] + firstRows.map(HierarchyListItem.task)
+            + [.secondHeader] + (secondVisible ? secondRows.map(HierarchyListItem.task) : [])
         return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    listSectionHeader(firstTitle)
-                    ForEach(firstRows) { row in selectableRow(row, collapsed: collapsed) }
-                    if collapsesSecondSection {
-                        Button {
-                            withAnimation(reduceMotion ? nil : WorkspaceMotion.branchChange) {
-                                showsCompleted.toggle()
+                    // A task keeps one ForEach identity when completion moves it
+                    // across the section header. Separate ForEach containers with
+                    // the same explicit row ID can reuse a stale pending view.
+                    ForEach(items) { item in
+                        switch item {
+                        case .firstHeader:
+                            listSectionHeader(firstTitle)
+                        case .secondHeader:
+                            if collapsesSecondSection {
+                                Button {
+                                    withAnimation(reduceMotion ? nil : WorkspaceMotion.branchChange) {
+                                        showsCompleted.toggle()
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text(secondTitle)
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                            .rotationEffect(.degrees(showsCompleted ? 90 : 0))
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 12)
+                                .padding(.top, 20)
+                                .padding(.bottom, 9)
+                                .help(showsCompleted ? L10n.tr("收起已完成任务") : L10n.tr("展开已完成任务"))
+                            } else {
+                                listSectionHeader(secondTitle)
                             }
-                        } label: {
-                            HStack {
-                                Text(secondTitle)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .rotationEffect(.degrees(showsCompleted ? 90 : 0))
-                            }
-                            .contentShape(Rectangle())
+                        case .task(let row):
+                            selectableRow(row, collapsed: collapsed)
                         }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 20)
-                        .padding(.bottom, 9)
-                        .help(showsCompleted ? L10n.tr("收起已完成任务") : L10n.tr("展开已完成任务"))
-                    } else {
-                        listSectionHeader(secondTitle)
-                    }
-                    if secondVisible {
-                        ForEach(secondRows) { row in selectableRow(row, collapsed: collapsed) }
                     }
                 }
                 .padding(.horizontal, 14)
@@ -411,7 +440,7 @@ struct TasksView: View {
                 let current = visibleRows.firstIndex { $0.id == selection } ?? (offset > 0 ? -1 : visibleRows.count)
                 let next = visibleRows[min(max(current + offset, 0), visibleRows.count - 1)].id
                 selection = next
-                proxy.scrollTo(next)
+                proxy.scrollTo(HierarchyListItem.ID.task(next))
             }
         }
     }
@@ -451,7 +480,6 @@ struct TasksView: View {
                 .padding(.leading, 44 + CGFloat(row.depth) * 26)
                 .padding(.trailing, 12)
         }
-        .id(row.id)
         .transition(reduceMotion ? .identity : WorkspaceMotion.branchTransition)
     }
 
