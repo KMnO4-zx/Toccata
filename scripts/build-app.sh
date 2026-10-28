@@ -42,6 +42,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>CFBundleShortVersionString</key><string>$TOCCATA_VERSION</string>
 <key>CFBundleVersion</key><string>$TOCCATA_BUILD</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
+<key>LSUIElement</key><true/>
 <key>DTSDKName</key><string>macosx$TOCCATA_MACOS_SDK_VERSION</string>
 <key>NSInputMonitoringUsageDescription</key><string>Toccata needs input monitoring to estimate keyboard activity, count key presses, and measure app activity. Key codes and activity records are stored only on this Mac.</string>
 <key>NSHighResolutionCapable</key><true/>

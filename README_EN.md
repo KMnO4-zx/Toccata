@@ -64,6 +64,8 @@ For **Apple Silicon Macs · macOS 13+**. Download the DMG from [Releases](https:
 
 Keyboard tracking requires permission under **System Settings → Privacy & Security → Input Monitoring**. Task management works independently.
 
+Toccata stays in the menu bar without a Dock icon. Click its menu bar icon to add and manage tasks, or right-click and choose **Open Workspace** for the full interface. Closing the workspace keeps Toccata running in the background; choose **Quit Toccata** to stop the app.
+
 Want to make it your own? Build instructions and development notes are in [develop.md (Chinese)](develop.md).
 
 ## Contributing

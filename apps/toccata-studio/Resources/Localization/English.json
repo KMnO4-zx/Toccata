@@ -123,7 +123,7 @@
   "登录时启动": "Launch at login",
   "前往系统设置允许启动": "Allow launch in System Settings",
   "取消登录启动申请": "Cancel login launch request",
-  "关闭工作台后，Toccata 会继续留在菜单栏。登录启动时只显示菜单栏图标；选择“退出 Toccata”可停止运行。": "Toccata stays in the menu bar when you close the workspace. At login, only the menu bar icon appears. Choose “Quit Toccata” to stop the app.",
+  "Toccata 不显示 Dock 图标，可从菜单栏添加和管理任务、打开工作台。关闭工作台后继续在后台运行；登录启动时只显示菜单栏图标，选择“退出 Toccata”可停止运行。": "Toccata runs without a Dock icon. Use the menu bar to add and manage tasks or open the workspace. Closing the workspace keeps Toccata running in the background. At login, only the menu bar icon appears. Choose “Quit Toccata” to stop the app.",
   "关于与更新": "About & updates",
   "关于 Toccata 与检查更新": "About Toccata and check for updates",
   "一": "M",

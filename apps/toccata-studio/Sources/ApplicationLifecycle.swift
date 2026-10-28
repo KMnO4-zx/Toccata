@@ -24,7 +24,9 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
         guard !didStart else { return }
         didStart = true
         let launchedAtLogin = ApplicationLaunchContext.currentIsLoginItemLaunch
-        NSApp.setActivationPolicy(launchedAtLogin ? .accessory : .regular)
+        // Keep the workbench and status-item panels interactive without a Dock
+        // icon, including SwiftPM launches that have no LSUIElement in a bundle.
+        NSApp.setActivationPolicy(.accessory)
         taskMenu.configure(store: taskStore, loginItems: loginItems, appearance: appearance, openAbout: { [weak self] in
             self?.openAbout()
         }) { [weak self] in
@@ -61,7 +63,6 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
 
     func openWorkbench() {
         guard !isQuitting else { return }
-        NSApp.setActivationPolicy(.regular)
         if workbench == nil {
             let content = ContentView(openAbout: { [weak self] in self?.openAbout() })
                 .environmentObject(refresher)
@@ -217,7 +218,7 @@ struct ApplicationSettingsView: View {
                 Text(error).foregroundStyle(.red).font(.callout)
             }
             Divider()
-            Text(L10n.tr("关闭工作台后，Toccata 会继续留在菜单栏。登录启动时只显示菜单栏图标；选择“退出 Toccata”可停止运行。"))
+            Text(L10n.tr("Toccata 不显示 Dock 图标，可从菜单栏添加和管理任务、打开工作台。关闭工作台后继续在后台运行；登录启动时只显示菜单栏图标，选择“退出 Toccata”可停止运行。"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Button(action: openAbout) {
                 HStack {
