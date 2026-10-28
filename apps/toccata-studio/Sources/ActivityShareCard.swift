@@ -162,6 +162,8 @@ struct ActivityShareCard: View {
                                 .font(.system(size: 19))
                             Spacer()
                             Text(Formatters.duration(ms: day.activeMs)).font(.system(size: 19))
+                            Text("· " + L10n.tr("\(day.keyCount.formatted()) 次按键"))
+                                .font(.system(size: 17)).foregroundStyle(muted)
                             Text("· Fn \(Formatters.duration(ms: day.fnMs))")
                                 .font(.system(size: 17)).foregroundStyle(muted)
                         }

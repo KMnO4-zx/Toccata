@@ -91,7 +91,7 @@
   "图例：颜色由浅到深表示活跃时间由少到多": "Legend: darker colors indicate more active time",
   "跟随范围": "Follow range",
   "日期": "Date",
-  "活跃 / Fn": "Active / Fn",
+  "活跃 / 按键 / Fn": "Active / Keystrokes / Fn",
   "今天": "Today",
   "这段时间还没有键盘活动。任务可以照常记在收集箱。": "No keyboard activity in this period. You can still add tasks to your inbox.",
   "暂无可读取的键盘记录。采集服务运行后，这里会自动更新。": "No keyboard records available. This updates automatically when recording starts.",

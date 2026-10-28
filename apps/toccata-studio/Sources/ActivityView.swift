@@ -6,6 +6,7 @@ struct ActivityView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let repository = ActivityRepository()
+    private let timelineSummaryWidth: CGFloat = 200
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     @State private var range: ActivityRange = .today
     @State private var displayedRange: ActivityRange = .today
@@ -309,7 +310,7 @@ struct ActivityView: View {
                 HStack(spacing: 12) {
                     Text(L10n.tr("日期")).frame(width: 70, alignment: .leading)
                     hourLabels
-                    Text(L10n.tr("活跃 / Fn")).frame(width: 130, alignment: .trailing)
+                    Text(L10n.tr("活跃 / 按键 / Fn")).frame(width: timelineSummaryWidth, alignment: .trailing)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -330,14 +331,14 @@ struct ActivityView: View {
                         VStack(alignment: .trailing, spacing: 4) {
                             Text(Formatters.duration(ms: day.activeMs))
                                 .font(.system(.callout, design: .rounded).weight(.semibold))
-                            Text("Fn \(Formatters.duration(ms: day.fnMs))")
+                            Text("\(L10n.tr("\(day.keyCount.formatted()) 次按键")) · Fn \(Formatters.duration(ms: day.fnMs))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
-                        .frame(width: 130, alignment: .trailing)
+                        .frame(width: timelineSummaryWidth, alignment: .trailing)
                     }
                 }
             }
