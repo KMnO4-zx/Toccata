@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 
+#if !TOCCATA_DEMO
 @main
 @MainActor
 struct ToccataStudioApp: App {
@@ -26,6 +27,7 @@ struct ToccataStudioApp: App {
         }
     }
 }
+#endif
 
 @MainActor
 struct ContentView: View {
@@ -39,9 +41,15 @@ struct ContentView: View {
     @State private var homeNavigationFailed = false
     @Binding var requestedSection: String?
     private let openAbout: () -> Void
+    private let initialActivityRange: ActivityRange
 
-    init(requestedSection: Binding<String?> = .constant(nil), openAbout: @escaping () -> Void) {
+    init(requestedSection: Binding<String?> = .constant(nil),
+         initialSection: WorkspaceSection = .tasks, initialTaskID: String? = nil,
+         initialActivityRange: ActivityRange = .today, openAbout: @escaping () -> Void) {
         _requestedSection = requestedSection
+        _selection = State(initialValue: initialSection)
+        _selectedTaskID = State(initialValue: initialTaskID)
+        self.initialActivityRange = initialActivityRange
         self.openAbout = openAbout
     }
 
@@ -56,56 +64,7 @@ struct ContentView: View {
 
     var body: some View {
         let _ = interfaceLanguage.language
-        NavigationSplitView {
-            VStack(alignment: .leading, spacing: 0) {
-                Button(action: openTasks) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "square.stack.3d.up.fill")
-                            .font(.title2)
-                            .foregroundStyle(Color.accentColor)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Toccata").font(.title3.weight(.semibold))
-                            Text(L10n.tr("记下想法，看见投入")).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(20)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(L10n.tr("回到任务"))
-                .accessibilityLabel(L10n.tr("Toccata，回到任务"))
-
-                WorkspaceSidebar(selection: $selection, openCount: openCount)
-
-                SidebarFooterView(openAbout: openAbout)
-            }
-            .navigationSplitViewColumnWidth(min: 190, ideal: 205, max: 240)
-        } detail: {
-            // Keep a concrete host for both activity pages while their identities
-            // change, so NavigationSplitView can render the outgoing transition.
-            ZStack(alignment: .topLeading) {
-                if showsTaskWorkspace {
-                    WorkspaceSplitView {
-                        workspacePage
-                            .id(section)
-                            .transition(WorkspaceMotion.pageTransition)
-                    } detail: {
-                        workspaceDetail
-                            .id(section)
-                            .transition(WorkspaceMotion.pageTransition)
-                    }
-                    .transition(WorkspaceMotion.pageTransition)
-                } else {
-                    activityPage
-                        .id(section)
-                        .transition(WorkspaceMotion.pageTransition)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-            .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: section)
-        }
+        workspaceContainer
         .font(.system(size: 13))
         .tint(.indigo)
         .background(TaskScrollerStyle())
@@ -121,6 +80,76 @@ struct ContentView: View {
         } message: {
             Text(L10n.tr("请先重试保存，再返回任务页面。"))
         }
+    }
+
+    @ViewBuilder
+    private var workspaceContainer: some View {
+#if TOCCATA_DEMO
+        // AppKit's vibrant sidebar cannot be cached offscreen. Reuse its exact
+        // SwiftUI content in an opaque container for the demo image exporter.
+        HStack(spacing: 0) {
+            sidebar.frame(width: 205)
+                .background(Color(nsColor: .windowBackgroundColor))
+            Divider()
+            mainPage
+        }
+#else
+        NavigationSplitView {
+            sidebar.navigationSplitViewColumnWidth(min: 190, ideal: 205, max: 240)
+        } detail: {
+            mainPage
+        }
+#endif
+    }
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: openTasks) {
+                HStack(spacing: 10) {
+                    Image(systemName: "square.stack.3d.up.fill")
+                        .font(.title2)
+                        .foregroundStyle(Color.accentColor)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Toccata").font(.title3.weight(.semibold))
+                        Text(L10n.tr("记下想法，看见投入")).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(20)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(L10n.tr("回到任务"))
+            .accessibilityLabel(L10n.tr("Toccata，回到任务"))
+            WorkspaceSidebar(selection: $selection, openCount: openCount)
+            SidebarFooterView(openAbout: openAbout)
+        }
+    }
+
+    private var mainPage: some View {
+        // Keep a concrete host for both activity pages while their identities
+        // change, so NavigationSplitView can render the outgoing transition.
+        ZStack(alignment: .topLeading) {
+            if showsTaskWorkspace {
+                WorkspaceSplitView {
+                    workspacePage
+                        .id(section)
+                        .transition(WorkspaceMotion.pageTransition)
+                } detail: {
+                    workspaceDetail
+                        .id(section)
+                        .transition(WorkspaceMotion.pageTransition)
+                }
+                .transition(WorkspaceMotion.pageTransition)
+            } else {
+                activityPage
+                    .id(section)
+                    .transition(WorkspaceMotion.pageTransition)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: section)
     }
 
     @ViewBuilder
@@ -167,7 +196,7 @@ struct ContentView: View {
     @ViewBuilder
     private var activityPage: some View {
         switch section {
-        case .activity: ActivityView()
+        case .activity: ActivityView(initialRange: initialActivityRange)
         case .ranking: RankingView()
         case .tasks, .inbox, .taskCalendar, .review: EmptyView()
         }

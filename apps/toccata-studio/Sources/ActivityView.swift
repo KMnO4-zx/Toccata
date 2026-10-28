@@ -24,6 +24,12 @@ struct ActivityView: View {
     @State private var shareRange: ActivityRange = .today
     @State private var shareReferenceDate = Date()
 
+    init(initialRange: ActivityRange = .today) {
+        _range = State(initialValue: initialRange)
+        _displayedRange = State(initialValue: initialRange)
+        _displayedTimelineRange = State(initialValue: initialRange)
+    }
+
     var body: some View {
         let _ = interfaceLanguage.language
         ScrollView {

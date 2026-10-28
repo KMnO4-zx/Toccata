@@ -92,6 +92,19 @@ launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.toccata.core.
 
 使用自定义数据目录时，还需在 plist 的 `EnvironmentVariables` 中配置同一个 `TOCCATA_DATA_DIR`。标准 App 使用内嵌服务，无需安装 LaunchAgent。
 
+### 生成 README 演示图
+
+```bash
+./scripts/render-demo.sh
+```
+
+脚本单独编译带 `TOCCATA_DEMO` 标记的演示版本，复用工作台、菜单栏任务列表、键盘热力图与活跃时间线的真实界面组件，生成两张 2 倍分辨率 PNG：
+
+- `images/todo-management.png`：左侧工作台展示任务、子任务和 Markdown 详情，右侧展示菜单栏小窗。
+- `images/keyboard-activity.png`：展示最近 7 天的统计概览、逐键热力图与完整活跃时间线。
+
+演示数据使用虚构任务及按当前日期生成的键盘事件，放在每次运行新建的临时目录中，导出后删除。演示版本使用独立的应用标识 `com.toccata.demo`，不启动采集服务，不读取或修改日常任务、键盘记录和偏好，也不申请输入监控或屏幕录制权限。图片由原生视图离屏导出；侧栏使用相同内容的不透明容器，以兼容导出。正常构建不包含演示入口及示例数据。可给脚本传入其他输出目录，已有同名图片会被覆盖。
+
 ## 数据与配置
 
 默认数据目录为 `~/Library/Application Support/Toccata/`，可由进程环境中的非空 `TOCCATA_DATA_DIR` 覆盖，建议使用绝对路径。

@@ -9,6 +9,10 @@ struct CaptureStatusView: View {
     var body: some View {
         let _ = interfaceLanguage.language
         Group {
+#if TOCCATA_DEMO
+            Label(L10n.tr("演示数据"), systemImage: "sparkles")
+                .foregroundStyle(.secondary)
+#else
             if refresher.captureEnabled {
                 Label(connectedText, systemImage: "circle.fill")
                     .foregroundStyle(.green)
@@ -27,6 +31,7 @@ struct CaptureStatusView: View {
                 Label(L10n.tr("键盘记录未连接"), systemImage: "circle")
                     .foregroundStyle(.secondary)
             }
+#endif
         }
         .help(helpText)
     }
