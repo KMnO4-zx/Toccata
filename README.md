@@ -16,6 +16,7 @@
 <p align="center">
   <a href="https://github.com/KMnO4-zx/Toccata/releases">下载安装</a> ·
   <a href="develop.md">开发指南</a> ·
+  <a href="CONTRIBUTING.md">参与贡献</a> ·
   <a href="LICENSE">Apache-2.0</a>
 </p>
 
@@ -65,6 +66,10 @@
 
 想按自己的习惯修改？构建与二次开发说明都在 [develop.md](develop.md)。
 
+
+## 参与贡献
+
+欢迎一起完善代码、文档、翻译和测试，参与方式见 [贡献指南](CONTRIBUTING.md)。Windows 版正在招募贡献者，欢迎到 [Windows 版本支持 #1](https://github.com/KMnO4-zx/Toccata/issues/1) 交流方案、认领功能；独立开发目录为 [apps/toccata-windows/](apps/toccata-windows/README.md)。
 
 ## 致谢 🙏
 

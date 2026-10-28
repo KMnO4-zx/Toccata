@@ -16,6 +16,7 @@
 <p align="center">
   <a href="https://github.com/KMnO4-zx/Toccata/releases">Download</a> ·
   <a href="develop.md">Developer Guide (Chinese)</a> ·
+  <a href="CONTRIBUTING.md#english">Contribute</a> ·
   <a href="LICENSE">Apache-2.0</a>
 </p>
 
@@ -64,6 +65,10 @@ For **Apple Silicon Macs · macOS 13+**. Download the DMG from [Releases](https:
 Keyboard tracking requires permission under **System Settings → Privacy & Security → Input Monitoring**. Task management works independently.
 
 Want to make it your own? Build instructions and development notes are in [develop.md (Chinese)](develop.md).
+
+## Contributing
+
+Contributions to code, documentation, translations, and testing are welcome. See the [contribution guide](CONTRIBUTING.md#english). The Windows port is looking for contributors: discuss ideas and pick a feature in [Windows support #1](https://github.com/KMnO4-zx/Toccata/issues/1), with client work in [apps/toccata-windows/](apps/toccata-windows/README.md#english).
 
 ## Thanks 🙏
 

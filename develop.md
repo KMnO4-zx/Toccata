@@ -2,6 +2,8 @@
 
 本文面向希望在本地构建、修改或二次开发 Toccata 的开发者，介绍代码结构、运行方式、数据边界和发布流程。所有命令均从仓库根目录执行，另有说明的除外。
 
+协作流程见 [贡献指南](CONTRIBUTING.md)。Windows 客户端目前处于方案讨论与贡献者招募阶段，入口位于 [apps/toccata-windows/](apps/toccata-windows/README.md)。
+
 ## 架构与目录
 
 Toccata 由 Rust 键盘采集服务和 SwiftUI / AppKit 工作台组成。任务功能由工作台独立提供，采集服务离线时仍可使用。
@@ -11,6 +13,7 @@ Toccata 由 Rust 键盘采集服务和 SwiftUI / AppKit 工作台组成。任务
 | [core/toccata-core/](core/toccata-core/) | CGEventTap 与 HID 采集、按键配对、SQLite 批量写入、Unix socket 广播 |
 | [apps/toccata-studio/Sources/](apps/toccata-studio/Sources/) | 任务、日历、回顾、菜单栏面板、键盘统计与分享界面 |
 | [apps/toccata-studio/Tests/](apps/toccata-studio/Tests/) | Swift 逻辑、存储与界面集成测试 |
+| [apps/toccata-windows/](apps/toccata-windows/README.md) | Windows 客户端独立开发目录，当前处于规划阶段 |
 | [shared/](shared/) | IPC 与数据库契约、键盘布局、版本信息、品牌和系统本地化资源 |
 | [scripts/](scripts/) | 资源同步、App 构建、DMG 打包、发布与脚本测试 |
 | [docs/releases/](docs/releases/) | 各版本发布说明 |
