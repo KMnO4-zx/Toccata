@@ -314,7 +314,7 @@ DMG 包含 App、“应用程序”快捷方式和安装说明。脚本只生成
 
 [Release Toccata](.github/workflows/release.yml) 工作流仅支持手动触发，推送提交或标签不会自动发布。工作流文件进入默认分支后，在 GitHub 的 **Actions → Release Toccata → Run workflow** 中操作：
 
-1. 选择 `main`，填写与版本文件一致的标签，例如版本为 `0.0.11` 时填写 `v0.0.11`。其他分支不执行发布构建。
+1. 选择 `main`，填写与版本文件一致的标签，例如版本为 `0.1.0` 时填写 `v0.1.0`。其他分支不执行发布构建。
 2. 默认 `draft` 模式运行测试、构建并验证 DMG，然后创建带安装包和 SHA-256 文件的 Release 草稿；审核后可直接在 GitHub 发布。
 3. `publish` 模式先创建草稿并上传附件，全部成功后发布正式版本并标记为 Latest。
 
