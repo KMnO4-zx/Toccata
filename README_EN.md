@@ -1,0 +1,87 @@
+<p align="center">
+  <img src="shared/branding/toccata-app-icon.png" alt="Toccata" width="96">
+</p>
+
+<h1 align="center">Toccata</h1>
+
+<p align="center">
+  <a href="README.md">简体中文</a> · <strong>English</strong>
+</p>
+
+<p align="center">
+  <strong>Capture ideas. See your effort.</strong><br>
+  <em>Curious about your net active thinking time?</em>
+</p>
+
+<p align="center">
+  <a href="https://github.com/KMnO4-zx/Toccata/releases">Download</a> ·
+  <a href="develop.md">Developer Guide (Chinese)</a> ·
+  <a href="LICENSE">Apache-2.0</a>
+</p>
+
+## Why I Built This
+
+I never used to bother with to-do apps. Keeping everything in my head worked just fine. Then work and study started piling up, and I finally needed somewhere to write things down.
+
+My needs were simple: quickly see what I'd finished and what was still left to do, then pull up the week's tasks to write my weekly report. So I tried TickTick. I hated using it, and they still wanted my money!
+
+**No way. So I built my own.**
+
+I also really wanted to build something that tracks **“net active thinking time.”** Of all those hours at my computer every day, how much of that time is my mind actually active? Since I was already building my own app, I figured I'd add that too.
+
+The name comes from [toccata](https://www.dictionary.com/browse/toccata), a piece of music for the keyboard. Its root is the Italian *toccare*, meaning “to touch.” I like that connection: fingers touch keys, and thoughts slowly become something you can see.
+
+## To-Do Management
+
+- **Capture on the fly**: open the menu bar window to add or edit tasks, with completed and pending items in view.
+- **Organize at your pace**: break tasks into subtasks in the main window, write details in Markdown, set dates, and browse the task calendar.
+- **Review your week**: gather completed and unfinished tasks, copy them with one click, and use them as the starting point for your weekly report.
+
+![To-do management: main workspace on the left, menu bar window on the right](images/todo-management.png)
+
+## Keyboard Activity: Net Active Thinking Time
+
+There's something else I want to know: of all the time I spend at my computer, how much of it am I actually active? Taking a screenshot every few seconds and asking AI to analyze what I'm doing leaves me uneasy about privacy. So I turned to keyboard input.
+
+My thinking is simple: **to the computer, I'm providing input; to myself, I'm producing output. When we're producing output, our minds are definitely active.** At that moment, the connection between me and the computer is right there, at the fingertips of both hands.
+
+> And there's the connection: Toccata comes from the Italian *toccare*, “to touch.”
+
+I want to use the keyboard to record the time I spend putting something out into the world. I call it **“net active thinking time.”** Honestly, I find that idea pretty sexy 🤔
+
+- **Keyboard heatmap**: see which keys you use most, with live feedback as you press them.
+- **Activity timeline**: see when you were typing throughout the day, and look back at your app usage and Fn hold time.
+- **Local records**: key codes, timestamps, hold durations, and associated apps are recorded on your Mac. Capture takes no screenshots and records no audio.
+
+![Keyboard activity: per-key heatmap and activity timelines for the last seven days](images/keyboard-activity.png)
+
+> “Net active thinking time” is the idea behind this project. The actual duration is estimated from keyboard activity; it cannot directly measure thought or capture all the effort spent reading and thinking. Fn hold time serves as an estimate of spoken output and may also include shortcut use. See the [counting rules (Chinese)](develop.md#按键次数与活跃时间计算). The screenshots above use demo data.
+
+## Get Started
+
+For **Apple Silicon Macs · macOS 13+**. Download the DMG from [Releases](https://github.com/KMnO4-zx/Toccata/releases), then drag `Toccata.app` into Applications.
+
+Keyboard tracking requires permission under **System Settings → Privacy & Security → Input Monitoring**. Task management works independently.
+
+Want to make it your own? Build instructions and development notes are in [develop.md (Chinese)](develop.md).
+
+## Thanks 🙏
+
+<table>
+  <tr>
+    <td width="56" align="center"><img src="images/logos/kimi.png" width="36" alt="Kimi Logo"></td>
+    <td>Thanks to the <a href="https://www.kimi.com/zh-cn/lp/kimi-ambassador"><strong>Kimi Global Ambassador Program</strong></a>.<br>Kimi K3.1 Pro is a great model for visual design!</td>
+  </tr>
+  <tr>
+    <td width="56" align="center"><img src="images/logos/openai-rounded.svg" width="36" alt="OpenAI Logo"></td>
+    <td>Thanks to the <a href="https://developers.openai.com/community/codex-for-oss"><strong>OpenAI Codex for Open Source program</strong></a> for giving me 12 months of ChatGPT Pro.<br>GPT 6 Astra is a great coding model!</td>
+  </tr>
+  <tr>
+    <td width="56" align="center"><img src="images/logos/volcengine.png" width="36" alt="Volcengine Logo"></td>
+    <td>Thanks to the <a href="https://developer.volcengine.com/"><strong>Volcengine Hero Program</strong></a>.<br>Doubao's multimodal capabilities are excellent!</td>
+  </tr>
+  <tr>
+    <td width="56" align="center"><img src="images/logos/datawhale.png" width="36" alt="Datawhale Logo"></td>
+    <td>Thanks to <a href="https://datawhale.cn/"><strong>Datawhale</strong></a>.<br>A place to meet wonderful people on the same journey.</td>
+  </tr>
+</table>
