@@ -16,6 +16,35 @@ final class ActivityRepository {
 
     var calculationPolicy: ActivityPolicy { policy }
 
+    /// Count only today's distinct key-downs. Read the count and the live overlap
+    /// from one committed snapshot so a daemon flush cannot count a key twice.
+    func todayKeyCount(now: Date = Date(), liveEvents: [ActivityKeyEvent] = [],
+                       liveConnected: Bool = false) throws -> Int {
+        let interval = ActivityRange.today.interval(now: now, calendar: calendar)
+        let start = ActivityCalculator.milliseconds(interval.start)
+        let end = min(ActivityCalculator.milliseconds(interval.end), ActivityCalculator.milliseconds(now))
+        let live = Set((liveConnected ? liveEvents : []).filter {
+            $0.kind == 0 && $0.timestampMs >= start && $0.timestampMs < end
+        }.map { ActivityKeyEvent(timestampMs: $0.timestampMs, keycode: $0.keycode, kind: 0) })
+        let database = try Database(url: url)
+        return try database.readSnapshot {
+            let count = try database.query("""
+                SELECT COUNT(*) FROM (
+                    SELECT DISTINCT ts_ms, keycode FROM key_events
+                    WHERE kind=0 AND ts_ms>=? AND ts_ms<?
+                )
+                """, params: [start, end]) { columnInt($0, 0) }.first ?? 0
+            guard let firstLive = live.map(\.timestampMs).min() else { return count }
+            let persisted = Set(try database.query("""
+                SELECT DISTINCT ts_ms, keycode FROM key_events
+                WHERE kind=0 AND ts_ms>=? AND ts_ms<?
+                """, params: [firstLive, end]) {
+                ActivityKeyEvent(timestampMs: columnInt64($0, 0), keycode: columnInt($0, 1), kind: 0)
+            })
+            return count + live.subtracting(persisted).count
+        }
+    }
+
     func snapshot(
         range: ActivityRange, now: Date = Date(),
         liveEvents: [ActivityKeyEvent] = [], liveConnected: Bool = false, database: Database? = nil

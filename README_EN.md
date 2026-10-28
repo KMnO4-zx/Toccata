@@ -66,6 +66,8 @@ Keyboard tracking requires permission under **System Settings → Privacy & Secu
 
 Toccata stays in the menu bar without a Dock icon. Click its menu bar icon to add and manage tasks, or right-click and choose **Open Workspace** for the full interface. Closing the workspace keeps Toccata running in the background; choose **Quit Toccata** to stop the app.
 
+Right-click the menu bar icon and choose **Water reminders…** to enable reminders based on key presses. The default interval is 8,192 presses, with a fresh count each day. You can change the interval and send a test notification. Enabling reminders requires notification permission; counts use the existing input monitoring records. Reminders continue with the workspace closed and stop when you quit the app.
+
 Want to make it your own? Build instructions and development notes are in [develop.md (Chinese)](develop.md).
 
 ## Contributing

@@ -15,6 +15,7 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var appearance: AppearanceSettings?
     private var openWorkbenchAction: (() -> Void)?
     private var openAboutAction: (() -> Void)?
+    private var openHydrationSettingsAction: (() -> Void)?
     private var clickMonitor: Any?
     private var globalClickMonitor: Any?
     private var observers: [NSObjectProtocol] = []
@@ -25,9 +26,11 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var editorRevealGeneration = UUID()
 
     func configure(store: TaskStore, loginItems: LoginItemController, appearance: AppearanceSettings,
+                   openHydrationSettings: @escaping () -> Void,
                    openAbout: @escaping () -> Void,
                    openWorkbench: @escaping () -> Void) {
         openAboutAction = openAbout
+        openHydrationSettingsAction = openHydrationSettings
         openWorkbenchAction = openWorkbench
         guard statusItem == nil else { return }
         self.store = store
@@ -298,6 +301,7 @@ final class TaskMenuController: NSObject, ObservableObject {
         }
         appearanceItem.submenu = appearanceMenu
         menu.addItem(appearanceItem)
+        menu.addItem(settingsItem(L10n.tr("喝水提醒…"), action: #selector(openHydrationSettings)))
         menu.addItem(.separator())
 
         let loginItem = settingsItem(L10n.tr("登录时启动"), action: #selector(toggleLoginItem))
@@ -335,6 +339,7 @@ final class TaskMenuController: NSObject, ObservableObject {
 
     @objc private func openWorkbenchFromSettings() { presentation.openWorkbench() }
     @objc private func openAboutFromSettings() { openAboutAction?() }
+    @objc private func openHydrationSettings() { openHydrationSettingsAction?() }
 
     @objc private func selectAppearance(_ item: NSMenuItem) {
         guard let value = item.representedObject as? String, let mode = AppearanceMode(rawValue: value) else { return }

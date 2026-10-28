@@ -6,11 +6,13 @@ import SwiftUI
 final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let appearance = AppearanceSettings()
     let loginItems = LoginItemController()
+    let hydrationReminders = HydrationReminderController()
     private let taskStore = TaskStore()
     private let taskMenu = TaskMenuController()
     private let coreProcess = CoreProcessController()
     private let refresher = LiveRefresher()
     private let aboutWindow = AboutWindowController()
+    private let hydrationWindow = HydrationReminderWindowController()
     private var workbench: NSWindow?
     private var healthTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
@@ -27,12 +29,15 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
         // Keep the workbench and status-item panels interactive without a Dock
         // icon, including SwiftPM launches that have no LSUIElement in a bundle.
         NSApp.setActivationPolicy(.accessory)
-        taskMenu.configure(store: taskStore, loginItems: loginItems, appearance: appearance, openAbout: { [weak self] in
+        taskMenu.configure(store: taskStore, loginItems: loginItems, appearance: appearance, openHydrationSettings: { [weak self] in
+            self?.openHydrationSettings()
+        }, openAbout: { [weak self] in
             self?.openAbout()
         }) { [weak self] in
             self?.openWorkbench()
         }
         refresher.start()
+        hydrationReminders.start(refresher: refresher)
         coreProcess.start(requestPermission: false)
         healthTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.ensureCaptureIsRunning() }
@@ -54,6 +59,12 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
 
     func applicationDidBecomeActive(_ notification: Notification) {
         loginItems.refresh()
+        Task { await hydrationReminders.refreshAuthorization() }
+    }
+
+    func openHydrationSettings() {
+        taskMenu.dismiss()
+        hydrationWindow.show(reminders: hydrationReminders)
     }
 
     func openAbout() {
@@ -122,6 +133,7 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
             let stopped = await coreProcess.stop()
             if stopped {
                 healthTimer?.invalidate()
+                hydrationReminders.stop()
                 refresher.stop()
                 sender.reply(toApplicationShouldTerminate: true)
             } else {
@@ -139,6 +151,7 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
 
     func applicationWillTerminate(_ notification: Notification) {
         healthTimer?.invalidate()
+        hydrationReminders.stop()
         refresher.stop()
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
     }
@@ -173,6 +186,7 @@ struct ApplicationSettingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var loginItems: LoginItemController
     @ObservedObject var appearance: AppearanceSettings
+    var openHydrationSettings: () -> Void
     var openAbout: () -> Void
 
     var body: some View {
@@ -205,6 +219,7 @@ struct ApplicationSettingsView: View {
             Text(L10n.tr("跟随系统会随 macOS 的浅色或深色外观自动切换。"))
                 .font(.callout).foregroundStyle(.secondary)
             Divider()
+            Button(L10n.tr("喝水提醒…"), action: openHydrationSettings)
             Text(L10n.tr("启动与后台运行")).font(.headline)
             Toggle(L10n.tr("登录时启动"), isOn: Binding(
                 get: { loginItems.enabled }, set: { loginItems.setEnabled($0) }

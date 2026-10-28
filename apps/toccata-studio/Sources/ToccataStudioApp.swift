@@ -12,6 +12,7 @@ struct ToccataStudioApp: App {
         let _ = interfaceLanguage.language
         Settings {
             ApplicationSettingsView(loginItems: application.loginItems, appearance: application.appearance,
+                                    openHydrationSettings: application.openHydrationSettings,
                                     openAbout: application.openAbout)
         }
         .commands {
