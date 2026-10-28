@@ -68,21 +68,7 @@
 
 ## 致谢 🙏
 
-<table>
-  <tr>
-    <td width="56" align="center"><img src="images/logos/kimi.png" width="36" alt="Kimi Logo"></td>
-    <td>感谢 <a href="https://www.kimi.com/zh-cn/lp/kimi-ambassador"><strong>Kimi 全球大使计划</strong></a>。<br>Kimi K3.1 Pro 是一个在审美设计领域很棒的模型！</td>
-  </tr>
-  <tr>
-    <td width="56" align="center"><img src="images/logos/openai-rounded.svg" width="36" alt="OpenAI Logo"></td>
-    <td>感谢 <a href="https://developers.openai.com/community/codex-for-oss"><strong>OpenAI Codex For Open Source 计划</strong></a>，赠予我 12 个月的 ChatGPT Pro 订阅。<br>GPT 6 Astra 是一个很棒的 Coding 模型！</td>
-  </tr>
-  <tr>
-    <td width="56" align="center"><img src="images/logos/volcengine.png" width="36" alt="火山引擎 Logo"></td>
-    <td>感谢 <a href="https://developer.volcengine.com/"><strong>火山 Hero 计划</strong></a>。<br>豆包的多模态能力确实非常棒！</td>
-  </tr>
-  <tr>
-    <td width="56" align="center"><img src="images/logos/datawhale.png" width="36" alt="Datawhale Logo"></td>
-    <td>感谢 <a href="https://datawhale.cn/"><strong>Datawhale</strong></a>。<br>在 Datawhale 可以遇到优秀的同行人。</td>
-  </tr>
-</table>
+- <img src="images/logos/kimi.png" width="20" height="20" alt="Kimi Logo"> &nbsp; 感谢 **[Kimi 全球大使计划](https://www.kimi.com/zh-cn/lp/kimi-ambassador)**。 Kimi K3.1 Pro 是一个在审美设计领域很棒的模型！
+- <img src="images/logos/openai-rounded.svg" width="20" height="20" alt="OpenAI Logo"> &nbsp; 感谢 **[OpenAI Codex For Open Source 计划](https://developers.openai.com/community/codex-for-oss)**，赠予我 12 个月的 ChatGPT Pro 订阅。GPT 6 Astra 是一个很棒的 Coding 模型！
+- <img src="images/logos/volcengine.png" width="20" height="20" alt="火山引擎 Logo"> &nbsp; 感谢 **[火山 Hero 计划](https://developer.volcengine.com/)**。 豆包的多模态能力确实非常棒！
+- <img src="images/logos/datawhale.png" width="20" height="20" alt="Datawhale Logo"> &nbsp; 感谢 **[Datawhale](https://datawhale.cn/)**。 在 Datawhale 可以遇到优秀的同行人。

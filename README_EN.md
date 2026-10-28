@@ -67,21 +67,7 @@ Want to make it your own? Build instructions and development notes are in [devel
 
 ## Thanks 🙏
 
-<table>
-  <tr>
-    <td width="56" align="center"><img src="images/logos/kimi.png" width="36" alt="Kimi Logo"></td>
-    <td>Thanks to the <a href="https://www.kimi.com/zh-cn/lp/kimi-ambassador"><strong>Kimi Global Ambassador Program</strong></a>.<br>Kimi K3.1 Pro is a great model for visual design!</td>
-  </tr>
-  <tr>
-    <td width="56" align="center"><img src="images/logos/openai-rounded.svg" width="36" alt="OpenAI Logo"></td>
-    <td>Thanks to the <a href="https://developers.openai.com/community/codex-for-oss"><strong>OpenAI Codex for Open Source program</strong></a> for giving me 12 months of ChatGPT Pro.<br>GPT 6 Astra is a great coding model!</td>
-  </tr>
-  <tr>
-    <td width="56" align="center"><img src="images/logos/volcengine.png" width="36" alt="Volcengine Logo"></td>
-    <td>Thanks to the <a href="https://developer.volcengine.com/"><strong>Volcengine Hero Program</strong></a>.<br>Doubao's multimodal capabilities are excellent!</td>
-  </tr>
-  <tr>
-    <td width="56" align="center"><img src="images/logos/datawhale.png" width="36" alt="Datawhale Logo"></td>
-    <td>Thanks to <a href="https://datawhale.cn/"><strong>Datawhale</strong></a>.<br>A place to meet wonderful people on the same journey.</td>
-  </tr>
-</table>
+- <img src="images/logos/kimi.png" width="20" height="20" alt="Kimi Logo"> &nbsp; Thanks to the **[Kimi Global Ambassador Program](https://www.kimi.com/zh-cn/lp/kimi-ambassador)**. Kimi K3.1 Pro is a great model for visual design!
+- <img src="images/logos/openai-rounded.svg" width="20" height="20" alt="OpenAI Logo"> &nbsp; Thanks to the **[OpenAI Codex for Open Source program](https://developers.openai.com/community/codex-for-oss)** for giving me 12 months of ChatGPT Pro. GPT 6 Astra is a great coding model!
+- <img src="images/logos/volcengine.png" width="20" height="20" alt="Volcengine Logo"> &nbsp; Thanks to the **[Volcengine Hero Program](https://developer.volcengine.com/)**. Doubao's multimodal capabilities are excellent!
+- <img src="images/logos/datawhale.png" width="20" height="20" alt="Datawhale Logo"> &nbsp; Thanks to **[Datawhale](https://datawhale.cn/)**. A place to meet wonderful people on the same journey.
