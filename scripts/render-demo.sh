@@ -2,6 +2,7 @@
 # Render the real SwiftUI views with isolated fictional data for the README.
 set -euo pipefail
 DEMO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$DEMO_ROOT/scripts/macos-toolchain.sh"
 DEMO_PACKAGE="$DEMO_ROOT/apps/toccata-studio"
 DEMO_BUILD="$DEMO_ROOT/.build/demo"
 DEMO_APP="$DEMO_BUILD/Toccata Demo.app"
@@ -9,9 +10,10 @@ DEMO_OUTPUT="${1:-$DEMO_ROOT/images}"
 
 "$DEMO_ROOT/scripts/sync-assets.sh"
 swift build --package-path "$DEMO_PACKAGE" --scratch-path "$DEMO_BUILD/swift" \
-  -c release -Xswiftc -DTOCCATA_DEMO
+  --sdk "$SDKROOT" -c release -Xswiftc -DTOCCATA_DEMO
 DEMO_BIN="$(swift build --package-path "$DEMO_PACKAGE" --scratch-path "$DEMO_BUILD/swift" \
-  -c release -Xswiftc -DTOCCATA_DEMO --show-bin-path)"
+  --sdk "$SDKROOT" -c release -Xswiftc -DTOCCATA_DEMO --show-bin-path)"
+verify_toccata_macos_sdk "$DEMO_BIN/toccata-studio"
 mkdir -p "$DEMO_APP/Contents/MacOS" "$DEMO_APP/Contents/Resources" "$DEMO_OUTPUT"
 cp "$DEMO_BIN/toccata-studio" "$DEMO_APP/Contents/MacOS/ToccataDemo"
 ditto "$DEMO_BIN/toccata-studio_toccata-studio.bundle" \

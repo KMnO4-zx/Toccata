@@ -41,7 +41,7 @@ open dist/Toccata.app
 - macOS 13 或更新版本。
 - Git，用于克隆源码。
 - Rust 工具链（`cargo`、`rustc`）。
-- 支持 Swift 5.9 的 Xcode Command Line Tools。
+- 提供 **macOS SDK 26.5** 的 Xcode 或 Command Line Tools（CI 固定使用 Xcode 26.5）。运行 `xcrun --sdk macosx --show-sdk-version` 确认当前选中 SDK 为 `26.5`；SDK 影响原生控件样式，本地与发布构建必须一致。应用的最低运行版本仍为 macOS 13。
 - Python 3，用于运行打包与构建信息脚本的测试。
 
 ### 在现有源码中重新构建
@@ -61,6 +61,7 @@ App 会在配置的 socket 不可连接时启动内嵌服务，已有可用服�
 
 ```bash
 # 终端一：构建并运行采集服务
+source scripts/macos-toolchain.sh
 export TOCCATA_DATA_DIR="$HOME/Library/Application Support/Toccata-Dev"
 cargo build --release --locked
 ./target/release/toccata-core
@@ -68,9 +69,10 @@ cargo build --release --locked
 
 ```bash
 # 终端二：同步资源，构建并运行工作台
+source scripts/macos-toolchain.sh
 export TOCCATA_DATA_DIR="$HOME/Library/Application Support/Toccata-Dev"
 ./scripts/sync-assets.sh
-swift build --package-path apps/toccata-studio -c release
+swift build --package-path apps/toccata-studio --sdk "$SDKROOT" -c release
 ./apps/toccata-studio/.build/release/toccata-studio
 ```
 
@@ -261,13 +263,15 @@ Fork 后如需独立分发，应检查以下位置：
 # 打包与构建信息脚本测试
 python3 scripts/tests/test_release.py
 python3 scripts/tests/test_build_info.py
+python3 scripts/tests/test_macos_toolchain.py
 
 # Rust 测试；依赖已缓存时可额外添加 --offline
+source scripts/macos-toolchain.sh
 cargo test --locked
 
 # Swift 测试
 ./scripts/sync-assets.sh
-swift test --package-path apps/toccata-studio
+swift test --package-path apps/toccata-studio --sdk "$SDKROOT"
 
 # 改动格式检查
 git diff --check
@@ -304,7 +308,7 @@ git diff --check
 ./scripts/package-dmg.sh --skip-build
 ```
 
-产物为 `dist/Toccata-<version>-<arch>.dmg` 及同名 `.sha256` 文件。版本取自 App 的 `CFBundleShortVersionString`，架构由工作台与内嵌服务的实际二进制判定，可为 `arm64`、`x86_64` 或 `universal`。脚本验证两者的签名与架构一致性，使用 `hdiutil` 生成 UDZO 映像并验证 SHA-256；同版本、同架构的旧产物在新包验证成功后替换。
+产物为 `dist/Toccata-<version>-<arch>.dmg` 及同名 `.sha256` 文件。版本取自 App 的 `CFBundleShortVersionString`，架构由工作台与内嵌服务的实际二进制判定，可为 `arm64`、`x86_64` 或 `universal`。构建与打包都通过 `scripts/macos-toolchain.sh` 要求当前 SDK 为 **26.5**，并检查两个二进制记录的实际 SDK；`--skip-build` 也会拒绝使用旧 SDK 的缓存 App。脚本还验证签名与架构一致性，使用 `hdiutil` 生成 UDZO 映像并验证 SHA-256；同版本、同架构的旧产物在新包验证成功后替换。
 
 DMG 包含 App、“应用程序”快捷方式和安装说明。脚本只生成文件，不安装或启动 App，也不修改登录项或系统权限。
 
@@ -318,7 +322,7 @@ DMG 包含 App、“应用程序”快捷方式和安装说明。脚本只生成
 2. 默认 `draft` 模式运行测试、构建并验证 DMG，然后创建带安装包和 SHA-256 文件的 Release 草稿；审核后可直接在 GitHub 发布。
 3. `publish` 模式先创建草稿并上传附件，全部成功后发布正式版本并标记为 Latest。
 
-工作流使用 macOS ARM runner 构建 Apple Silicon 安装包，按触发时的确切提交构建，说明来自 `docs/releases/<tag>.md`。构建任务仅有读取权限；发布任务单独使用仓库的 `GITHUB_TOKEN` 写入 Releases，应用内无需令牌。
+工作流使用 macOS 26 ARM runner，固定选择 **Xcode 26.5 / macOS SDK 26.5** 构建 Apple Silicon 安装包，按触发时的确切提交构建，说明来自 `docs/releases/<tag>.md`。构建任务仅有读取权限；发布任务单独使用仓库的 `GITHUB_TOKEN` 写入 Releases，应用内无需令牌。
 
 已有同名 Release 或标签时工作流会停止，不覆盖附件或移动标签。上传失败可能留下草稿，应先检查现有状态再决定重试。正常草稿审核后直接发布，无需以相同标签重跑。工作流沿用 ad-hoc 签名，不包含 Apple 公证；本地打包不会创建标签、发布 Release 或修改仓库可见性。
 

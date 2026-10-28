@@ -42,6 +42,9 @@ if [ ! -f "$PLIST" ] || [ ! -x "$STUDIO" ] || [ ! -x "$HELPER" ]; then
 fi
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")"
+source "$ROOT/scripts/macos-toolchain.sh"
+verify_toccata_macos_sdk "$STUDIO" "$HELPER"
+
 BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")"
 if [[ ! "$VERSION" =~ ^[0-9]+([.][0-9]+){0,2}$ ]]; then
     printf 'Invalid app version for DMG filename: %s\n' "$VERSION" >&2

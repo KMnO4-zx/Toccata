@@ -29,8 +29,10 @@ jobs:
   build:
     # Keep release builds on the reviewed main branch.
     if: github.ref == 'refs/heads/main'
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -45,6 +47,9 @@ jobs:
           test "$(uname -m)" = arm64
       - name: Prepare toolchains and resources
         run: |
+          source scripts/macos-toolchain.sh
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
           rustup toolchain install stable --profile minimal
           rustup default stable
           swift --version
@@ -52,10 +57,13 @@ jobs:
           git diff --exit-code -- apps/toccata-studio/Resources/app-version.json
       - name: Test core and Studio logic
         run: |
+          source scripts/macos-toolchain.sh
           python3 scripts/tests/test_release.py
+          python3 scripts/tests/test_build_info.py
+          python3 scripts/tests/test_macos_toolchain.py
           cargo test --locked
           # WebKit integration tests require a local interactive desktop.
-          swift test --package-path apps/toccata-studio --skip MarkdownWebEditorTests
+          swift test --package-path apps/toccata-studio --sdk "$SDKROOT" --skip MarkdownWebEditorTests
       - name: Build and verify DMG
         run: ./scripts/package-dmg.sh
       - name: Upload verified package

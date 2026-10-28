@@ -4,6 +4,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "$ROOT/scripts/version.sh"
+source "$ROOT/scripts/macos-toolchain.sh"
 PACKAGE="$ROOT/apps/toccata-studio"
 SIGN_IDENTITY="${TOCCATA_SIGN_IDENTITY:--}"
 SIGN_REQUIREMENTS='=designated => identifier "com.toccata.studio"'
@@ -14,8 +15,9 @@ export SWIFTPM_MODULECACHE_OVERRIDE="$CACHE/swift-cache"
 "$ROOT/scripts/sync-assets.sh"
 
 cargo build --manifest-path "$ROOT/Cargo.toml" --release --locked
-swift build --package-path "$PACKAGE" --configuration release --disable-sandbox --cache-path "$CACHE/spm-cache"
-BIN_DIR="$(swift build --package-path "$PACKAGE" --configuration release --disable-sandbox --cache-path "$CACHE/spm-cache" --show-bin-path)"
+swift build --package-path "$PACKAGE" --sdk "$SDKROOT" --configuration release --disable-sandbox --cache-path "$CACHE/spm-cache"
+BIN_DIR="$(swift build --package-path "$PACKAGE" --sdk "$SDKROOT" --configuration release --disable-sandbox --cache-path "$CACHE/spm-cache" --show-bin-path)"
+verify_toccata_macos_sdk "$BIN_DIR/toccata-studio" "$ROOT/target/release/toccata-core"
 STAGING="$(mktemp -d "$ROOT/dist/.Toccata.XXXXXX")"
 trap 'rm -rf "$STAGING"' EXIT
 APP="$STAGING/Toccata.app"
@@ -40,6 +42,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>CFBundleShortVersionString</key><string>$TOCCATA_VERSION</string>
 <key>CFBundleVersion</key><string>$TOCCATA_BUILD</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
+<key>DTSDKName</key><string>macosx$TOCCATA_MACOS_SDK_VERSION</string>
 <key>NSInputMonitoringUsageDescription</key><string>Toccata needs input monitoring to estimate keyboard activity, count key presses, and measure app activity. Key codes and activity records are stored only on this Mac.</string>
 <key>NSHighResolutionCapable</key><true/>
 <key>NSSupportsAutomaticTermination</key><false/>
