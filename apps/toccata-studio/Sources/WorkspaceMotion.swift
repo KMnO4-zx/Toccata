@@ -3,6 +3,8 @@ import SwiftUI
 enum WorkspaceMotion {
     static let panelRevealDuration: TimeInterval = 0.16
     static let pageChange = Animation.easeOut(duration: 0.18)
+    static let sidebarSelection = Animation.interactiveSpring(response: 0.28, dampingFraction: 0.88)
+    static let sidebarSelectionFade = Animation.easeOut(duration: 0.12)
     static let detailChange = Animation.easeOut(duration: 0.16)
     static let menuChange = Animation.easeOut(duration: 0.16)
     static let branchChange = Animation.easeInOut(duration: 0.2)

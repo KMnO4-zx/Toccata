@@ -27,27 +27,6 @@ struct ToccataStudioApp: App {
     }
 }
 
-private enum WorkspaceSection: String, CaseIterable, Identifiable {
-    case tasks = "任务"
-    case inbox = "收集箱"
-    case taskCalendar = "任务日历"
-    case review = "任务回顾"
-    case activity = "键盘活跃"
-    case ranking = "应用与趋势"
-
-    var id: String { rawValue }
-    var symbol: String {
-        switch self {
-        case .tasks: return "checklist"
-        case .inbox: return "tray"
-        case .taskCalendar: return "calendar"
-        case .review: return "checkmark.circle"
-        case .activity: return "waveform.path"
-        case .ranking: return "chart.bar.xaxis"
-        }
-    }
-}
-
 @MainActor
 struct ContentView: View {
     @ObservedObject private var interfaceLanguage = LanguageSettings.shared
@@ -97,19 +76,7 @@ struct ContentView: View {
                 .help(L10n.tr("回到任务"))
                 .accessibilityLabel(L10n.tr("Toccata，回到任务"))
 
-                List(selection: $selection) {
-                    Section(L10n.tr("任务")) {
-                        sidebarRow(.tasks)
-                        sidebarRow(.inbox, count: openCount)
-                        sidebarRow(.taskCalendar)
-                        sidebarRow(.review)
-                    }
-                    Section(L10n.tr("时间与活动")) {
-                        sidebarRow(.activity)
-                        sidebarRow(.ranking)
-                    }
-                }
-                .listStyle(.sidebar)
+                WorkspaceSidebar(selection: $selection, openCount: openCount)
 
                 SidebarFooterView(openAbout: openAbout)
             }
@@ -248,17 +215,6 @@ struct ContentView: View {
         }
     }
 
-    private func sidebarRow(_ item: WorkspaceSection, count: Int? = nil) -> some View {
-        HStack {
-            Label(L10n.key(item.rawValue), systemImage: item.symbol)
-            Spacer()
-            if let count, count > 0 {
-                Text("\(count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-            }
-        }
-        .tag(item)
-        .padding(.vertical, 3)
-    }
 }
 
 extension View {
