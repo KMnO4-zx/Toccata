@@ -11,9 +11,13 @@ struct ToccataStudioApp: App {
     var body: some Scene {
         let _ = interfaceLanguage.language
         Settings {
-            ApplicationSettingsView(loginItems: application.loginItems, appearance: application.appearance,
-                                    openHydrationSettings: application.openHydrationSettings,
-                                    openAbout: application.openAbout)
+            GeneralSettingsView(openAbout: application.openAbout)
+                .environmentObject(application.appearance)
+                .environmentObject(application.loginItems)
+                .environmentObject(application.dockIcon)
+                .environmentObject(application.hydrationReminders)
+                .frame(width: 700, height: 740)
+                .languageChangeTransition()
         }
         .commands {
             CommandGroup(replacing: .appInfo) {
@@ -59,7 +63,7 @@ struct ContentView: View {
     private var showsTaskWorkspace: Bool {
         switch section {
         case .tasks, .inbox, .taskCalendar, .review: return true
-        case .activity, .ranking: return false
+        case .activity, .ranking, .generalSettings: return false
         }
     }
 
@@ -128,7 +132,7 @@ struct ContentView: View {
     }
 
     private var mainPage: some View {
-        // Keep a concrete host for both activity pages while their identities
+        // Keep a concrete host for full-width pages while their identities
         // change, so NavigationSplitView can render the outgoing transition.
         ZStack(alignment: .topLeading) {
             if showsTaskWorkspace {
@@ -143,7 +147,7 @@ struct ContentView: View {
                 }
                 .transition(WorkspaceMotion.pageTransition)
             } else {
-                activityPage
+                fullWidthPage
                     .id(section)
                     .transition(WorkspaceMotion.pageTransition)
             }
@@ -160,7 +164,7 @@ struct ContentView: View {
         case .inbox: TasksView(mode: .inbox, selection: $selectedTaskID)
         case .taskCalendar: TaskCalendarView(selection: $selectedTaskID)
         case .review: TasksView(mode: .review, selection: $selectedTaskID)
-        case .activity, .ranking: EmptyView()
+        case .activity, .ranking, .generalSettings: EmptyView()
         }
     }
 
@@ -195,10 +199,11 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private var activityPage: some View {
+    private var fullWidthPage: some View {
         switch section {
         case .activity: ActivityView(initialRange: initialActivityRange)
         case .ranking: RankingView()
+        case .generalSettings: GeneralSettingsView(openAbout: openAbout)
         case .tasks, .inbox, .taskCalendar, .review: EmptyView()
         }
     }

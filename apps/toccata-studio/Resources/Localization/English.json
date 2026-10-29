@@ -484,5 +484,15 @@
   "每天重新计数，每个节点只提醒一次。开启提醒或调整间隔后，从下一个节点开始。": "Counts reset each day, with one reminder per milestone. Enabling reminders or changing the interval starts at the next milestone.",
   "允许通知": "Allow notifications",
   "前往通知设置": "Open notification settings",
-  "发送测试通知": "Send a test notification"
+  "发送测试通知": "Send a test notification",
+  "通用配置": "General settings",
+  "调整外观、提醒与启动方式。": "Customize appearance, reminders, and startup behavior.",
+  "外观与语言": "Appearance & language",
+  "隐藏 Dock 栏图标": "Hide Dock icon",
+  "隐藏后，仍可从菜单栏打开工作台。": "You can still open the workspace from the menu bar.",
+  "关闭工作台后继续在后台运行；选择“退出 Toccata”可停止运行。": "Toccata keeps running after you close the workspace. Choose “Quit Toccata” to stop it.",
+  "关于": "About",
+  "版本信息与检查更新": "Version info & updates",
+  "无法更改 Dock 图标显示，请重试。": "Could not change Dock icon visibility. Please try again.",
+  "设置": "Settings"
 }

@@ -5,21 +5,30 @@ import SwiftUI
 struct HydrationReminderSettingsView: View {
     @ObservedObject private var language = LanguageSettings.shared
     @ObservedObject var reminders: HydrationReminderController
+    var showsTitle = true
 
     var body: some View {
         let _ = language.language
         VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.tr("喝水提醒")).font(.headline)
-            Toggle(L10n.tr("开启喝水提醒"), isOn: Binding(
+            if showsTitle { Text(L10n.tr("喝水提醒")).font(.headline) }
+            Toggle(isOn: Binding(
                 get: { reminders.isEnabled },
                 set: { value in Task { await reminders.setEnabled(value) } }
-            ))
-            Picker(L10n.tr("提醒间隔"), selection: Binding(
-                get: { reminders.interval }, set: { reminders.setInterval($0) }
             )) {
-                ForEach(HydrationReminderController.intervals, id: \.self) { count in
-                    Text(HydrationReminderController.intervalTitle(count)).tag(count)
-                }
+                Text(L10n.tr("开启喝水提醒"))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .accessibilityIdentifier("settings-hydration-enabled")
+            HStack {
+                Text(L10n.tr("提醒间隔"))
+                Spacer(minLength: 12)
+                SettingsPopoverPicker(title: L10n.tr("提醒间隔"), options: HydrationReminderController.intervals,
+                                      selection: Binding(
+                    get: { reminders.interval }, set: { reminders.setInterval($0) }
+                ), optionTitle: HydrationReminderController.intervalTitle,
+                                      popoverWidth: language.language == .english ? 250 : 200)
+                .frame(width: 220, alignment: .trailing)
+                .accessibilityIdentifier("settings-hydration-interval")
             }
             Text(L10n.tr("每天重新计数，每个节点只提醒一次。开启提醒或调整间隔后，从下一个节点开始。"))
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

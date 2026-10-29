@@ -65,37 +65,11 @@ struct SidebarFooterView: View {
     }
 
     private var languagePicker: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(L10n.tr("语言"))
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 4)
-            ForEach(AppLanguage.allCases) { language in
-                Button {
-                    showsLanguagePicker = false
-                    interfaceLanguage.select(language, reduceMotion: reduceMotion)
-                } label: {
-                    HStack {
-                        Text(language.nativeName)
-                        Spacer(minLength: 20)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color.accentColor)
-                            .opacity(interfaceLanguage.language == language ? 1 : 0)
-                    }
-                    .font(.system(size: 12))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(interfaceLanguage.language == language ? Color.accentColor.opacity(0.08) : .clear,
-                                in: RoundedRectangle(cornerRadius: 6))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(interfaceLanguage.language == language ? [.isSelected] : [])
-            }
+        SettingsPopoverOptions(title: L10n.tr("语言"), options: AppLanguage.allCases,
+                               selection: interfaceLanguage.language, optionTitle: { $0.nativeName }) { language in
+            showsLanguagePicker = false
+            interfaceLanguage.select(language, reduceMotion: reduceMotion)
         }
-        .padding(10)
         .frame(width: interfaceLanguage.language == .english ? 220 : 170)
     }
 
@@ -166,39 +140,14 @@ struct SidebarFooterView: View {
     }
 
     private var appearancePicker: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(L10n.tr("外观"))
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 4)
-            ForEach(AppearanceMode.allCases) { mode in
-                Button {
-                    appearance.mode = mode
-                    showsAppearancePicker = false
-                } label: {
-                    HStack {
-                        Text(mode.title)
-                        Spacer(minLength: 20)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color.accentColor)
-                            .opacity(appearance.mode == mode ? 1 : 0)
-                    }
-                    .font(.system(size: 12))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(appearance.mode == mode ? Color.accentColor.opacity(0.08) : .clear,
-                                in: RoundedRectangle(cornerRadius: 6))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(appearance.mode == mode ? [.isSelected] : [])
-            }
+        SettingsPopoverOptions(title: L10n.tr("外观"), options: AppearanceMode.allCases,
+                               selection: appearance.mode, optionTitle: { $0.title }) { mode in
+            showsAppearancePicker = false
+            appearance.mode = mode
         }
-        .padding(10)
         .frame(width: interfaceLanguage.language == .english ? 220 : 170)
     }
+
 }
 
 private struct SidebarFooterLabelStyle: LabelStyle {

@@ -2,6 +2,7 @@
 import AppKit
 import SwiftUI
 import SQLite3
+import ServiceManagement
 
 /// Compiled only by scripts/render-demo.sh. The production lifecycle and the
 /// keyboard collector are never started, and every run gets fresh sample data.
@@ -14,14 +15,16 @@ enum ToccataDemoApplication {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             setenv("TOCCATA_DATA_DIR", directory.path, 1)
-            UserDefaults.standard.register(defaults: [
-                LanguageSettings.defaultsKey: "zh-Hans",
-                AppearanceSettings.defaultsKey: "light",
+            UserDefaults.standard.setVolatileDomain([
+                LanguageSettings.defaultsKey: CommandLine.arguments.contains("--english") ? "en" : "zh-Hans",
+                AppearanceSettings.defaultsKey: CommandLine.arguments.contains("--dark") ? "dark" : "light",
+                DockIconSettings.defaultsKey: false,
+                HydrationReminderController.enabledKey: false,
                 "workspacePrimaryColumnFraction": 0.49
-            ])
+            ], forName: UserDefaults.argumentDomain)
             let application = NSApplication.shared
             application.setActivationPolicy(.accessory)
-            application.appearance = NSAppearance(named: .aqua)
+            application.appearance = NSAppearance(named: CommandLine.arguments.contains("--dark") ? .darkAqua : .aqua)
             let output = CommandLine.arguments.dropFirst().first ?? "images"
             let delegate = try DemoApplicationDelegate(directory: directory,
                 output: URL(fileURLWithPath: output, isDirectory: true))
@@ -42,6 +45,9 @@ private final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
     private let store: TaskStore
     private let selectedTask: String
     private let appearance = AppearanceSettings()
+    private let loginItems = LoginItemController(service: DemoLoginItemService())
+    private let dockIcon = DockIconSettings(apply: { _ in true })
+    private let reminders = HydrationReminderController(service: DemoNotificationService())
     // Deliberately not started: no socket connection, polling or input capture.
     private let refresher = LiveRefresher()
     private let presentation = MenuTaskPresentation()
@@ -63,11 +69,14 @@ private final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             do {
                 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-                try await render(.tasks, size: NSSize(width: 1600, height: 960), filename: "todo-management.png")
-                try await render(.activity, size: NSSize(width: 1440, height: 1580), filename: "keyboard-activity.png")
+                if CommandLine.arguments.contains("--settings") {
+                    try await render(.generalSettings, size: NSSize(width: 1320, height: 1160), filename: "general-settings.png")
+                } else {
+                    try await render(.tasks, size: NSSize(width: 1600, height: 960), filename: "todo-management.png")
+                    try await render(.activity, size: NSSize(width: 1440, height: 1580), filename: "keyboard-activity.png")
+                }
                 try FileManager.default.removeItem(at: directory)
-                print("Exported: \(output.appendingPathComponent("todo-management.png").path)")
-                print("Exported: \(output.appendingPathComponent("keyboard-activity.png").path)")
+                print("Exported demo images: \(output.path)")
                 NSApp.terminate(nil)
             } catch {
                 fputs("Demo export failed: \(error)\n", stderr)
@@ -84,8 +93,11 @@ private final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
             .environmentObject(appearance)
             .environmentObject(refresher)
             .environmentObject(presentation)
-            .environment(\.colorScheme, .light)
-            .environment(\.locale, Locale(identifier: "zh_CN"))
+            .environmentObject(loginItems)
+            .environmentObject(dockIcon)
+            .environmentObject(reminders)
+            .environment(\.colorScheme, appearance.mode == .dark ? .dark : .light)
+            .environment(\.locale, LanguageSettings.shared.language.locale)
         let host = NSHostingView(rootView: content)
         host.frame = NSRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -117,6 +129,7 @@ private final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
 }
 
 private struct DemoCanvas: View {
+    @Environment(\.colorScheme) private var colorScheme
     let section: WorkspaceSection
     let selectedTask: String
     let size: CGSize
@@ -130,11 +143,11 @@ private struct DemoCanvas: View {
                     Text("Toccata").fontWeight(.semibold)
                 }
                 .font(.system(size: 24))
-                Text(section == .tasks ? "ToDo 管理" : "键盘活跃")
+                Text(L10n.key(section.rawValue))
                     .font(.system(size: 24, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text("演示数据")
+                Text(L10n.tr("演示数据"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
             }
@@ -154,6 +167,8 @@ private struct DemoCanvas: View {
                             .shadow(color: .black.opacity(0.10), radius: 22, y: 12)
                     }
                 }
+            } else if section == .generalSettings {
+                workbench(width: 1240, height: 1010)
             } else {
                 workbench(width: 1360, height: 1414)
             }
@@ -161,8 +176,11 @@ private struct DemoCanvas: View {
         }
         .padding(40)
         .frame(width: size.width, height: size.height)
-        .background(LinearGradient(colors: [Color(red: 0.95, green: 0.96, blue: 0.99),
-                                            Color(red: 0.89, green: 0.91, blue: 0.97)],
+        .background(LinearGradient(colors: colorScheme == .dark
+                                   ? [Color(red: 0.12, green: 0.13, blue: 0.19),
+                                      Color(red: 0.08, green: 0.09, blue: 0.14)]
+                                   : [Color(red: 0.95, green: 0.96, blue: 0.99),
+                                      Color(red: 0.89, green: 0.91, blue: 0.97)],
                                    startPoint: .topLeading, endPoint: .bottomTrailing))
     }
 
@@ -196,6 +214,23 @@ private struct DemoCanvas: View {
 
 private enum DemoError: Error {
     case message(String)
+}
+
+/// Screenshot runs never register login items or contact notification services.
+@MainActor
+private final class DemoLoginItemService: LoginItemServicing {
+    var status: SMAppService.Status { .notRegistered }
+    func register() {}
+    func unregister() {}
+    func openSystemSettings() {}
+}
+
+@MainActor
+private final class DemoNotificationService: HydrationNotificationServicing {
+    func authorization() async -> HydrationNotificationAuthorization { .notDetermined }
+    func requestAuthorization() async throws {}
+    func send(_ notification: HydrationNotification) async throws {}
+    func openSettings() {}
 }
 
 @MainActor

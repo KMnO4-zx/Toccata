@@ -31,6 +31,12 @@ final class WorkspaceSidebarTests: XCTestCase {
         try await fixture.press(.ranking)
         fixture.send(keyCode: 125, characters: "\u{f701}")
         try await fixture.settle()
+        XCTAssertEqual(fixture.model.selection, .generalSettings)
+        fixture.send(keyCode: 125, characters: "\u{f701}")
+        try await fixture.settle()
+        XCTAssertEqual(fixture.model.selection, .generalSettings)
+        fixture.send(keyCode: 126, characters: "\u{f700}")
+        try await fixture.settle()
         XCTAssertEqual(fixture.model.selection, .ranking)
         try await fixture.press(.tasks)
         fixture.send(keyCode: 126, characters: "\u{f700}")
@@ -90,7 +96,7 @@ private final class SidebarFixture {
         // Row centers in this fixed-size fixture, measured from its rendered layout.
         let rowCenters: [WorkspaceSection: CGFloat] = [
             .tasks: 37, .inbox: 69, .taskCalendar: 101, .review: 133,
-            .activity: 198, .ranking: 230
+            .activity: 198, .ranking: 230, .generalSettings: 295
         ]
         let fromTop = rowCenters[destination]!
         let point = NSPoint(x: 110, y: host.view.isFlipped ? fromTop : host.view.bounds.height - fromTop)

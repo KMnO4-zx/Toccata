@@ -7,6 +7,7 @@ enum WorkspaceSection: String, CaseIterable, Identifiable {
     case review = "任务回顾"
     case activity = "键盘活跃"
     case ranking = "应用与趋势"
+    case generalSettings = "通用配置"
 
     var id: String { rawValue }
     var symbol: String {
@@ -17,11 +18,12 @@ enum WorkspaceSection: String, CaseIterable, Identifiable {
         case .review: return "checkmark.circle"
         case .activity: return "waveform.path"
         case .ranking: return "chart.bar.xaxis"
+        case .generalSettings: return "gearshape"
         }
     }
 }
 
-/// All six destinations share one SwiftUI layout so the selection can travel
+/// All destinations share one SwiftUI layout so the selection can travel
 /// across groups without being clipped by native List row hosting views.
 struct WorkspaceSidebar: View {
     @ObservedObject private var interfaceLanguage = LanguageSettings.shared
@@ -39,6 +41,7 @@ struct WorkspaceSidebar: View {
                 VStack(alignment: .leading, spacing: 16) {
                     group(L10n.tr("任务"), items: [.tasks, .inbox, .taskCalendar, .review])
                     group(L10n.tr("时间与活动"), items: [.activity, .ranking])
+                    group(L10n.tr("设置"), items: [.generalSettings])
                 }
                 .backgroundPreferenceValue(SidebarRowBoundsKey.self) { bounds in
                     GeometryReader { geometry in

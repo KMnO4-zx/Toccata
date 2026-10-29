@@ -32,4 +32,4 @@ cat > "$DEMO_APP/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 codesign --force --sign - "$DEMO_APP"
-"$DEMO_APP/Contents/MacOS/ToccataDemo" "$DEMO_OUTPUT"
+"$DEMO_APP/Contents/MacOS/ToccataDemo" "$DEMO_OUTPUT" "${@:2}"
