@@ -27,7 +27,8 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
         guard !didStart else { return }
         didStart = true
         let launchedAtLogin = ApplicationLaunchContext.currentIsLoginItemLaunch
-        taskMenu.configure(store: taskStore, loginItems: loginItems, appearance: appearance, openHydrationSettings: { [weak self] in
+        taskMenu.configure(store: taskStore, loginItems: loginItems, appearance: appearance,
+                           refresher: refresher, openHydrationSettings: { [weak self] in
             self?.openHydrationSettings()
         }, openAbout: { [weak self] in
             self?.openAbout()

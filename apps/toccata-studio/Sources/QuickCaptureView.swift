@@ -8,7 +8,7 @@ struct QuickCaptureView: View {
     @EnvironmentObject private var tasks: TaskStore
     @EnvironmentObject private var presentation: MenuTaskPresentation
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var page: MenuPanelPage = .tasks
+    private var page: MenuPanelPage { presentation.page }
     @State private var scope: MenuTaskScope = .thisWeek
     @State private var sortOrder: MenuTaskSortOrder = .createdDescending
     @State private var title = ""
@@ -30,9 +30,9 @@ struct QuickCaptureView: View {
     var body: some View {
         let _ = interfaceLanguage.language
         VStack(spacing: 0) {
-            header
+            if page != .activity { header }
             if page == .tasks { captureField }
-            if let error = tasks.errorMessage {
+            if page != .activity, let error = tasks.errorMessage {
                 Text(error)
                     .font(.system(size: 10))
                     .foregroundStyle(.red)
@@ -43,8 +43,10 @@ struct QuickCaptureView: View {
             Group {
                 if page == .tasks {
                     taskList.padding(.top, 8)
-                } else {
+                } else if page == .calendar {
                     MenuCalendarView()
+                } else {
+                    MenuActivityOverview()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -62,7 +64,10 @@ struct QuickCaptureView: View {
         .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { referenceDate = $0 }
         .onAppear {
             updateExpandedBranches(reset: knownBranchIDs.isEmpty)
-            captureFocused = true
+            captureFocused = page == .tasks
+        }
+        .onExitCommand {
+            if page != .tasks { presentation.dismissMenu() }
         }
         .onChange(of: presentation.openGeneration) { _ in resetForOpening() }
         .onChange(of: presentation.listFocusRequest) { _ in captureFocused = false }
@@ -322,44 +327,42 @@ struct QuickCaptureView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 0) {
-            Button {
-                page = .tasks
-                captureFocused = true
-            } label: {
-                Image(systemName: page == .tasks ? "checkmark.circle.fill" : "checkmark.circle")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(page == .tasks ? TaskMenuStyle.accent : TaskMenuStyle.muted)
-                    .frame(width: 20, height: 20)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L10n.tr("任务"))
-            .accessibilityAddTraits(page == .tasks ? .isSelected : [])
-
-            Button { page = .calendar } label: {
-                Image(systemName: "calendar")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(page == .calendar ? TaskMenuStyle.accent : TaskMenuStyle.muted)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L10n.tr("日历"))
-            .accessibilityAddTraits(page == .calendar ? .isSelected : [])
-
+            navigationButton(.tasks, title: L10n.tr("任务"),
+                             symbol: page == .tasks ? "checkmark.circle.fill" : "checkmark.circle")
+            navigationButton(.calendar, title: L10n.tr("日历"), symbol: "calendar")
+            navigationButton(.activity, title: L10n.tr("活动"), symbol: "waveform.path")
             Button { presentation.openWorkbench() } label: {
-                Image(systemName: "macwindow")
-                    .font(.system(size: 20))
-                    .foregroundStyle(TaskMenuStyle.muted)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
+                navigationLabel(L10n.tr("工作台"), symbol: "macwindow", selected: false)
             }
             .buttonStyle(.plain)
             .help(L10n.tr("打开工作台"))
             .accessibilityLabel(L10n.tr("打开工作台"))
         }
-        .frame(height: 48)
+        .frame(height: 52)
+        .overlay(alignment: .top) { Rectangle().fill(TaskMenuStyle.divider).frame(height: 0.5) }
+    }
+
+    private func navigationButton(_ destination: MenuPanelPage, title: String, symbol: String) -> some View {
+        Button {
+            presentation.page = destination
+            captureFocused = destination == .tasks
+        } label: {
+            navigationLabel(title, symbol: symbol, selected: page == destination)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(destination.title)
+        .accessibilityIdentifier("menu-page-\(destination.rawValue)")
+        .accessibilityAddTraits(page == destination ? .isSelected : [])
+    }
+
+    private func navigationLabel(_ title: String, symbol: String, selected: Bool) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: symbol).font(.system(size: 18, weight: .medium))
+            Text(title).font(.system(size: 9))
+        }
+        .foregroundStyle(selected ? TaskMenuStyle.accent : TaskMenuStyle.muted)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
@@ -465,14 +468,16 @@ struct QuickCaptureView: View {
     }
 
     private func resetForOpening() {
-        page = .tasks
         scope = .thisWeek
         presentation.selectedTaskID = nil
         presentation.dismissEditor()
         referenceDate = Date()
         updateExpandedBranches(reset: true)
         captureFocused = false
-        DispatchQueue.main.async { captureFocused = true }
+        let opening = presentation.openGeneration
+        DispatchQueue.main.async {
+            if presentation.openGeneration == opening, page == .tasks { captureFocused = true }
+        }
     }
 
     private func addTask() {
@@ -483,11 +488,6 @@ struct QuickCaptureView: View {
             captureFocused = true
         }
     }
-}
-
-private enum MenuPanelPage {
-    case tasks
-    case calendar
 }
 
 private enum MenuTaskSortOrder: String, CaseIterable, Identifiable {

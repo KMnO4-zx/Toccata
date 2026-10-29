@@ -10,17 +10,19 @@ struct KeyboardHeatmapView: View {
     private let periodDescription: String
     private let labelScale: CGFloat
     private let pressedKeys: Set<Int>
+    private let compactTooltip: Bool
     @State private var hoveredKeyID: String?
 
     init(layout: KeyboardLayout = .magicKeyboard, counts: [Int: Int] = [:], fnMs: Int64 = 0,
          periodDescription: String = L10n.tr("今天"), labelScale: CGFloat = 1,
-         pressedKeys: Set<Int> = []) {
+         pressedKeys: Set<Int> = [], compactTooltip: Bool = false) {
         self.layout = layout
         self.counts = counts
         self.fnMs = fnMs
         self.periodDescription = periodDescription
         self.labelScale = labelScale
         self.pressedKeys = pressedKeys
+        self.compactTooltip = compactTooltip
     }
 
     var body: some View {
@@ -66,8 +68,8 @@ struct KeyboardHeatmapView: View {
                 }
 
                 if let item = scaled.keys.first(where: { $0.id == hoveredKeyID }) {
-                    let width = min(item.key.code == 63 ? 240 : 180, scaled.size.width)
-                    let height: CGFloat = 66
+                    let width = min(item.key.code == 63 ? (compactTooltip ? 180 : 240) : (compactTooltip ? 140 : 180), scaled.size.width)
+                    let height: CGFloat = compactTooltip ? 48 : 66
                     let halfWidth = width / 2
                     let halfHeight = height / 2
                     let x = min(max(item.frame.midX, halfWidth), scaled.size.width - halfWidth)
@@ -76,7 +78,8 @@ struct KeyboardHeatmapView: View {
 
                     KeyboardKeyTooltip(
                         name: item.key.readableLabel,
-                        activity: activityDescription(for: item.key)
+                        activity: activityDescription(for: item.key),
+                        compact: compactTooltip
                     )
                     .frame(width: width, height: height)
                     .position(x: x, y: min(max(y, halfHeight), max(halfHeight, scaled.size.height - halfHeight)))
@@ -241,19 +244,20 @@ private struct KeyboardKeyCap: View {
 private struct KeyboardKeyTooltip: View {
     let name: String
     let activity: String
+    let compact: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: compact ? 3 : 5) {
             Text(name)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: compact ? 10 : 12, weight: .semibold))
                 .foregroundStyle(.secondary)
             Text(activity)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: compact ? 11 : 13, weight: .medium))
                 .monospacedDigit()
         }
         .lineLimit(1)
         .minimumScaleFactor(0.8)
-        .padding(.horizontal, 14)
+        .padding(.horizontal, compact ? 10 : 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
         .overlay {

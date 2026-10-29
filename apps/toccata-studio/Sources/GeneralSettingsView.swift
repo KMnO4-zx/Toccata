@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct GeneralSettingsView: View {
     @ObservedObject private var language = LanguageSettings.shared
+    @ObservedObject private var menuSettings = MenuBarSettings.shared
     @EnvironmentObject private var appearance: AppearanceSettings
     @EnvironmentObject private var loginItems: LoginItemController
     @EnvironmentObject private var dockIcon: DockIconSettings
@@ -40,6 +41,17 @@ struct GeneralSettingsView: View {
                         .frame(width: 220, alignment: .trailing)
                         .accessibilityIdentifier("settings-language")
                     }
+                }
+
+                settingsCard(L10n.tr("状态栏"), symbol: "menubar.rectangle") {
+                    settingsRow(L10n.tr("状态栏默认页面")) {
+                        SettingsPopoverPicker(title: L10n.tr("状态栏默认页面"), options: MenuPanelPage.allCases,
+                                              selection: $menuSettings.defaultPage, optionTitle: { $0.title },
+                                              popoverWidth: language.language == .english ? 230 : 190)
+                            .accessibilityIdentifier("settings-menu-default-page")
+                    }
+                    Text(L10n.tr("点击状态栏图标时，默认打开所选页面。"))
+                        .font(.caption).foregroundStyle(.secondary)
                 }
 
                 settingsCard(L10n.tr("启动与后台运行"), symbol: "power") {

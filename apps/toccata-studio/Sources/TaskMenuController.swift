@@ -13,6 +13,7 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var store: TaskStore?
     private var loginItems: LoginItemController?
     private var appearance: AppearanceSettings?
+    private var refresher: LiveRefresher?
     private var openWorkbenchAction: (() -> Void)?
     private var openAboutAction: (() -> Void)?
     private var openHydrationSettingsAction: (() -> Void)?
@@ -26,6 +27,7 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var editorRevealGeneration = UUID()
 
     func configure(store: TaskStore, loginItems: LoginItemController, appearance: AppearanceSettings,
+                   refresher: LiveRefresher,
                    openHydrationSettings: @escaping () -> Void,
                    openAbout: @escaping () -> Void,
                    openWorkbench: @escaping () -> Void) {
@@ -36,6 +38,7 @@ final class TaskMenuController: NSObject, ObservableObject {
         self.store = store
         self.loginItems = loginItems
         self.appearance = appearance
+        self.refresher = refresher
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             button.image = NSImage(systemSymbolName: "square.stack.3d.up.fill", accessibilityDescription: L10n.tr("Toccata 任务"))
@@ -64,6 +67,7 @@ final class TaskMenuController: NSObject, ObservableObject {
             self?.openWorkbenchAction?()
         }
         presentation.onAnchorsChanged = { [weak self] in self?.positionEditor() }
+        presentation.onDismissMenu = { [weak self] in self?.dismiss() }
         storeSubscription = store.$tasks.receive(on: RunLoop.main).sink { [weak self] updated in
             guard let self else { return }
             let count = updated.filter { $0.parentID == nil && !$0.isCompleted }.count
@@ -113,18 +117,21 @@ final class TaskMenuController: NSObject, ObservableObject {
     }
 
     func showMenu() {
-        guard let store,
+        guard let store, let refresher,
               let button = statusItem?.button, let statusWindow = button.window else { return }
         let anchor = statusWindow.convertToScreen(button.convert(button.bounds, to: nil))
         let screen = statusWindow.screen ?? NSScreen.main ?? NSScreen.screens[0]
         let frame = MenuPanelLayout.listFrame(anchor: anchor, screen: screen.visibleFrame)
         presentation.panelSize = frame.size
+        hideEditor()
+        presentation.prepareForOpening()
         if listPanel == nil {
             let panel = makePanel(title: L10n.tr("Toccata 任务列表"))
             panel.contentView = NSHostingView(rootView:
                 QuickCaptureView()
                     .environmentObject(store)
                     .environmentObject(presentation)
+                    .environmentObject(refresher)
                     .tint(TaskMenuStyle.accent)
                     .background(TaskMenuStyle.background)
                     .clipShape(RoundedRectangle(cornerRadius: TaskMenuStyle.cornerRadius))
@@ -133,11 +140,6 @@ final class TaskMenuController: NSObject, ObservableObject {
         }
         guard let panel = listPanel else { return }
         let wasVisible = panel.isVisible
-        hideEditor()
-        presentation.selectedTaskID = nil
-        presentation.focusRequest = nil
-        presentation.rowFrames = [:]
-        presentation.openGeneration = UUID()
 
         let shouldAnimate = !wasVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         panel.setFrame(shouldAnimate ? MenuPanelLayout.revealFrame(for: frame) : frame, display: true)
@@ -155,6 +157,7 @@ final class TaskMenuController: NSObject, ObservableObject {
     func dismiss() {
         guard !isDismissing else { return }
         isDismissing = true
+        presentation.menuDidHide()
         if let globalClickMonitor {
             NSEvent.removeMonitor(globalClickMonitor)
             self.globalClickMonitor = nil

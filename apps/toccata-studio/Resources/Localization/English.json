@@ -494,5 +494,21 @@
   "关于": "About",
   "版本信息与检查更新": "Version info & updates",
   "无法更改 Dock 图标显示，请重试。": "Could not change Dock icon visibility. Please try again.",
-  "设置": "Settings"
+  "设置": "Settings",
+  "任务管理": "Task management",
+  "活动速览": "Activity overview",
+  "状态栏": "Menu bar",
+  "状态栏默认页面": "Default menu bar page",
+  "点击状态栏图标时，默认打开所选页面。": "Open this page each time you click the menu bar icon.",
+  "活动": "Activity",
+  "工作台": "Workspace",
+  "键盘": "Keyboard",
+  "颜色越深，按键越多": "Darker keys mean more presses",
+  "活跃时段": "Activity timeline",
+  "这一天还没有键盘活动记录。": "No keyboard activity recorded for this day.",
+  "{0}小时{1}分": "{0}h {1}m",
+  "{0}分钟": "{0}m",
+  "{0} · 活跃 {1} · {2} 次按键": "{0} · Active {1} · {2} key presses",
+  "{0} · {1} · {2} 次按键": "{0} · {1} · {2} key presses",
+  "{0} · {1}": "{0} · {1}"
 }

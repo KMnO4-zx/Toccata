@@ -68,6 +68,8 @@ Toccata stays in the menu bar and shows a Dock icon by default. Hide it under **
 
 **Settings → General settings** brings together appearance, language, water reminders, launch at login, Dock visibility, and About. The appearance, language, and About shortcuts remain at the bottom left. Launch at login is off by default.
 
+The menu bar panel also includes **Activity overview**, with Keyboard and Apps pages for today or yesterday. The Keyboard page shows a per-key heatmap and 15-minute activity segments with hover details. The scrollable Apps page lists every app by active time, showing both active time and key presses. Set **Default menu bar page** to Task management, Task calendar, or Activity overview under General settings. Task management is the default; each reopening uses your configured page.
+
 Open General settings, or right-click the menu bar icon and choose **Water reminders…** to enable reminders based on key presses. The default interval is 8,192 presses, with a fresh count each day. You can change the interval and send a test notification. Enabling reminders requires notification permission; counts use the existing input monitoring records. Reminders continue with the workspace closed and stop when you quit the app.
 
 Want to make it your own? Build instructions and development notes are in [develop.md (Chinese)](develop.md).

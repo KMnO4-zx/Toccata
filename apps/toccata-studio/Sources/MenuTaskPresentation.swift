@@ -14,6 +14,10 @@ struct MenuEditorFocusRequest: Equatable {
 /// Shared selection and focus for the task list and its companion editor.
 @MainActor
 final class MenuTaskPresentation: ObservableObject {
+    @Published var page: MenuPanelPage
+    @Published var activityTab: MenuActivityTab = .keyboard
+    @Published private(set) var isMenuVisible = false
+    private let settings: MenuBarSettings
     @Published var selectedTaskID: String?
     @Published private(set) var isEditorVisible = false
     @Published var focusRequest: MenuEditorFocusRequest?
@@ -33,7 +37,25 @@ final class MenuTaskPresentation: ObservableObject {
     var onDismissEditor: (() -> Void)?
     var onFocusList: (() -> Void)?
     var onOpenWorkbench: (() -> Void)?
+    var onDismissMenu: (() -> Void)?
     var onAnchorsChanged: (() -> Void)?
+
+    init(settings: MenuBarSettings? = nil) {
+        self.settings = settings ?? .shared
+        page = self.settings.defaultPage
+    }
+
+    func prepareForOpening() {
+        page = settings.defaultPage
+        selectedTaskID = nil
+        editorDidHide()
+        rowFrames = [:]
+        isMenuVisible = true
+        openGeneration = UUID()
+    }
+
+    func menuDidHide() { isMenuVisible = false }
+    func dismissMenu() { onDismissMenu?() }
 
     func selectTask(_ id: String, focus: MenuEditorField? = nil) {
         selectedTaskID = id

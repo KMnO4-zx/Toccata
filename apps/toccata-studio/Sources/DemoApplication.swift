@@ -20,6 +20,7 @@ enum ToccataDemoApplication {
                 AppearanceSettings.defaultsKey: CommandLine.arguments.contains("--dark") ? "dark" : "light",
                 DockIconSettings.defaultsKey: false,
                 HydrationReminderController.enabledKey: false,
+                MenuBarSettings.defaultPageKey: MenuPanelPage.tasks.rawValue,
                 "workspacePrimaryColumnFraction": 0.49
             ], forName: UserDefaults.argumentDomain)
             let application = NSApplication.shared
@@ -52,6 +53,7 @@ private final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
     private let refresher = LiveRefresher()
     private let presentation = MenuTaskPresentation()
     private var window: NSWindow?
+    private var menuController: TaskMenuController?
 
     init(directory: URL, output: URL) throws {
         self.directory = directory
@@ -69,7 +71,13 @@ private final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             do {
                 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-                if CommandLine.arguments.contains("--settings") {
+                if CommandLine.arguments.contains("--menu-preview") {
+                    showMenuPreview()
+                    return
+                } else if CommandLine.arguments.contains("--menu") {
+                    try await renderMenu(tab: .keyboard, filename: "menu-keyboard.png")
+                    try await renderMenu(tab: .apps, filename: "menu-apps.png")
+                } else if CommandLine.arguments.contains("--settings") {
                     try await render(.generalSettings, size: NSSize(width: 1320, height: 1160), filename: "general-settings.png")
                 } else {
                     try await render(.tasks, size: NSSize(width: 1600, height: 960), filename: "todo-management.png")
@@ -86,8 +94,50 @@ private final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    private func showMenuPreview() {
+        let controller = TaskMenuController()
+        controller.configure(store: store, loginItems: loginItems, appearance: appearance,
+                             refresher: refresher, openHydrationSettings: {}, openAbout: {}) { [weak self] in
+            self?.showSettingsPreview()
+        }
+        menuController = controller
+        controller.showMenu()
+    }
+
+    private func showSettingsPreview() {
+        let content = GeneralSettingsView(openAbout: {})
+            .environmentObject(appearance).environmentObject(loginItems)
+            .environmentObject(dockIcon).environmentObject(reminders)
+            .frame(width: 700, height: 740).languageChangeTransition()
+        let window = NSWindow(contentViewController: NSHostingController(rootView: content))
+        window.title = "Toccata Demo Settings"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        window.center()
+        self.window?.close()
+        self.window = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func renderMenu(tab: MenuActivityTab, filename: String) async throws {
+        let presentation = MenuTaskPresentation()
+        presentation.prepareForOpening()
+        presentation.page = .activity
+        presentation.activityTab = tab
+        let content = QuickCaptureView()
+            .environmentObject(store).environmentObject(presentation).environmentObject(refresher)
+            .environment(\.colorScheme, appearance.mode == .dark ? .dark : .light)
+            .tint(TaskMenuStyle.accent)
+        try await capture(content, size: presentation.panelSize, filename: filename)
+        presentation.menuDidHide()
+    }
+
     private func render(_ section: WorkspaceSection, size: NSSize, filename: String) async throws {
-        window?.close()
         let content = DemoCanvas(section: section, selectedTask: selectedTask, size: size)
             .environmentObject(store)
             .environmentObject(appearance)
@@ -98,6 +148,11 @@ private final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
             .environmentObject(reminders)
             .environment(\.colorScheme, appearance.mode == .dark ? .dark : .light)
             .environment(\.locale, LanguageSettings.shared.language.locale)
+        try await capture(content, size: size, filename: filename)
+    }
+
+    private func capture<Content: View>(_ content: Content, size: NSSize, filename: String) async throws {
+        window?.close()
         let host = NSHostingView(rootView: content)
         host.frame = NSRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)

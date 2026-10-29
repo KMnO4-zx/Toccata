@@ -99,6 +99,12 @@ launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.toccata.core.
 
 使用自定义数据目录时，还需在 plist 的 `EnvironmentVariables` 中配置同一个 `TOCCATA_DATA_DIR`。标准 App 使用内嵌服务，无需安装 LaunchAgent。
 
+### 菜单栏默认页面与活动速览
+
+“通用配置 → 状态栏默认页面”保存到本机偏好 `menuBarDefaultPage`，支持 `tasks`、`calendar`、`activity`；缺失或无效时回退到任务管理。每次打开小窗重新读取当前配置，临时切换标签不会修改默认值；任务输入框仅在任务管理页获取焦点。
+
+活动速览沿用 `ActivityRepository` 和 `StatsRepository` 的统计口径与每日派生缓存。键盘数据合并实时事件并去重，应用排行与工作台一样读取已落盘记录；应用页完整列出所选日期的全部应用，显示各自时长和次数。活跃时段使用与工作台一致的等高 15 分钟色条，悬停显示时段、活跃时长、按键次数与 Fn 时长；键盘按键也有紧凑悬浮提示。键盘页使用固定布局；只有应用列表可滚动，并隐藏滚动条。键盘与应用切换时，选中背景平滑移动，内容淡入淡出；今日与昨日切换时，保留原有内容直到新数据就绪，再同步淡入日期与统计内容。切换后从列表顶部开始，并遵循系统“减少动态效果”设置。小窗可见时每 5 秒在后台刷新，隐藏后取消界面加载，不再发起定时查询；读取失败显示重试入口。
+
 ### 喝水提醒
 
 “设置 → 通用配置”或菜单栏右键菜单的“喝水提醒…”可开启本地通知，默认关闭。开启后申请独立的通知授权；登录启动和后台计数不会触发授权弹窗。默认间隔为 8,192 次按键，可选择 4,096、8,192、16,384 或 32,768 次，并发送测试通知。
@@ -113,6 +119,8 @@ launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.toccata.core.
 ./scripts/render-demo.sh
 # 设置页：可组合 --english 和 --dark 检查语言与外观
 ./scripts/render-demo.sh .build/settings-preview --settings --english --dark
+# 活动速览的两个状态；用 --menu-preview 可交互检查真实状态栏小窗
+./scripts/render-demo.sh .build/menu-preview --menu
 ```
 
 脚本单独编译带 `TOCCATA_DEMO` 标记的演示版本，复用工作台、菜单栏任务列表、键盘热力图与活跃时间线的真实界面组件，生成两张 2 倍分辨率 PNG：
