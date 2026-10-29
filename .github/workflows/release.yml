@@ -61,6 +61,7 @@ jobs:
           python3 scripts/tests/test_release.py
           python3 scripts/tests/test_build_info.py
           python3 scripts/tests/test_macos_toolchain.py
+          python3 scripts/tests/test_update_installer.py
           cargo test --locked
           # WebKit integration tests require a local interactive desktop.
           swift test --package-path apps/toccata-studio --sdk "$SDKROOT" --skip MarkdownWebEditorTests

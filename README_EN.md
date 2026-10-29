@@ -62,6 +62,8 @@ I want to use the keyboard to record the time I spend putting something out into
 
 For **Apple Silicon Macs · macOS 13+**. Download the DMG from [Releases](https://github.com/KMnO4-zx/Toccata/releases), then drag `Toccata.app` into Applications.
 
+Once you have a version with in-app updates, use **About Toccata → Check for Updates** to download a newer release, then choose **Install and Restart**. Downloads can be cancelled or retried; tasks and keyboard records are saved before installation. The release page remains available when there is no compatible package. Older versions need one manual upgrade first.
+
 Keyboard tracking requires permission under **System Settings → Privacy & Security → Input Monitoring**. Task management works independently.
 
 Toccata stays in the menu bar and shows a Dock icon by default. Hide it under **Settings → General settings**. Click its menu bar icon to add and manage tasks, or right-click and choose **Open Workspace** for the full interface. Closing the workspace keeps Toccata running in the background; choose **Quit Toccata** to stop the app.

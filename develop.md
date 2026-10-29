@@ -121,6 +121,8 @@ launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.toccata.core.
 ./scripts/render-demo.sh .build/settings-preview --settings --english --dark
 # 活动速览的两个状态；用 --menu-preview 可交互检查真实状态栏小窗
 ./scripts/render-demo.sh .build/menu-preview --menu
+# 关于页的新版可用、下载中、准备安装三个状态；使用模拟更新数据
+./scripts/render-demo.sh .build/about-preview --about
 ```
 
 脚本单独编译带 `TOCCATA_DEMO` 标记的演示版本，复用工作台、菜单栏任务列表、键盘热力图与活跃时间线的真实界面组件，生成两张 2 倍分辨率 PNG：
@@ -249,7 +251,7 @@ Fn（键码 `63`）的实际按住区间单独合并、裁剪和汇总，**不�
 | 分享图片 | `ActivityShareSnapshot.swift`、`ActivityShareCard.swift`、`ActivitySharePopover.swift` |
 | 语言、外观与动画 | `LanguageSettings.swift`、`AppearanceSettings.swift`、`WorkspaceMotion.swift` |
 | 应用生命周期、服务启动与登录项 | `ToccataStudioApp.swift`、`ApplicationLifecycle.swift`、`CoreProcessController.swift`、`LoginItemController.swift` |
-| 关于页、版本与更新检查 | `AboutView.swift`、`AppVersion.swift`、`UpdateChecker.swift` |
+| 关于页、版本与应用内更新 | `AboutView.swift`、`AppVersion.swift`、`UpdateChecker.swift`、`AppUpdateController.swift`、`UpdatePackagePreparer.swift`、`Resources/install-update.sh` |
 | 键盘事件、特殊键与按住配对 | `tap.rs`、`hid.rs`、`special_keys.rs`、`tracker.rs` |
 | 服务配置、数据库与 IPC | `config.rs`、`store.rs`、`ipc.rs`、`main.rs` |
 
@@ -275,10 +277,14 @@ Fn（键码 `63`）的实际按住区间单独合并、裁剪和汇总，**不�
 
 Fork 后如需独立分发，应检查以下位置：
 
-- `UpdateChecker.swift` 中的 `ToccataReleaseSource.repository`：更新源、仓库链接及发布页面地址由此生成，按自己的仓库修改。更新检查由用户手动触发，只查询版本并打开发布页，不自动下载安装，也不上传任务或键盘记录。
-- `scripts/build-app.sh` 中的 App 名称、Bundle ID 和签名要求，以及 `AppVersion.swift` 对 Bundle ID 的判断：改名或更换身份时保持一致。
+- `UpdateChecker.swift` 中的 `ToccataReleaseSource.repository`：更新源、仓库链接及发布页面地址由此生成，按自己的仓库修改。用户在关于页检查、下载新版，并选择“安装并重启”；不在后台定时检查，也不上传任务或键盘记录。
+- `scripts/build-app.sh` 中的 App 名称、Bundle ID 和签名要求，以及 `AppVersion.swift`、`UpdatePackagePreparer.swift`、`Resources/install-update.sh` 对应用身份的判断：改名或更换身份时保持一致。
 - `AppPaths.swift` 与 Rust `config.rs`：独立发行版如需默认使用自己的数据目录，应同步修改两端；开发调试可先使用 `TOCCATA_DATA_DIR`。
 - 品牌资源、系统本地化资源、`scripts/package-dmg.sh`、`scripts/create-github-release.sh` 与发布工作流中的产物命名；使用独立 LaunchAgent 时也需检查其标签与路径。
+
+应用内更新沿用 GitHub Releases 的 `Toccata-<version>-<arch>.dmg`，优先当前架构，兼容 universal 包。附件必须有 GitHub API 提供的 SHA-256 `digest`；缺失校验值、架构不匹配或没有安装包时保留发布页入口。下载仅允许 GitHub 的 HTTPS 地址，校验大小、SHA-256、应用身份、版本、最低系统版本、两个可执行文件的架构及代码签名；原应用具有 Team ID 时，新包必须属于同一团队。目前发行版采用 ad-hoc 签名，来源信任依赖 GitHub HTTPS 与其 API 摘要，并非独立的发行者签名验证。
+
+更新先在应用同目录准备副本，确认任务保存和采集服务退出后，由独立脚本等待旧进程退出、替换应用并重新启动。替换或启动命令失败时尝试回退；新应用实际启动后才删除旧副本。若新应用在启动早期崩溃，旧副本会保留在同目录的 `.Toccata-backup-<UUID>.app`，不会自动判断崩溃并回退。任务与活动数据目录不参与替换。只读 DMG、App Translocation 或无写权限的位置需先手动安装到可写目录。
 
 ## 验证与调试
 
@@ -287,6 +293,7 @@ Fork 后如需独立分发，应检查以下位置：
 python3 scripts/tests/test_release.py
 python3 scripts/tests/test_build_info.py
 python3 scripts/tests/test_macos_toolchain.py
+python3 scripts/tests/test_update_installer.py
 
 # Rust 测试；依赖已缓存时可额外添加 --offline
 source scripts/macos-toolchain.sh
@@ -301,6 +308,8 @@ git diff --check
 ```
 
 `MarkdownWebEditorTests` 需要本机可交互桌面的 WebKit 环境。发布工作流使用 `swift test --package-path apps/toccata-studio --skip MarkdownWebEditorTests`；修改 Markdown 编辑器时仍需在本机补齐这部分验证。
+
+`test_update_installer.py` 在隔离目录验证退出等待、替换、回退及并发替换保护，模拟签名和启动命令，不启动正式应用。真实下载与校验可选用 `UpdateDownloadSmokeTests`：先将构建好的 App 复制到 `.build/updater-smoke/Toccata.app`，只将该副本版本改为 `0.0.0` 并重新 ad-hoc 签名，再用 `TOCCATA_UPDATE_SMOKE_APP="$PWD/.build/updater-smoke/Toccata.app" swift test --package-path apps/toccata-studio --sdk "$SDKROOT" --filter UpdateDownloadSmokeTests` 运行。此测试下载并准备最新版，但不会安装或启动；平时跳过。遇到 API 限流时，可用 `TOCCATA_UPDATE_SMOKE_RELEASE_JSON` 指向先前保存的 GitHub Release JSON，仅复用发布元数据，仍真实下载安装包。
 
 界面改动还应在实际 App 中检查相关交互、浅色与深色外观、中英文排版和减少动态效果。存储改动应覆盖已有数据库迁移；采集改动应检查权限缺失、断开重连、长按与特殊键。自动化测试无法替代实际键盘设备和窗口交互验证。
 

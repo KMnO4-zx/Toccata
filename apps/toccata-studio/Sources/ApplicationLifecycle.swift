@@ -22,10 +22,12 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
     private var isClosingWorkbench = false
     private var allowsWorkbenchClose = false
     private var pendingSave: Task<Bool, Never>?
+    private var updateInstallation: (start: () async throws -> Void, failed: (Error) -> Void)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !didStart else { return }
         didStart = true
+        PreparedAppUpdate.cleanUpSuccessfulInstallation()
         let launchedAtLogin = ApplicationLaunchContext.currentIsLoginItemLaunch
         taskMenu.configure(store: taskStore, loginItems: loginItems, appearance: appearance,
                            refresher: refresher, openHydrationSettings: { [weak self] in
@@ -48,6 +50,7 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
             Task { @MainActor in self?.ensureCaptureIsRunning() }
         }
         if !launchedAtLogin { openWorkbench() }
+        if CommandLine.arguments.contains("--update-failed") { openAbout() }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -128,6 +131,7 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
         Task { @MainActor in
             guard await savePendingEdits() else {
                 isQuitting = false
+                failUpdate(UpdateInstallFailure.save)
                 sender.reply(toApplicationShouldTerminate: false)
                 showSaveFailure()
                 return
@@ -135,12 +139,23 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
             taskMenu.dismiss()
             let stopped = await coreProcess.stop()
             if stopped {
+                do {
+                    try await updateInstallation?.start()
+                    updateInstallation = nil
+                } catch {
+                    isQuitting = false
+                    failUpdate(error)
+                    coreProcess.start(requestPermission: false)
+                    sender.reply(toApplicationShouldTerminate: false)
+                    return
+                }
                 healthTimer?.invalidate()
                 hydrationReminders.stop()
                 refresher.stop()
                 sender.reply(toApplicationShouldTerminate: true)
             } else {
                 isQuitting = false
+                failUpdate(UpdateInstallFailure.save)
                 sender.reply(toApplicationShouldTerminate: false)
                 let alert = NSAlert()
                 alert.messageText = L10n.tr("后台记录仍在保存")
@@ -150,6 +165,18 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
             }
         }
         return .terminateLater
+    }
+
+    func installUpdate(start: @escaping () async throws -> Void, failed: @escaping (Error) -> Void) {
+        guard !isQuitting, updateInstallation == nil else { failed(UpdateInstallFailure.save); return }
+        updateInstallation = (start, failed)
+        NSApp.terminate(nil)
+    }
+
+    private func failUpdate(_ error: Error) {
+        let failed = updateInstallation?.failed
+        updateInstallation = nil
+        failed?(error)
     }
 
     func applicationWillTerminate(_ notification: Notification) {

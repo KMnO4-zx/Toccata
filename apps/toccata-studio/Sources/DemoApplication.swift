@@ -77,6 +77,8 @@ private final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
                 } else if CommandLine.arguments.contains("--menu") {
                     try await renderMenu(tab: .keyboard, filename: "menu-keyboard.png")
                     try await renderMenu(tab: .apps, filename: "menu-apps.png")
+                } else if CommandLine.arguments.contains("--about") {
+                    try await renderAbout()
                 } else if CommandLine.arguments.contains("--settings") {
                     try await render(.generalSettings, size: NSSize(width: 1320, height: 1160), filename: "general-settings.png")
                 } else {
@@ -135,6 +137,37 @@ private final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
             .tint(TaskMenuStyle.accent)
         try await capture(content, size: presentation.panelSize, filename: filename)
         presentation.menuDidHide()
+    }
+
+    private func renderAbout() async throws {
+        let service = ReleaseUpdateService { _ in
+            let json: [String: Any] = ["tag_name": "v0.2.0", "draft": false, "prerelease": false,
+                "assets": [["name": "Toccata-0.2.0-\(UpdatePackage.architecture).dmg", "state": "uploaded",
+                            "size": 123, "digest": "sha256:" + String(repeating: "a", count: 64)]]]
+            return (try JSONSerialization.data(withJSONObject: json),
+                    HTTPURLResponse(url: ToccataReleaseSource.latestAPIURL, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        let version = AppVersion(version: "0.1.1", build: "18")
+        let checker = UpdateChecker(service: service, current: version)
+        await checker.check()
+        guard case let .available(update) = checker.state else { throw DemoError.message("Missing demo update") }
+        let work = directory.appendingPathComponent("update-preview")
+        let updater = AppUpdateController { _, progress in
+            progress(0.42)
+            try await Task.sleep(nanoseconds: 4_000_000_000)
+            return PreparedAppUpdate(target: work.appendingPathComponent("original.app"),
+                staged: work.appendingPathComponent("staged.app"), backup: work.appendingPathComponent("backup.app"),
+                directory: work, originalIdentity: "0:0", version: "0.2.0")
+        }
+        let content = AboutView(version: version, checker: checker, updater: updater)
+            .environment(\.colorScheme, appearance.mode == .dark ? .dark : .light)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let size = NSHostingView(rootView: content).fittingSize
+        try await capture(content, size: size, filename: "about-update-available.png")
+        updater.download(update)
+        try await capture(content, size: size, filename: "about-update-downloading.png")
+        try await capture(content, size: size, filename: "about-update-ready.png")
+        updater.cancel()
     }
 
     private func render(_ section: WorkspaceSection, size: NSSize, filename: String) async throws {

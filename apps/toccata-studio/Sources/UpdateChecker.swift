@@ -12,6 +12,21 @@ enum ToccataReleaseSource {
 struct AvailableUpdate: Equatable {
     let version: String
     let pageURL: URL
+    var package: UpdatePackage? = nil
+}
+
+struct UpdatePackage: Equatable {
+    let url: URL
+    let size: Int64
+    let sha256: String
+
+    static var architecture: String {
+        #if arch(arm64)
+        return "arm64"
+        #else
+        return "x86_64"
+        #endif
+    }
 }
 
 enum UpdateCheckFailure: Error, Equatable {
@@ -65,7 +80,7 @@ struct ReleaseUpdateService {
         }
     }
 
-    func check(current: AppVersion) async throws -> AvailableUpdate? {
+    func check(current: AppVersion, architecture: String = UpdatePackage.architecture) async throws -> AvailableUpdate? {
         guard let installed = ReleaseVersion(current.version) else { throw UpdateCheckFailure.invalidResponse }
         var request = URLRequest(url: ToccataReleaseSource.latestAPIURL)
         request.cachePolicy = .reloadIgnoringLocalCacheData
@@ -89,17 +104,40 @@ struct ReleaseUpdateService {
         // Never open an arbitrary URL from a remote response.
         let pageURL = ToccataReleaseSource.releasesURL.appendingPathComponent("tag")
             .appendingPathComponent(release.tagName)
-        return AvailableUpdate(version: "\(latest.major).\(latest.minor).\(latest.patch)", pageURL: pageURL)
+        let version = "\(latest.major).\(latest.minor).\(latest.patch)"
+        var package: UpdatePackage?
+        for arch in [architecture, "universal"] {
+            let name = "Toccata-\(version)-\(arch).dmg"
+            let matching = (release.assets ?? []).filter { $0.name == name }
+            guard matching.count == 1, let asset = matching.first,
+                  asset.state == "uploaded", asset.size > 0, asset.size <= 1_073_741_824,
+                  let digest = asset.digest, digest.hasPrefix("sha256:") else { continue }
+            let hash = String(digest.dropFirst(7))
+            guard hash.count == 64, hash.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else { continue }
+            // Asset URLs are derived from our repository, never remote URL fields.
+            package = UpdatePackage(url: ToccataReleaseSource.releasesURL.appendingPathComponent("download")
+                .appendingPathComponent(release.tagName).appendingPathComponent(name), size: asset.size, sha256: hash)
+            break
+        }
+        return AvailableUpdate(version: version, pageURL: pageURL, package: package)
     }
 
     private struct GitHubRelease: Decodable {
         let tagName: String
         let draft: Bool
         let prerelease: Bool
+        let assets: [Asset]?
+
+        struct Asset: Decodable {
+            let name: String
+            let size: Int64
+            let state: String
+            let digest: String?
+        }
 
         enum CodingKeys: String, CodingKey {
             case tagName = "tag_name"
-            case draft, prerelease
+            case draft, prerelease, assets
         }
     }
 }

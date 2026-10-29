@@ -49,11 +49,13 @@ struct AboutView: View {
     @ObservedObject private var interfaceLanguage = LanguageSettings.shared
     let version: AppVersion
     @StateObject private var checker: UpdateChecker
+    @StateObject private var updater: AppUpdateController
     @State private var copied = false
 
-    init(version: AppVersion = .current, checker: UpdateChecker? = nil) {
+    init(version: AppVersion = .current, checker: UpdateChecker? = nil, updater: AppUpdateController? = nil) {
         self.version = version
         _checker = StateObject(wrappedValue: checker ?? UpdateChecker(current: version))
+        _updater = StateObject(wrappedValue: updater ?? AppUpdateController())
     }
 
     var body: some View {
@@ -127,18 +129,17 @@ struct AboutView: View {
                 HStack {
                     Label(L10n.tr("软件更新"), systemImage: "arrow.triangle.2.circlepath").font(.headline)
                     Spacer()
-                    if checker.state == .checking {
-                        ProgressView().controlSize(.small).accessibilityLabel(L10n.tr("正在检查更新"))
+                    if checker.state == .checking || updater.state == .verifying || updater.state == .installing {
+                        ProgressView().controlSize(.small).accessibilityLabel(progressLabel)
                     }
                 }
-                updateStatus
-                    .frame(maxWidth: .infinity, minHeight: 58, alignment: .topLeading)
+                Group {
+                    if updater.state == .idle { updateStatus }
+                    else { downloadStatus }
+                }
+                .frame(maxWidth: .infinity, minHeight: 78, alignment: .topLeading)
                 HStack {
-                    Button(checker.state == .checking ? L10n.tr("正在检查…") : L10n.tr("检查更新")) {
-                        Task { await checker.check() }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(checker.state == .checking)
+                    updateAction
                     Spacer()
                     if case let .available(update) = checker.state {
                         Link(L10n.tr("查看新版 ↗"), destination: update.pageURL)
@@ -150,7 +151,7 @@ struct AboutView: View {
             }
             .padding(16)
             .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
-            Text(L10n.tr("手动检查 GitHub Releases，不会自动下载安装。"))
+            Text(L10n.tr("从 GitHub 下载并校验更新，点击“安装并重启”完成更新。"))
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(28)
@@ -174,7 +175,9 @@ struct AboutView: View {
                 Text(L10n.tr("当前版本 \(version.displayVersion)")).font(.callout).foregroundStyle(.secondary)
             case let .available(update):
                 Text(L10n.tr("发现新版本 v\(update.version)")).fontWeight(.semibold).foregroundStyle(Color.accentColor)
-                Text(L10n.tr("查看更新说明并下载，安装由你确认。"))
+                Text(update.package == nil
+                     ? L10n.tr("此版本暂无可自动安装的兼容安装包，请查看发布页面。")
+                     : L10n.tr("可在这里下载更新，完成后安装并重启。"))
                     .font(.callout).foregroundStyle(.secondary)
             case let .failed(error):
                 Text(error.title).fontWeight(.medium)
@@ -183,5 +186,67 @@ struct AboutView: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private var updateAction: some View {
+        if isDownloading || updater.state == .verifying {
+            Button(L10n.tr("取消下载")) { updater.cancel() }.buttonStyle(.bordered)
+        } else if updater.prepared != nil {
+            Button(updater.state == .installing ? L10n.tr("正在准备重启…") : L10n.tr("安装并重启")) { updater.install() }
+                .buttonStyle(.borderedProminent).disabled(updater.state == .installing)
+        } else if case let .available(update) = checker.state, update.package != nil {
+            Button(L10n.tr("下载更新")) { updater.download(update) }
+                .buttonStyle(.borderedProminent).disabled(updater.state.isBusy)
+        } else {
+            Button(checker.state == .checking ? L10n.tr("正在检查…") : L10n.tr("检查更新")) {
+                updater.cancel()
+                Task { await checker.check() }
+            }
+            .buttonStyle(.borderedProminent).disabled(checker.state == .checking)
+        }
+    }
+
+    private var isDownloading: Bool {
+        if case .downloading = updater.state { return true }
+        return false
+    }
+
+    private var progressLabel: String {
+        switch updater.state {
+        case .verifying: return L10n.tr("正在校验并准备安装…")
+        case .installing: return L10n.tr("正在保存任务和键盘记录…")
+        default: return L10n.tr("正在检查更新")
+        }
+    }
+
+    @ViewBuilder private var downloadStatus: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            switch updater.state {
+            case .idle: EmptyView()
+            case let .downloading(progress):
+                HStack {
+                    Text(L10n.tr("正在下载更新…")).fontWeight(.medium)
+                    Spacer()
+                    Text(progress, format: .percent.precision(.fractionLength(0))).monospacedDigit()
+                }
+                ProgressView(value: progress)
+            case .verifying:
+                Text(L10n.tr("正在校验并准备安装…")).fontWeight(.medium)
+                Text(L10n.tr("安装包下载完成，正在检查完整性与兼容性。"))
+                    .font(.callout).foregroundStyle(.secondary)
+            case .ready:
+                Label(L10n.tr("更新已准备好"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Text(L10n.tr("点击下方按钮，保存当前任务后安装并重新打开 Toccata。"))
+                    .font(.callout).foregroundStyle(.secondary)
+            case .installing:
+                Text(L10n.tr("正在保存任务和键盘记录…")).fontWeight(.medium)
+                Text(L10n.tr("完成后会自动安装并重新打开 Toccata。"))
+                    .font(.callout).foregroundStyle(.secondary)
+            case let .failed(message):
+                Text(L10n.tr("更新未完成")).fontWeight(.medium)
+                Text(message).font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
