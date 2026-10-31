@@ -71,7 +71,7 @@ struct ContentView: View {
         let _ = interfaceLanguage.language
         workspaceContainer
         .font(.system(size: 13))
-        .tint(.indigo)
+        .tint(.accentColor)
         .background(TaskScrollerStyle())
         .background(ActivityKeyboardInputScope(isActive: section == .activity))
         .languageChangeTransition()

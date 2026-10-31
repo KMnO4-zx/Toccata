@@ -46,6 +46,7 @@ struct WorkspaceTaskRow: View {
                         .lineLimit(4)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
+                        .transition(.opacity)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

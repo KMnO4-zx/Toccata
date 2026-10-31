@@ -116,65 +116,84 @@ struct TaskCalendarView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Text(L10n.tr("查看记录"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                    Picker(L10n.tr("按哪种日期查看"), selection: Binding(
-                        get: { mode },
-                        set: { mode = $0; selection = nil; collapsedTaskIDs.removeAll() }
-                    )) {
-                        ForEach(TaskCalendarMode.allCases) { item in
-                            Text(item.title).tag(item)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .id(interfaceLanguage.language)
-                    .accessibilityLabel(L10n.tr("按哪种日期查看"))
+                filterRow(L10n.tr("查看记录")) {
+                    WorkspaceSegmentedControl(
+                        title: L10n.tr("按哪种日期查看"),
+                        selection: Binding(
+                            get: { mode },
+                            set: { mode = $0; selection = nil; collapsedTaskIDs.removeAll() }
+                        ),
+                        options: TaskCalendarMode.allCases,
+                        optionTitle: { $0.title }
+                    )
                 }
-                HStack(spacing: 8) {
-                    Text(L10n.tr("显示方式"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                    Picker(L10n.tr("任务显示方式"), selection: $displayMode) {
-                        ForEach(TaskListDisplayMode.allCases) { item in
-                            Text(item.title).tag(item)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .id(interfaceLanguage.language)
-                    .accessibilityLabel(L10n.tr("任务显示方式"))
+                filterRow(L10n.tr("显示方式")) {
+                    WorkspaceSegmentedControl(
+                        title: L10n.tr("任务显示方式"), selection: $displayMode,
+                        options: TaskListDisplayMode.allCases, optionTitle: { $0.title }
+                    )
                 }
             }
 
-            if matchingTasks.isEmpty {
-                VStack(spacing: 7) {
-                    Text(emptyDayTitle)
-                        .font(.system(size: 13, weight: .medium))
-                    Text(L10n.tr("没有指定计划日期的任务，会留在下方“未安排日期”。"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 22)
-            } else {
-                // Branch animations change both row count and height. Resolve
-                // their native-backed rows eagerly, as in the main task list.
-                VStack(spacing: 4) {
-                    ForEach(rows) { row in
-                        taskRow(row, showsDayEvents: true)
-                            .transition(reduceMotion ? .identity : WorkspaceMotion.branchTransition)
+            // Keep the calendar and composer in place while the selected record
+            // category fades between its results, including empty states.
+            ZStack(alignment: .topLeading) {
+                // A concrete container keeps the transition on the result set;
+                // Group can leave native-backed rows hidden after later updates.
+                VStack(alignment: .leading, spacing: 0) {
+                    if matchingTasks.isEmpty {
+                        VStack(spacing: 7) {
+                            Text(emptyDayTitle)
+                                .font(.system(size: 13, weight: .medium))
+                            Text(L10n.tr("没有指定计划日期的任务，会留在下方“未安排日期”。"))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 22)
+                    } else {
+                        // Branch animations change both row count and height. Resolve
+                        // their native-backed rows eagerly, as in the main task list.
+                        VStack(spacing: 4) {
+                            ForEach(rows) { row in
+                                taskRow(row, showsDayEvents: true)
+                                    .transition(reduceMotion ? .identity : WorkspaceMotion.branchTransition)
+                            }
+                        }
+                        .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: collapsedTaskIDs)
+                        .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: displayMode)
                     }
                 }
-                .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: collapsedTaskIDs)
-                .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: displayMode)
+                .id(mode)
+                .transition(.opacity)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .animation(reduceMotion ? WorkspaceMotion.sidebarSelectionFade : WorkspaceMotion.pageChange, value: mode)
 
             plannedTaskComposer
         }
+    }
+
+    private func filterRow<Control: View>(_ title: String, @ViewBuilder control: () -> Control) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                filterLabel(title)
+                control()
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                filterLabel(title)
+                control()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func filterLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
+            .fixedSize()
     }
 
     private var plannedTaskComposer: some View {
@@ -230,6 +249,7 @@ struct TaskCalendarView: View {
                     }
                 }
                 .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: collapsedTaskIDs)
+                .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: displayMode)
             } label: {
                 HStack(spacing: 7) {
                     Label(L10n.tr("未安排日期"), systemImage: "tray")
@@ -294,6 +314,7 @@ struct TaskCalendarView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                             .lineLimit(3)
+                            .transition(.opacity)
                     }
                     if showsDayEvents, !row.node.isContextOnly, displayMode.showsDescriptions {
                         HStack(spacing: 6) {
@@ -308,10 +329,12 @@ struct TaskCalendarView: View {
                             }
                             Spacer(minLength: 0)
                         }
+                        .transition(.opacity)
                     } else if !showsDayEvents, !row.node.isContextOnly, displayMode.showsDescriptions {
                         Text(task.isCompleted ? L10n.tr("已完成 · 未设置计划日期") : L10n.tr("待办 · 未设置计划日期"))
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
+                            .transition(.opacity)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

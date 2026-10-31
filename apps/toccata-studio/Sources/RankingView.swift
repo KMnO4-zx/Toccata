@@ -23,6 +23,7 @@ struct RankingView: View {
         let _ = interfaceLanguage.language
         StableWidthScrollView {
             VStack(alignment: .leading, spacing: 24) {
+                header
                 calendarSection
                 appSection
             }
@@ -36,6 +37,16 @@ struct RankingView: View {
         .onReceive(refresher.$generation.dropFirst()) { _ in reload() }
         .onReceive(clock) { now in
             if !Calendar.current.isDate(now, inSameDayAs: loadedDay) { reload() }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(L10n.tr("应用与趋势"))
+                .font(.system(size: 28, weight: .bold))
+            Text(L10n.tr("回看键盘活动与应用使用趋势。"))
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
     }
 
