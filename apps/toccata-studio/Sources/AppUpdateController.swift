@@ -17,14 +17,18 @@ enum AppUpdateState: Equatable {
 @MainActor
 final class AppUpdateController: ObservableObject {
     typealias Prepare = (AvailableUpdate, @escaping @Sendable (Double?) -> Void) async throws -> PreparedAppUpdate
+    typealias Install = (PreparedAppUpdate, @escaping (Error) -> Void) -> Void
     @Published private(set) var state: AppUpdateState = .idle
     private(set) var prepared: PreparedAppUpdate?
     private var task: Task<Void, Never>?
     private var generation = UUID()
     private let prepare: Prepare
+    private let installPrepared: Install
     private var termination: AnyCancellable?
 
-    init(prepare: Prepare? = nil) {
+    init(install: @escaping Install = { _, failed in failed(UpdateInstallFailure.installer) },
+         prepare: Prepare? = nil) {
+        self.installPrepared = install
         self.prepare = prepare ?? { update, progress in
             try await UpdatePackagePreparer().prepare(update, progress: progress)
         }
@@ -75,15 +79,9 @@ final class AppUpdateController: ObservableObject {
 
     func install() {
         guard let prepared, !state.isBusy else { return }
-        guard let application = NSApp.delegate as? ToccataApplicationDelegate else {
-            state = .failed(L10n.tr("请从已安装的 Toccata.app 中更新。"))
-            return
-        }
         state = .installing
-        application.installUpdate(start: {
-            try await prepared.startInstaller()
-        }, failed: { [weak self] error in
+        installPrepared(prepared) { [weak self] error in
             self?.state = .failed((error as? UpdateInstallFailure)?.message ?? L10n.tr("暂时无法安装更新，请稍后重试。"))
-        })
+        }
     }
 }

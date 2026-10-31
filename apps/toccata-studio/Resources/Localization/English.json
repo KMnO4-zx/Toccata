@@ -534,6 +534,5 @@
   "暂时无法安装更新，请稍后重试。": "Unable to install the update. Please try again.",
   "任务或键盘记录尚未保存，更新已暂停。请稍后重试安装。": "Some tasks or keyboard records have not been saved. Installation is paused; please retry shortly.",
   "下载更新失败，请检查网络后重试。": "Download failed. Check your connection and try again.",
-  "请从已安装的 Toccata.app 中更新。": "Update from an installed copy of Toccata.app.",
   "自动安装未完成，当前应用仍可使用。请重新检查更新。": "Installation did not finish. The current app is still available. Please check for updates again."
 }

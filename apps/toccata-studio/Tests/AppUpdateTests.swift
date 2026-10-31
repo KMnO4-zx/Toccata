@@ -1,3 +1,4 @@
+import AppKit
 import CryptoKit
 import XCTest
 @testable import toccata_studio
@@ -192,6 +193,70 @@ final class AppUpdateControllerTests: XCTestCase {
         controller.cancel()
     }
 
+    func testInstallUsesInjectedLifecycleAndIgnoresSystemDelegate() async throws {
+        let application = NSApplication.shared
+        let previousDelegate = application.delegate
+        let proxy = UpdateTestApplicationDelegate()
+        application.delegate = proxy
+        defer { application.delegate = previousDelegate }
+        let plan = try fixture()
+        var received: [PreparedAppUpdate] = []
+        let controller = AppUpdateController(install: { plan, _ in received.append(plan) },
+                                             prepare: { _, _ in plan })
+        controller.install()
+        XCTAssertTrue(received.isEmpty, "Installation requires a verified package")
+        controller.download(update)
+        await settle(controller)
+        controller.install()
+        controller.install()
+        XCTAssertEqual(received, [plan], "Repeated clicks must request only one installation")
+        XCTAssertEqual(controller.state, .installing)
+    }
+
+    func testInstallationFailureKeepsPreparedPackageForRetry() async throws {
+        let plan = try fixture()
+        var count = 0
+        var failure: ((Error) -> Void)?
+        let controller = AppUpdateController(install: { _, failed in
+            count += 1
+            failure = failed
+        }, prepare: { _, _ in plan })
+        controller.download(update)
+        await settle(controller)
+        controller.install()
+        failure?(UpdateInstallFailure.save)
+        XCTAssertEqual(controller.state, .failed(UpdateInstallFailure.save.message))
+        XCTAssertEqual(controller.prepared, plan)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: plan.staged.path))
+        controller.install()
+        XCTAssertEqual(count, 2)
+        XCTAssertEqual(controller.state, .installing)
+    }
+
+    func testTerminationDoesNotDiscardPackageHandedToInstaller() async throws {
+        let plan = try fixture()
+        let controller = AppUpdateController(install: { _, _ in }, prepare: { _, _ in plan })
+        controller.download(update)
+        await settle(controller)
+        controller.install()
+        NotificationCenter.default.post(name: NSApplication.willTerminateNotification, object: nil)
+        controller.cancel()
+        XCTAssertEqual(controller.state, .installing)
+        XCTAssertEqual(controller.prepared, plan)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: plan.staged.path))
+    }
+
+    func testMissingInstallerReportsFailureWithoutClaimingInvalidLocation() async throws {
+        let plan = try fixture()
+        let controller = AppUpdateController(prepare: { _, _ in plan })
+        controller.download(update)
+        await settle(controller)
+        controller.install()
+        XCTAssertEqual(controller.state, .failed(UpdateInstallFailure.installer.message))
+        controller.cancel()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: plan.staged.path))
+    }
+
     private func settle(_ controller: AppUpdateController) async {
         for _ in 0..<500 {
             if !controller.state.isBusy { return }
@@ -210,6 +275,8 @@ final class AppUpdateControllerTests: XCTestCase {
                                  originalIdentity: "0:0", version: "0.2.0")
     }
 }
+
+private final class UpdateTestApplicationDelegate: NSObject, NSApplicationDelegate {}
 
 final class UpdateDownloadSmokeTests: XCTestCase {
     func testPublishedPackageDownloadsVerifiesAndStagesWithoutInstalling() async throws {

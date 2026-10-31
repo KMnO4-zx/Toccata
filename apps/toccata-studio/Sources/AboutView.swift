@@ -6,8 +6,10 @@ import SwiftUI
 final class AboutWindowController {
     private var panel: NSPanel?
     private var languageSubscription: AnyCancellable?
+    private let updater: AppUpdateController
 
-    init() {
+    init(install: @escaping AppUpdateController.Install) {
+        updater = AppUpdateController(install: install)
         languageSubscription = LanguageSettings.shared.$language.dropFirst()
             .receive(on: RunLoop.main).sink { [weak self] _ in
                 guard let panel = self?.panel else { return }
@@ -28,7 +30,7 @@ final class AboutWindowController {
             window.isReleasedWhenClosed = false
             window.hidesOnDeactivate = false
             window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
-            let content = NSHostingView(rootView: AboutView())
+            let content = NSHostingView(rootView: AboutView(updater: updater))
             window.contentView = content
             window.setContentSize(content.fittingSize)
             window.center()
@@ -52,10 +54,10 @@ struct AboutView: View {
     @StateObject private var updater: AppUpdateController
     @State private var copied = false
 
-    init(version: AppVersion = .current, checker: UpdateChecker? = nil, updater: AppUpdateController? = nil) {
+    init(version: AppVersion = .current, checker: UpdateChecker? = nil, updater: AppUpdateController) {
         self.version = version
         _checker = StateObject(wrappedValue: checker ?? UpdateChecker(current: version))
-        _updater = StateObject(wrappedValue: updater ?? AppUpdateController())
+        _updater = StateObject(wrappedValue: updater)
     }
 
     var body: some View {
