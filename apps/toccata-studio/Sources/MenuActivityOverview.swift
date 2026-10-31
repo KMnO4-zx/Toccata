@@ -171,7 +171,8 @@ struct MenuActivityOverview: View {
             Divider()
             VStack(alignment: .leading, spacing: 8) {
                 sectionTitle(L10n.tr("键盘热力图"))
-                KeyboardHeatmapView(counts: data.activity.keyCounts, fnMs: data.activity.fnMs,
+                KeyboardHeatmapView(counts: data.activity.keyCounts, totalCount: data.activity.keyCount,
+                                    fnMs: data.activity.fnMs,
                                     periodDescription: data.period.title, labelScale: 0.75,
                                     compactTooltip: true)
                     .id(presentation.openGeneration)

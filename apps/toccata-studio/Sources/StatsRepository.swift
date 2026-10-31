@@ -166,6 +166,15 @@ final class StatsRepository {
 }
 
 enum Formatters {
+    /// Share of all key presses in the selected period, rounded to at most one decimal place.
+    static func keyPercentage(count: Int, totalCount: Int) -> String {
+        guard count > 0, totalCount > 0 else { return "0%" }
+        let tenths = Int((Double(min(count, totalCount)) / Double(totalCount) * 1_000).rounded())
+        let whole = tenths / 10
+        let fraction = tenths % 10
+        return fraction == 0 ? "\(whole)%" : "\(whole).\(fraction)%"
+    }
+
     /// 一千次起使用 K，保留至多两位小数；较小的计数保留原数字。
     static func keyCount(_ count: Int) -> String {
         let count = max(0, count)

@@ -197,7 +197,8 @@ struct ActivityView: View {
     private var keyboardSection: some View {
         VStack(alignment: .leading, spacing: 20) {
             KeyboardActivityHeader(title: keyboardTitle, totalCount: snapshot.keyCount, counts: snapshot.keyCounts)
-            LiveKeyboardHeatmapView(counts: snapshot.keyCounts, fnMs: snapshot.fnMs, periodDescription: keyboardPeriodDescription)
+            LiveKeyboardHeatmapView(counts: snapshot.keyCounts, totalCount: snapshot.keyCount,
+                                    fnMs: snapshot.fnMs, periodDescription: keyboardPeriodDescription)
                 .frame(maxWidth: 700)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 4)

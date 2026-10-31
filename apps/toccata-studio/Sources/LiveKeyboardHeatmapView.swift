@@ -9,11 +9,12 @@ struct LiveKeyboardHeatmapView: View {
     @StateObject private var feedback = LiveKeyboardFeedback()
     @State private var isVisible = false
     let counts: [Int: Int]
+    let totalCount: Int
     let fnMs: Int64
     let periodDescription: String
 
     var body: some View {
-        KeyboardHeatmapView(counts: counts, fnMs: fnMs, periodDescription: periodDescription,
+        KeyboardHeatmapView(counts: counts, totalCount: totalCount, fnMs: fnMs, periodDescription: periodDescription,
                             pressedKeys: feedback.state.pressedKeys)
             .overlay {
                 KeyboardFeedbackBubbles(state: feedback.state)

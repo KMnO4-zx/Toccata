@@ -6,6 +6,7 @@ struct KeyboardHeatmapView: View {
 
     private let layout: KeyboardLayout
     private let counts: [Int: Int]
+    private let totalCount: Int
     private let fnMs: Int64
     private let periodDescription: String
     private let labelScale: CGFloat
@@ -13,11 +14,12 @@ struct KeyboardHeatmapView: View {
     private let compactTooltip: Bool
     @State private var hoveredKeyID: String?
 
-    init(layout: KeyboardLayout = .magicKeyboard, counts: [Int: Int] = [:], fnMs: Int64 = 0,
+    init(layout: KeyboardLayout = .magicKeyboard, counts: [Int: Int] = [:], totalCount: Int, fnMs: Int64 = 0,
          periodDescription: String = L10n.tr("今天"), labelScale: CGFloat = 1,
          pressedKeys: Set<Int> = [], compactTooltip: Bool = false) {
         self.layout = layout
         self.counts = counts
+        self.totalCount = totalCount
         self.fnMs = fnMs
         self.periodDescription = periodDescription
         self.labelScale = labelScale
@@ -56,7 +58,7 @@ struct KeyboardHeatmapView: View {
                     KeyboardKeyCap(
                         label: item.key.displayLabel,
                         name: item.key.readableLabel,
-                        activity: activityDescription(for: item.key),
+                        activity: activity(for: item.key).accessibilityDescription,
                         intensity: intensity,
                         size: item.frame.size,
                         labelScale: labelScale,
@@ -68,8 +70,9 @@ struct KeyboardHeatmapView: View {
                 }
 
                 if let item = scaled.keys.first(where: { $0.id == hoveredKeyID }) {
-                    let width = min(item.key.code == 63 ? (compactTooltip ? 180 : 240) : (compactTooltip ? 140 : 180), scaled.size.width)
-                    let height: CGFloat = compactTooltip ? 48 : 66
+                    let width = min(compactTooltip ? 190 : 260, scaled.size.width)
+                    let height: CGFloat = item.key.code == 63
+                        ? (compactTooltip ? 84 : 110) : (compactTooltip ? 66 : 88)
                     let halfWidth = width / 2
                     let halfHeight = height / 2
                     let x = min(max(item.frame.midX, halfWidth), scaled.size.width - halfWidth)
@@ -78,7 +81,7 @@ struct KeyboardHeatmapView: View {
 
                     KeyboardKeyTooltip(
                         name: item.key.readableLabel,
-                        activity: activityDescription(for: item.key),
+                        activity: activity(for: item.key),
                         compact: compactTooltip
                     )
                     .frame(width: width, height: height)
@@ -107,12 +110,32 @@ struct KeyboardHeatmapView: View {
         .onDisappear { hoveredKeyID = nil }
     }
 
-    private func activityDescription(for key: KeyboardLayout.Key) -> String {
-        if key.code == 63 {
-            return L10n.tr("\(periodDescription)按住 \(Formatters.duration(ms: fnMs))")
-        }
-        let count = max(0, counts[key.code ?? Int.min] ?? 0)
-        return L10n.tr("\(periodDescription)按下 \(count.formatted()) 次")
+    private func activity(for key: KeyboardLayout.Key) -> KeyboardKeyActivity {
+        KeyboardKeyActivity(count: counts[key.code ?? Int.min] ?? 0, totalCount: totalCount,
+                            periodDescription: periodDescription, fnMs: key.code == 63 ? fnMs : nil)
+    }
+}
+
+struct KeyboardKeyActivity {
+    let count: Int
+    let totalCount: Int
+    let periodDescription: String
+    var fnMs: Int64? = nil
+
+    var countDescription: String {
+        L10n.tr("\(periodDescription)按下 \(max(0, count).formatted(.number.locale(L10n.locale))) 次")
+    }
+
+    var percentageDescription: String {
+        L10n.tr("占总按键 \(Formatters.keyPercentage(count: count, totalCount: totalCount))")
+    }
+
+    var holdDescription: String? {
+        fnMs.map { L10n.tr("\(periodDescription)按住 \(Formatters.duration(ms: $0))") }
+    }
+
+    var accessibilityDescription: String {
+        [countDescription, percentageDescription, holdDescription].compactMap { $0 }.joined(separator: " · ")
     }
 }
 
@@ -243,7 +266,7 @@ private struct KeyboardKeyCap: View {
 
 private struct KeyboardKeyTooltip: View {
     let name: String
-    let activity: String
+    let activity: KeyboardKeyActivity
     let compact: Bool
 
     var body: some View {
@@ -251,9 +274,19 @@ private struct KeyboardKeyTooltip: View {
             Text(name)
                 .font(.system(size: compact ? 10 : 12, weight: .semibold))
                 .foregroundStyle(.secondary)
-            Text(activity)
+            Text(activity.countDescription)
                 .font(.system(size: compact ? 11 : 13, weight: .medium))
                 .monospacedDigit()
+            Text(activity.percentageDescription)
+                .font(.system(size: compact ? 10 : 12))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            if let holdDescription = activity.holdDescription {
+                Text(holdDescription)
+                    .font(.system(size: compact ? 10 : 12))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
         }
         .lineLimit(1)
         .minimumScaleFactor(0.8)

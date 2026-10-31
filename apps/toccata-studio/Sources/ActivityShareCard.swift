@@ -89,7 +89,8 @@ struct ActivityShareCard: View {
     private var keyboard: some View {
         VStack(alignment: .leading, spacing: 10) {
             heading(L10n.tr("键盘热力图"), detail: L10n.tr("越深，按得越多"))
-            KeyboardHeatmapView(counts: report.activity.keyCounts, fnMs: report.activity.fnMs,
+            KeyboardHeatmapView(counts: report.activity.keyCounts, totalCount: report.activity.keyCount,
+                                fnMs: report.activity.fnMs,
                                 periodDescription: L10n.tr("所选时段"), labelScale: 1.4)
                 .frame(width: 656, height: 656 / KeyboardLayout.magicKeyboard.aspectRatio)
                 .allowsHitTesting(false)
@@ -104,6 +105,9 @@ struct ActivityShareCard: View {
                             keyBadge(shortName(key))
                             Text(L10n.tr("\(key.count.formatted()) 次"))
                                 .font(.system(size: 19)).monospacedDigit().foregroundStyle(muted)
+                                .lineLimit(1).minimumScaleFactor(0.75)
+                            Text(L10n.tr("占 \(Formatters.keyPercentage(count: key.count, totalCount: report.activity.keyCount))"))
+                                .font(.system(size: 18)).monospacedDigit().foregroundStyle(blue)
                                 .lineLimit(1).minimumScaleFactor(0.75)
                         }
                         .frame(maxWidth: .infinity).padding(.vertical, 4)

@@ -54,7 +54,7 @@ struct KeyboardActivityHeader: View {
     }
 
     private var hint: some View {
-        Text(L10n.tr("悬停查看按键次数 · Fn 显示按住时长"))
+        Text(L10n.tr("悬停查看次数与占比 · Fn 同时显示按住时长"))
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: true, vertical: false)
@@ -71,30 +71,54 @@ struct KeyboardActivityHeader: View {
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Text(L10n.tr("常用按键")).foregroundStyle(.secondary)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), alignment: .leading)], alignment: .leading, spacing: 8) {
-                        ForEach(entries) { entry in keyUsage(entry) }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), alignment: .leading)], alignment: .leading, spacing: 8) {
+                        ForEach(entries) { entry in gridKeyUsage(entry) }
                     }
                 }
             }
             .font(.system(size: 11))
             .accessibilityElement(children: .combine)
             .accessibilityLabel(L10n.tr("所选时段按键次数前五名"))
-            .accessibilityValue(entries.map { L10n.tr("\($0.name)，\($0.count) 次") }.joined(separator: "；"))
+            .accessibilityValue(entries.map {
+                L10n.tr("\($0.name)，\($0.count) 次") + "，" +
+                    L10n.tr("占 \(Formatters.keyPercentage(count: $0.count, totalCount: totalCount))")
+            }.joined(separator: "；"))
         }
     }
 
     private func keyUsage(_ entry: KeyboardUsageRanking.Entry) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(entry.name)
-                .fontWeight(.medium)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 4))
-                .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5))
-            Text(L10n.tr("\(entry.count.formatted()) 次"))
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
+            keyBadge(entry.name)
+            keyStatistics(entry)
         }
         .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func gridKeyUsage(_ entry: KeyboardUsageRanking.Entry) -> some View {
+        ViewThatFits(in: .horizontal) {
+            keyUsage(entry)
+            VStack(alignment: .leading, spacing: 4) {
+                keyBadge(entry.name)
+                keyStatistics(entry)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func keyBadge(_ name: String) -> some View {
+        Text(name)
+            .fontWeight(.medium)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 4))
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5))
+    }
+
+    private func keyStatistics(_ entry: KeyboardUsageRanking.Entry) -> some View {
+        Text(L10n.tr("\(entry.count.formatted()) 次") + " · " +
+             Formatters.keyPercentage(count: entry.count, totalCount: totalCount))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
     }
 }
