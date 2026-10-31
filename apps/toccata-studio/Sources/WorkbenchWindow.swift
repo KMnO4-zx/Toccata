@@ -1,6 +1,21 @@
 import AppKit
 import SwiftUI
 
+/// Requests are consumed by the existing workbench, including while its window is hidden.
+@MainActor
+final class WorkbenchNavigation: ObservableObject {
+    @Published var requestedSection: String?
+}
+
+struct WorkbenchRootView: View {
+    @ObservedObject var navigation: WorkbenchNavigation
+    let openAbout: () -> Void
+
+    var body: some View {
+        ContentView(requestedSection: $navigation.requestedSection, openAbout: openAbout)
+    }
+}
+
 @MainActor
 final class WorkbenchWindow: NSWindow {
     weak var activityKeyboardInputScope: ActivityKeyboardInputAnchorView?

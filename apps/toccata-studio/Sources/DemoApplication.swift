@@ -103,7 +103,7 @@ private final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
     private func showMenuPreview() {
         let controller = TaskMenuController()
         controller.configure(store: store, loginItems: loginItems, appearance: appearance,
-                             refresher: refresher, openHydrationSettings: {}, openAbout: {}) { [weak self] in
+                             refresher: refresher, openHydrationSettings: {}, openAbout: {}) { [weak self] _ in
             self?.showSettingsPreview()
         }
         menuController = controller

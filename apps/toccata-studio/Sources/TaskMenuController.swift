@@ -14,7 +14,7 @@ final class TaskMenuController: NSObject, ObservableObject {
     private var loginItems: LoginItemController?
     private var appearance: AppearanceSettings?
     private var refresher: LiveRefresher?
-    private var openWorkbenchAction: (() -> Void)?
+    private var openWorkbenchAction: ((WorkspaceSection?) -> Void)?
     private var openAboutAction: (() -> Void)?
     private var openHydrationSettingsAction: (() -> Void)?
     private var clickMonitor: Any?
@@ -30,7 +30,7 @@ final class TaskMenuController: NSObject, ObservableObject {
                    refresher: LiveRefresher,
                    openHydrationSettings: @escaping () -> Void,
                    openAbout: @escaping () -> Void,
-                   openWorkbench: @escaping () -> Void) {
+                   openWorkbench: @escaping (WorkspaceSection?) -> Void) {
         openAboutAction = openAbout
         openHydrationSettingsAction = openHydrationSettings
         openWorkbenchAction = openWorkbench
@@ -62,9 +62,9 @@ final class TaskMenuController: NSObject, ObservableObject {
         presentation.onShowEditor = { [weak self] _, focus in self?.showEditor(focus: focus) }
         presentation.onDismissEditor = { [weak self] in self?.hideEditor() }
         presentation.onFocusList = { [weak self] in self?.listPanel?.makeKeyAndOrderFront(nil) }
-        presentation.onOpenWorkbench = { [weak self] in
+        presentation.onOpenWorkbench = { [weak self] section in
             self?.dismiss()
-            self?.openWorkbenchAction?()
+            self?.openWorkbenchAction?(section)
         }
         presentation.onAnchorsChanged = { [weak self] in self?.positionEditor() }
         presentation.onDismissMenu = { [weak self] in self?.dismiss() }
@@ -340,7 +340,7 @@ final class TaskMenuController: NSObject, ObservableObject {
         return item
     }
 
-    @objc private func openWorkbenchFromSettings() { presentation.openWorkbench() }
+    @objc private func openWorkbenchFromSettings() { openWorkbenchAction?(nil) }
     @objc private func openAboutFromSettings() { openAboutAction?() }
     @objc private func openHydrationSettings() { openHydrationSettingsAction?() }
 

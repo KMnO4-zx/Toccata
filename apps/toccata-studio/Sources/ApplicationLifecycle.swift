@@ -14,6 +14,7 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
     private let refresher = LiveRefresher()
     private let aboutWindow = AboutWindowController()
     private let hydrationWindow = HydrationReminderWindowController()
+    private let workbenchNavigation = WorkbenchNavigation()
     private var workbench: NSWindow?
     private var healthTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
@@ -34,8 +35,8 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
             self?.openHydrationSettings()
         }, openAbout: { [weak self] in
             self?.openAbout()
-        }) { [weak self] in
-            self?.openWorkbench()
+        }) { [weak self] section in
+            self?.openWorkbench(section: section)
         }
         dockIcon.applySavedPreference()
         refresher.start()
@@ -75,10 +76,12 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
         aboutWindow.show()
     }
 
-    func openWorkbench() {
+    func openWorkbench(section: WorkspaceSection? = nil) {
         guard !isQuitting else { return }
+        if let section { workbenchNavigation.requestedSection = section.rawValue }
         if workbench == nil {
-            let content = ContentView(openAbout: { [weak self] in self?.openAbout() })
+            let content = WorkbenchRootView(navigation: workbenchNavigation,
+                                            openAbout: { [weak self] in self?.openAbout() })
                 .environmentObject(refresher)
                 .environmentObject(taskStore)
                 .environmentObject(appearance)

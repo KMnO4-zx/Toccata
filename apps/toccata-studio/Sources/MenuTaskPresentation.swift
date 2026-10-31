@@ -36,7 +36,7 @@ final class MenuTaskPresentation: ObservableObject {
     var onShowEditor: ((String, MenuEditorField?) -> Void)?
     var onDismissEditor: (() -> Void)?
     var onFocusList: (() -> Void)?
-    var onOpenWorkbench: (() -> Void)?
+    var onOpenWorkbench: ((WorkspaceSection) -> Void)?
     var onDismissMenu: (() -> Void)?
     var onAnchorsChanged: (() -> Void)?
 
@@ -90,5 +90,5 @@ final class MenuTaskPresentation: ObservableObject {
         listFocusRequest += 1
     }
 
-    func openWorkbench() { onOpenWorkbench?() }
+    func openWorkbench() { onOpenWorkbench?(page.workbenchSection) }
 }
