@@ -416,6 +416,9 @@ struct TasksView: View {
                 .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: showsCompleted)
                 .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: displayMode)
                 .animation(reduceMotion ? nil : WorkspaceMotion.taskReorder, value: sortOrder)
+                // Animate pin changes even when they originate in another window.
+                .animation(reduceMotion ? nil : WorkspaceMotion.taskReorder,
+                           value: Set(store.tasks.filter { $0.parentID == nil && $0.isPinned }.map(\.id)))
             }
             .focusable()
             .focused($taskListFocused)

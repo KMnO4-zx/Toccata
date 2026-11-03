@@ -208,6 +208,9 @@ struct QuickCaptureView: View {
                     .animation(reduceMotion ? nil : WorkspaceMotion.branchChange,
                                value: presentation.expandedTaskIDs)
                     .animation(reduceMotion ? nil : WorkspaceMotion.taskReorder, value: sortOrder)
+                    // Animate pin changes even when they originate in another window.
+                    .animation(reduceMotion ? nil : WorkspaceMotion.taskReorder,
+                               value: Set(tasks.tasks.filter { $0.parentID == nil && $0.isPinned }.map(\.id)))
                 }
                 .scrollIndicators(.visible)
                 .background(TaskScrollerStyle())
