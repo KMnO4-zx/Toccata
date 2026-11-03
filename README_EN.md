@@ -36,6 +36,7 @@ The name comes from [toccata](https://www.dictionary.com/browse/toccata), a piec
 
 - **Capture on the fly**: open the menu bar window to add or edit tasks, with completed and pending items in view.
 - **Organize at your pace**: break tasks into subtasks in the main window, write details in Markdown, set dates, and browse the task calendar.
+- **Sort and pin**: reorder or pin whole task groups in the main window and menu bar, with subtasks following their parent. Sort by creation time, name, or planned date.
 - **Review your week**: gather completed and unfinished tasks, copy them with one click, and use them as the starting point for your weekly report.
 
 ![To-do management: main workspace on the left, menu bar window on the right](images/todo-management.png)
