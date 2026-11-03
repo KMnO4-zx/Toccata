@@ -261,7 +261,8 @@ struct QuickCaptureView: View {
             SubtaskDragHandle(task: task)
         }
         .padding(.leading, 23 + indentation)
-        .padding(.trailing, 18)
+        // The grip already has a generous hit area; the scrollbar owns its gutter.
+        .padding(.trailing, 4)
         .frame(height: 32)
         .overlay(alignment: .leading) {
             if !row.node.children.isEmpty {
