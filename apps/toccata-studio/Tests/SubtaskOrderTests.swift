@@ -57,7 +57,7 @@ final class SubtaskOrderTests: XCTestCase {
             XCTAssertEqual(updated.updatedAt, original.updatedAt)
             XCTAssertEqual(updated.completedAt, original.completedAt)
             XCTAssertEqual(updated.plannedDate, original.plannedDate)
-            XCTAssertEqual(updated.priority, original.priority)
+            XCTAssertEqual(updated.isPinned, original.isPinned)
         }
         XCTAssertEqual(store.task(id: done), before.first { $0.id == done })
         XCTAssertEqual(store.task(id: parent), before.first { $0.id == parent })

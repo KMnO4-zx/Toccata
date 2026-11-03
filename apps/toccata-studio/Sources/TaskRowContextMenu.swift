@@ -9,6 +9,13 @@ private struct TaskRowContextMenu: ViewModifier {
     let task: TodoTask
     let onEdit: () -> Void
 
+    private var pinActionTitle: String {
+        if task.parentID != nil {
+            return store.isPinned(id: task.id) ? L10n.tr("取消主任务置顶") : L10n.tr("置顶主任务")
+        }
+        return store.isPinned(id: task.id) ? L10n.tr("取消置顶") : L10n.tr("置顶任务")
+    }
+
     func body(content: Content) -> some View {
         content
             .contextMenu {
@@ -19,6 +26,11 @@ private struct TaskRowContextMenu: ViewModifier {
                     _ = store.setCompleted(id: task.id, completed: !task.isCompleted)
                 } label: {
                     Label(task.isCompleted ? L10n.tr("恢复为待办") : L10n.tr("标记完成"), systemImage: task.isCompleted ? "arrow.uturn.backward" : "checkmark.circle")
+                }
+                Button {
+                    _ = store.setPinned(id: task.id, pinned: !store.isPinned(id: task.id))
+                } label: {
+                    Label(pinActionTitle, systemImage: store.isPinned(id: task.id) ? "pin.slash" : "pin")
                 }
                 Divider()
                 Button(role: .destructive) {

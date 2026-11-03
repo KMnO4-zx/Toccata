@@ -325,10 +325,12 @@ private final class DemoNotificationService: HydrationNotificationServicing {
 private enum DemoFixtures {
     static func tasks(in store: TaskStore, now: Date) throws -> String {
         func add(_ title: String, details: String = "", date: Date? = nil,
-                 parent: String? = nil, priority: TaskPriority = .none, done: Bool = false) throws -> String {
-            guard let id = store.addTask(title: title, details: details, plannedDate: date, parentID: parent),
-                  store.setPriority(id: id, priority: priority) else {
+                 parent: String? = nil, pinned: Bool = false, done: Bool = false) throws -> String {
+            guard let id = store.addTask(title: title, details: details, plannedDate: date, parentID: parent) else {
                 throw DemoError.message(store.errorMessage ?? "Could not create the sample task")
+            }
+            if pinned, !store.setPinned(id: id, pinned: true) {
+                throw DemoError.message(store.errorMessage ?? "Could not pin the sample task")
             }
             if done, !store.setCompleted(id: id, completed: true) {
                 throw DemoError.message("Could not complete the sample task")
@@ -340,8 +342,8 @@ private enum DemoFixtures {
         _ = try add("给书桌留一点空白", details: "收好散落的线材和便签。", done: true)
         _ = try add("买一袋新的咖啡豆", details: "试试浅烘的花香调。")
         _ = try add("读完《设计心理学》这一章", details: "记录三个可以用在产品里的细节。")
-        _ = try add("准备周五的产品分享", details: "用一个真实的小案例，把思路讲清楚。", date: tomorrow, priority: .medium)
-        let featured = try add("打磨个人网站 2.0", details: "## 这次想做好什么\n\n让作品和想法更容易被看见。\n\n- 首页只留下最重要的三个项目\n- 为每个项目补一张清楚的截图\n- 检查手机上的阅读体验\n\n> 做完一小步，就记录一小步。", date: now, priority: .high)
+        _ = try add("准备周五的产品分享", details: "用一个真实的小案例，把思路讲清楚。", date: tomorrow)
+        let featured = try add("打磨个人网站 2.0", details: "## 这次想做好什么\n\n让作品和想法更容易被看见。\n\n- 首页只留下最重要的三个项目\n- 为每个项目补一张清楚的截图\n- 检查手机上的阅读体验\n\n> 做完一小步，就记录一小步。", date: now, pinned: true)
         _ = try add("确定首页内容与结构", parent: featured, done: true)
         _ = try add("补齐项目介绍和配图", parent: featured)
         _ = try add("检查移动端排版", parent: featured)

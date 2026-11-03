@@ -146,6 +146,7 @@ struct TaskDetailView: View {
             .help(L10n.tr("保存修改（⌘S）；修改也会自动保存"))
             .keyboardShortcut("s", modifiers: .command)
             .disabled(!hasChanges || !validTitle)
+            pinButton
             Button(role: .destructive) { confirmsDeletion = true } label: {
                 Image(systemName: "trash")
             }
@@ -154,6 +155,22 @@ struct TaskDetailView: View {
         .font(.system(size: 12))
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
+    }
+
+    private var pinButton: some View {
+        let pinned = store.isPinned(id: task.id)
+        let title = task.parentID == nil
+            ? (pinned ? L10n.tr("取消置顶") : L10n.tr("置顶任务"))
+            : (pinned ? L10n.tr("取消主任务置顶") : L10n.tr("置顶主任务"))
+        return Button {
+            _ = store.setPinned(id: task.id, pinned: !pinned)
+        } label: {
+            Image(systemName: pinned ? "pin.fill" : "pin")
+                .foregroundStyle(pinned ? Color.accentColor : Color.secondary)
+        }
+        .accessibilityLabel(title)
+        .accessibilityIdentifier("workspace-task-pin")
+        .help(title)
     }
 
     private var taskHeading: some View {

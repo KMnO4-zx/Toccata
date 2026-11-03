@@ -1,23 +1,5 @@
 import Foundation
 
-enum TaskPriority: Int, CaseIterable, Identifiable {
-    case none = 0
-    case low = 1
-    case medium = 2
-    case high = 3
-
-    var id: Int { rawValue }
-
-    var title: String {
-        switch self {
-        case .none: return L10n.tr("无优先级")
-        case .low: return L10n.tr("低优先级")
-        case .medium: return L10n.tr("中优先级")
-        case .high: return L10n.tr("高优先级")
-        }
-    }
-}
-
 /// Tasks enter the inbox without a plan date. Their review date is the actual completion time.
 struct TodoTask: Identifiable, Equatable {
     let id: String
@@ -28,12 +10,12 @@ struct TodoTask: Identifiable, Equatable {
     let createdAt: Date
     let updatedAt: Date
     let completedAt: Date?
-    let priority: TaskPriority
-    /// Manual order among siblings in the same completion group; nil keeps the legacy order.
+    let isPinned: Bool
+    /// Manual order among roots or siblings in the same completion/pin group.
     let subtaskOrder: Int?
 
     init(id: String, parentID: String?, title: String, details: String, plannedDate: Date?,
-         createdAt: Date, updatedAt: Date, completedAt: Date?, priority: TaskPriority = .none,
+         createdAt: Date, updatedAt: Date, completedAt: Date?, isPinned: Bool = false,
          subtaskOrder: Int? = nil) {
         self.id = id
         self.parentID = parentID
@@ -43,7 +25,7 @@ struct TodoTask: Identifiable, Equatable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.completedAt = completedAt
-        self.priority = priority
+        self.isPinned = isPinned
         self.subtaskOrder = subtaskOrder
     }
 

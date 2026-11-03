@@ -51,6 +51,13 @@ struct WorkspaceTaskRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
+            if task.parentID == nil, task.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 16, height: 22)
+                    .accessibilityLabel(L10n.tr("已置顶"))
+            }
             SubtaskDragHandle(task: task)
 
             if childCount > 0, let onToggleExpanded {

@@ -24,7 +24,7 @@ struct WorkspaceTaskListSnapshot {
     let completedRoots: [MenuTaskTreeNode]
 
     init(allTasks: [TodoTask], scopedTasks: [TodoTask], includeAllDescendants: Bool = false,
-         query: String = "") {
+         query: String = "", sortOrder: TaskSortOrder = .createdDescending) {
         let roots = MenuTaskTree.roots(allTasks: allTasks, matchingTasks: scopedTasks,
                                        includeAllDescendants: includeAllDescendants)
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -39,13 +39,9 @@ struct WorkspaceTaskListSnapshot {
             return MenuTaskTreeNode(task: node.task, children: children, isContextOnly: node.isContextOnly)
         }
 
-        let matching = roots.compactMap(filtered)
+        let matching = TaskOrder.sortedRoots(roots.compactMap(filtered), sortOrder: sortOrder)
         pendingRoots = matching.filter { !$0.task.isCompleted }
-        completedRoots = matching.filter { $0.task.isCompleted }.sorted {
-            let left = $0.task.completedAt ?? .distantPast
-            let right = $1.task.completedAt ?? .distantPast
-            return left == right ? $0.id < $1.id : left > right
-        }
+        completedRoots = matching.filter { $0.task.isCompleted }
     }
 
     static func rows(from roots: [MenuTaskTreeNode], collapsedIDs: Set<String> = []) -> [WorkspaceTaskListRow] {

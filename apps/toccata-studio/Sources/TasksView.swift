@@ -34,6 +34,7 @@ struct TasksView: View {
     @State private var referenceDate = Date()
     @State private var collapsedTaskIDs: Set<String> = []
     @State private var hoveredTaskID: String?
+    @AppStorage(TaskSortOrder.storageKey) private var sortOrder: TaskSortOrder = .createdDescending
     @AppStorage("tasks.listDisplayMode") private var displayMode: TaskListDisplayMode = .titles
     @FocusState private var addingTask: Bool
     @FocusState private var taskListFocused: Bool
@@ -139,6 +140,7 @@ struct TasksView: View {
                 HStack(spacing: 8) {
                     searchField
                     TaskListDisplayModePicker(selection: $displayMode)
+                    TaskSortPicker(selection: $sortOrder)
                 }
             }
             .padding(22)
@@ -280,7 +282,7 @@ struct TasksView: View {
     private var inboxList: some View {
         let scoped = scopedTasks
         let snapshot = WorkspaceTaskListSnapshot(allTasks: store.tasks, scopedTasks: scoped,
-            includeAllDescendants: mode == .inbox, query: query)
+            includeAllDescendants: mode == .inbox, query: query, sortOrder: sortOrder)
         // Search always reveals matching descendants, even inside a folded branch.
         let collapsed = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? collapsedTaskIDs : []
         let pendingRows = WorkspaceTaskListSnapshot.rows(from: snapshot.pendingRoots, collapsedIDs: collapsed)
@@ -314,14 +316,13 @@ struct TasksView: View {
             }
         )
         .taskContextMenu(task: row.task) { selection = row.id }
-        .subtaskReordering(task: row.task)
     }
 
     @ViewBuilder
     private func reviewList(_ review: TaskReviewSnapshot) -> some View {
         let collapsed = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? collapsedTaskIDs : []
-        let completedRows = WorkspaceTaskListSnapshot.rows(from: review.completedRoots, collapsedIDs: collapsed)
-        let pendingRows = WorkspaceTaskListSnapshot.rows(from: review.pendingRoots, collapsedIDs: collapsed)
+        let completedRows = WorkspaceTaskListSnapshot.rows(from: TaskOrder.sortedRoots(review.completedRoots, sortOrder: sortOrder), collapsedIDs: collapsed)
+        let pendingRows = WorkspaceTaskListSnapshot.rows(from: TaskOrder.sortedRoots(review.pendingRoots, sortOrder: sortOrder), collapsedIDs: collapsed)
         if review.tasks.isEmpty {
             TaskPlaceholder(
                 symbol: query.isEmpty ? "doc.text" : "magnifyingglass",
@@ -414,6 +415,7 @@ struct TasksView: View {
                 .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: collapsedTaskIDs)
                 .animation(reduceMotion ? nil : WorkspaceMotion.branchChange, value: showsCompleted)
                 .animation(reduceMotion ? nil : WorkspaceMotion.pageChange, value: displayMode)
+                .animation(reduceMotion ? nil : WorkspaceMotion.taskReorder, value: sortOrder)
             }
             .focusable()
             .focused($taskListFocused)
@@ -464,6 +466,7 @@ struct TasksView: View {
                 .padding(.leading, 44 + CGFloat(row.depth) * 26)
                 .padding(.trailing, 12)
         }
+        .subtaskReordering(task: row.task)
         .transition(reduceMotion ? .identity : WorkspaceMotion.branchTransition)
     }
 

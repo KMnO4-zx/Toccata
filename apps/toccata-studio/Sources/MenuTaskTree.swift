@@ -82,9 +82,7 @@ enum MenuTaskTree {
 
         func precedes(_ lhs: String, _ rhs: String) -> Bool {
             guard let left = tasksByID[lhs], let right = tasksByID[rhs] else { return lhs < rhs }
-            if left.isCompleted != right.isCompleted { return !left.isCompleted }
-            if left.createdAt != right.createdAt { return left.createdAt > right.createdAt }
-            return lhs < rhs
+            return TaskOrder.precedes(left, right, sortOrder: .createdDescending)
         }
 
         func node(for id: String) -> MenuTaskTreeNode {

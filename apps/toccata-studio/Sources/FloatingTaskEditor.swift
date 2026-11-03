@@ -154,46 +154,31 @@ private struct FloatingTaskEditorContent: View {
                 dateChooser.background(MenuCompanionWindow(presentation: presentation))
             }
             Spacer(minLength: 0)
-            priorityMenu
+            pinButton
         }
         .padding(.horizontal, 24)
         .frame(height: 48)
     }
 
-    private var priorityMenu: some View {
-        Menu {
-            ForEach([TaskPriority.none, .low, .medium, .high], id: \.self) { priority in
-                Button {
-                    _ = store.setPriority(id: task.id, priority: priority)
-                } label: {
-                    if task.priority == priority {
-                        Label(priority.title, systemImage: "checkmark")
-                    } else {
-                        Text(priority.title)
-                    }
-                }
-            }
+    private var pinButton: some View {
+        let pinned = store.isPinned(id: task.id)
+        let title = task.parentID == nil
+            ? (pinned ? L10n.tr("取消置顶") : L10n.tr("置顶任务"))
+            : (pinned ? L10n.tr("取消主任务置顶") : L10n.tr("置顶主任务"))
+        return Button {
+            _ = store.setPinned(id: task.id, pinned: !pinned)
         } label: {
-            Image(systemName: task.priority == .none ? "flag" : "flag.fill")
+            Image(systemName: pinned ? "pin.fill" : "pin")
                 .font(.system(size: 14))
-                .foregroundStyle(priorityColor)
-                .frame(width: 18, height: 22)
+                .foregroundStyle(pinned ? TaskMenuStyle.accent : TaskMenuStyle.secondary)
+                .frame(width: 26, height: 26)
                 .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
         .fixedSize()
-        .accessibilityLabel(L10n.tr("任务优先级"))
-        .help(L10n.tr("设置任务优先级"))
-    }
-
-    private var priorityColor: Color {
-        switch task.priority {
-        case .none: return TaskMenuStyle.secondary
-        case .low: return TaskMenuStyle.accent
-        case .medium: return .orange
-        case .high: return .red
-        }
+        .accessibilityLabel(title)
+        .accessibilityIdentifier("menu-task-pin")
+        .help(title)
     }
 
     private var dateChooser: some View {

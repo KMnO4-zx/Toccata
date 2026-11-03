@@ -53,26 +53,53 @@ final class TaskStore: ObservableObject {
 
     func children(of parentID: String?) -> [TodoTask] {
         let children = tasks.filter { $0.parentID == parentID }
-        return parentID == nil ? children : children.sorted(by: SubtaskOrder.precedes)
+        return parentID == nil ? children.sorted { TaskOrder.precedes($0, $1, sortOrder: .manual) }
+            : children.sorted(by: SubtaskOrder.precedes)
     }
 
-    /// A move never changes the parent, completion state, or task dates.
+    /// A move never changes parentage, completion, task contents, or dates.
     @discardableResult
     func moveSubtask(id: String, relativeTo targetID: String, placement: SubtaskPlacement) -> Bool {
-        guard let ids = SubtaskOrder.reorderedIDs(in: tasks, moving: id,
-                                                 relativeTo: targetID, placement: placement),
-              let source = task(id: id) else { return false }
-        let currentIDs = children(of: source.parentID).filter {
-            $0.isCompleted == source.isCompleted
-        }.map(\.id)
-        if currentIDs == ids { return true }
+        guard task(id: id)?.parentID != nil else { return false }
+        return moveTask(id: id, relativeTo: targetID, placement: placement)
+    }
+
+    @discardableResult
+    func moveTask(id: String, relativeTo targetID: String, placement: SubtaskPlacement,
+                  sortOrder: TaskSortOrder = .manual) -> Bool {
+        guard TaskOrder.reorderedIDs(in: tasks, moving: id, relativeTo: targetID,
+                                     placement: placement, sortOrder: sortOrder) != nil else { return false }
         return write { database in
-            // Validate again inside the transaction, against the latest persisted state.
-            guard let orderedIDs = SubtaskOrder.reorderedIDs(in: try database.snapshot(), moving: id,
-                relativeTo: targetID, placement: placement) else { throw TaskStoreError.invalidSubtaskMove }
-            for (position, childID) in orderedIDs.enumerated() {
+            let snapshot = try database.snapshot()
+            guard let source = snapshot.first(where: { $0.id == id }),
+                  let orderedIDs = TaskOrder.reorderedIDs(in: snapshot, moving: id,
+                    relativeTo: targetID, placement: placement, sortOrder: sortOrder) else {
+                throw TaskStoreError.invalidTaskMove
+            }
+            if source.parentID != nil || sortOrder == .manual {
+                let currentIDs = snapshot.filter {
+                    $0.parentID == source.parentID && $0.isCompleted == source.isCompleted &&
+                    (source.parentID != nil || $0.isPinned == source.isPinned)
+                }.sorted {
+                    source.parentID == nil ? TaskOrder.precedes($0, $1, sortOrder: .manual)
+                        : SubtaskOrder.precedes($0, $1)
+                }.map(\.id)
+                if currentIDs == orderedIDs { return }
+            }
+            // Switching from an automatic sort preserves every other root group's
+            // current order too, including tasks hidden by the active view/search.
+            if source.parentID == nil && sortOrder != .manual {
+                let roots = snapshot.filter { $0.parentID == nil }.sorted {
+                    TaskOrder.precedes($0, $1, sortOrder: sortOrder)
+                }
+                for (position, root) in roots.enumerated() {
+                    try database.run("UPDATE tasks SET subtask_order = ? WHERE id = ?",
+                                     [.integer(Int64(position)), .text(root.id)])
+                }
+            }
+            for (position, taskID) in orderedIDs.enumerated() {
                 try database.run("UPDATE tasks SET subtask_order = ? WHERE id = ?",
-                                 [.integer(Int64(position)), .text(childID)])
+                                 [.integer(Int64(position)), .text(taskID)])
             }
         }
     }
@@ -122,13 +149,22 @@ final class TaskStore: ObservableObject {
         }
     }
 
+    func isPinned(id: String) -> Bool {
+        guard let task = task(id: id) else { return false }
+        return TaskOrder.root(of: task, in: tasks)?.isPinned ?? false
+    }
+
+    /// Pinning a child operates on its whole root branch; children never detach.
     @discardableResult
-    func setPriority(id: String, priority: TaskPriority) -> Bool {
+    func setPinned(id: String, pinned: Bool) -> Bool {
         let timestamp = now()
         return write { database in
-            guard try database.taskExists(id: id) else { throw TaskStoreError.taskMissing }
-            try database.run("UPDATE tasks SET priority = ?, updated_at = ? WHERE id = ?",
-                             [.integer(Int64(priority.rawValue)), .date(timestamp), .text(id)])
+            let snapshot = try database.snapshot()
+            guard let task = snapshot.first(where: { $0.id == id }),
+                  let root = TaskOrder.root(of: task, in: snapshot) else { throw TaskStoreError.taskMissing }
+            guard root.isPinned != pinned else { return }
+            try database.run("UPDATE tasks SET is_pinned = ?, updated_at = ? WHERE id = ?",
+                             [.integer(pinned ? 1 : 0), .date(timestamp), .text(root.id)])
         }
     }
 
@@ -198,7 +234,7 @@ private enum TaskStoreError: LocalizedError {
     case unavailable
     case taskMissing
     case nestedSubtask
-    case invalidSubtaskMove
+    case invalidTaskMove
     case database(String)
 
     var errorDescription: String? {
@@ -206,7 +242,7 @@ private enum TaskStoreError: LocalizedError {
         case .unavailable: return L10n.tr("任务数据库暂不可用，请检查存储位置后重新打开应用。")
         case .taskMissing: return L10n.tr("任务不存在，可能已被删除。")
         case .nestedSubtask: return L10n.tr("子任务下不能再创建子任务。")
-        case .invalidSubtaskMove: return L10n.tr("只能在同一主任务、同一完成状态的子任务之间排序。")
+        case .invalidTaskMove: return L10n.tr("只能在同一层级、完成状态和置顶分组内排序。")
         case .database(let message): return L10n.tr("任务保存失败：\(message)")
         }
     }
@@ -250,15 +286,17 @@ private final class TaskDatabase {
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL,
                     completed_at REAL,
-                    priority INTEGER NOT NULL DEFAULT 0,
+                    is_pinned INTEGER NOT NULL DEFAULT 0,
                     subtask_order INTEGER
                 )
                 """)
             // Serialize the schema check and ALTER so repeated opens also migrate safely.
             try transaction {
                 let columns = try query("PRAGMA table_info(tasks)") { self.text($0, 1) }
-                if !columns.contains("priority") {
-                    try run("ALTER TABLE tasks ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
+                // Legacy priority values are retained on disk but no longer used.
+                // A new pin starts disabled rather than changing old tasks' meaning.
+                if !columns.contains("is_pinned") {
+                    try run("ALTER TABLE tasks ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0")
                 }
                 if !columns.contains("subtask_order") {
                     try run("ALTER TABLE tasks ADD COLUMN subtask_order INTEGER")
@@ -320,7 +358,7 @@ private final class TaskDatabase {
 
     func snapshot() throws -> [TodoTask] {
         try query("""
-            SELECT id, parent_id, title, details, planned_at, created_at, updated_at, completed_at, priority, subtask_order
+            SELECT id, parent_id, title, details, planned_at, created_at, updated_at, completed_at, is_pinned, subtask_order
             FROM tasks ORDER BY created_at ASC, rowid ASC
             """) { statement in
             TodoTask(id: self.text(statement, 0), parentID: self.optionalText(statement, 1),
@@ -329,7 +367,7 @@ private final class TaskDatabase {
                      createdAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 5)),
                      updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(statement, 6)),
                      completedAt: self.optionalDate(statement, 7),
-                     priority: TaskPriority(rawValue: Int(sqlite3_column_int64(statement, 8))) ?? .none,
+                     isPinned: sqlite3_column_int64(statement, 8) != 0,
                      subtaskOrder: sqlite3_column_type(statement, 9) == SQLITE_NULL ? nil : Int(sqlite3_column_int64(statement, 9)))
         }
     }
