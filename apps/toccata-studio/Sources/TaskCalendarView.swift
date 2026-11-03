@@ -360,7 +360,7 @@ struct TaskCalendarView: View {
             addingTask = false
         }
         .padding(.leading, CGFloat(row.depth) * 22)
-        .subtaskReordering(task: task)
+        .subtaskReordering(task: task, enabled: task.parentID != nil)
     }
 
     private func eventBadge(_ title: String, color: Color) -> some View {

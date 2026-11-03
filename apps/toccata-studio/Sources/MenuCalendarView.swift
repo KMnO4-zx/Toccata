@@ -149,7 +149,9 @@ struct MenuCalendarView: View {
             .accessibilityValue(row.node.isContextOnly ? L10n.tr("父任务上下文") : "")
             .accessibilityIdentifier("menu-calendar-task-\(task.id)")
             .help(taskHelp(row))
-            SubtaskDragHandle(task: task)
+            if task.parentID != nil {
+                SubtaskDragHandle(task: task)
+            }
         }
         .padding(.leading, 23 + indentation)
         .padding(.trailing, 18)
@@ -184,7 +186,7 @@ struct MenuCalendarView: View {
                                    value: [task.id: proxy.frame(in: .named("taskMenu"))])
         })
         .taskContextMenu(task: task) { presentation.selectTask(task.id) }
-        .subtaskReordering(task: task)
+        .subtaskReordering(task: task, enabled: task.parentID != nil)
     }
 
     private func taskHelp(_ row: WorkspaceTaskListRow) -> String {

@@ -10,18 +10,23 @@ struct SubtaskDragHandle: View {
 
     var body: some View {
         let _ = interfaceLanguage.language
-        if task.parentID != nil {
-            SubtaskGrip(taskID: task.id, store: store)
-                .frame(width: 22, height: 22)
-                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
-                .help(L10n.tr("按住拖动：仅调整同一主任务下、同一完成状态的子任务顺序"))
-        }
+        SubtaskGrip(taskID: task.id, store: store)
+            .frame(width: 28, height: 28)
+            .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+            .help(task.parentID == nil
+                  ? L10n.tr("按住拖动：主任务与子任务一起排序")
+                  : L10n.tr("按住拖动：仅调整同一主任务下、同一完成状态的子任务顺序"))
     }
 }
 
 extension View {
-    func subtaskReordering(task: TodoTask) -> some View {
-        modifier(SubtaskReorderModifier(task: task))
+    @ViewBuilder
+    func subtaskReordering(task: TodoTask, enabled: Bool = true) -> some View {
+        if enabled {
+            modifier(SubtaskReorderModifier(task: task))
+        } else {
+            self
+        }
     }
 }
 
@@ -34,44 +39,57 @@ private struct SubtaskReorderModifier: ViewModifier {
     let task: TodoTask
 
     func body(content: Content) -> some View {
-        if task.parentID != nil {
-            let isDragging = session.drag?.sourceID == regionID
-            let insertion = session.drag?.targetID == regionID ? session.drag?.placement : nil
-            content
-                .background {
-                    if isDragging {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(nsColor: .windowBackgroundColor))
-                            .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
-                            .padding(.horizontal, 6)
-                    }
+        let isDragging = session.drag?.movingRegionIDs.contains(regionID) == true
+        let insertion = session.drag?.insertionRegionID == regionID ? session.drag?.placement : nil
+        content
+            .background {
+                if isDragging {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(nsColor: .windowBackgroundColor))
+                        .shadow(color: .black.opacity(0.10), radius: 5, y: 2)
+                        .padding(.horizontal, 6)
                 }
-                .background(SubtaskRegion(id: regionID, taskID: task.id, store: store,
-                                          reduceMotion: reduceMotion))
-                .overlay(alignment: insertion == .after ? .bottom : .top) {
-                    if insertion != nil {
-                        Capsule().fill(Color.accentColor).frame(height: 2)
-                            .padding(.horizontal, 8)
-                            .allowsHitTesting(false)
-                    }
+            }
+            .background(SubtaskRegion(id: regionID, taskID: task.id, store: store,
+                                      reduceMotion: reduceMotion))
+            .overlay(alignment: insertion == .after ? .bottom : .top) {
+                if insertion != nil {
+                    Capsule().fill(Color.accentColor).frame(height: 2)
+                        .padding(.horizontal, 8)
+                        .allowsHitTesting(false)
                 }
-                .offset(y: isDragging ? session.drag?.offset ?? 0 : 0)
-                .zIndex(isDragging ? 1 : 0)
-                .accessibilityAction(named: L10n.tr("上移子任务")) { moveByKeyboard(-1) }
-                .accessibilityAction(named: L10n.tr("下移子任务")) { moveByKeyboard(1) }
-        } else {
-            content
-        }
+            }
+            .offset(y: isDragging ? session.drag?.offset ?? 0 : 0)
+            .zIndex(isDragging ? 1 : 0)
+            .accessibilityAction(named: L10n.tr("上移任务")) { moveByKeyboard(-1) }
+            .accessibilityAction(named: L10n.tr("下移任务")) { moveByKeyboard(1) }
     }
 
     private func moveByKeyboard(_ offset: Int) {
-        let siblings = store.children(of: task.parentID).filter { $0.isCompleted == task.isCompleted }
+        let sortOrder = task.parentID == nil ? TaskDragSortPreference.current : .manual
+        let siblings = store.children(of: task.parentID)
+            .filter { $0.id == task.id || TaskOrder.canMove(task, relativeTo: $0) }
+            .sorted { TaskOrder.precedes($0, $1, sortOrder: sortOrder) }
         guard let index = siblings.firstIndex(where: { $0.id == task.id }),
               siblings.indices.contains(index + offset) else { return }
         withAnimation(reduceMotion ? nil : WorkspaceMotion.taskReorder) {
-            _ = store.moveSubtask(id: task.id, relativeTo: siblings[index + offset].id,
-                                 placement: offset < 0 ? .before : .after)
+            if store.moveTask(id: task.id, relativeTo: siblings[index + offset].id,
+                              placement: offset < 0 ? .before : .after, sortOrder: sortOrder),
+               task.parentID == nil {
+                TaskDragSortPreference.useManualOrder()
+            }
         }
+    }
+}
+
+private enum TaskDragSortPreference {
+    static var current: TaskSortOrder {
+        UserDefaults.standard.string(forKey: TaskSortOrder.storageKey)
+            .flatMap(TaskSortOrder.init(rawValue:)) ?? .createdDescending
+    }
+
+    static func useManualOrder() {
+        UserDefaults.standard.set(TaskSortOrder.manual.rawValue, forKey: TaskSortOrder.storageKey)
     }
 }
 
@@ -80,8 +98,10 @@ private final class SubtaskReorderSession: ObservableObject {
     static let shared = SubtaskReorderSession()
     struct Drag {
         let sourceID: UUID
+        let movingRegionIDs: Set<UUID>
         var offset: CGFloat = 0
-        var targetID: UUID?
+        var insertionRegionID: UUID?
+        var targetTaskID: String?
         var placement: SubtaskPlacement?
     }
     @Published private(set) var drag: Drag?
@@ -90,40 +110,64 @@ private final class SubtaskReorderSession: ObservableObject {
     private var sourceTask: TodoTask?
     private var startPoint = NSPoint.zero
     private var sourceFrame = NSRect.zero
+    private var sortOrder: TaskSortOrder = .manual
 
     func begin(taskID: String, store: TaskStore, window: NSWindow?, at point: NSPoint) -> Bool {
-        guard drag == nil, let task = store.task(id: taskID), task.parentID != nil,
+        guard drag == nil, let task = store.task(id: taskID),
               let region = regions.allObjects.first(where: {
                   $0.taskID == taskID && $0.store === store && $0.window === window &&
-                  $0.screenFrame.contains(point)
+                  $0.screenFrame.insetBy(dx: -4, dy: -4).contains(point)
               }) else { return false }
         source = region
         sourceTask = task
         sourceFrame = region.screenFrame
         startPoint = point
-        drag = Drag(sourceID: region.id)
+        sortOrder = task.parentID == nil ? TaskDragSortPreference.current : .manual
+        // Only the visible copy in this list follows the dragged branch. A detail
+        // pane or another window can display the same tasks at the same time.
+        let moving = regions.allObjects.filter { candidate in
+            candidate.belongsToSameList(as: region) &&
+            belongsToBranch(candidate.taskID, rootID: task.id, tasks: store.tasks)
+        }
+        drag = Drag(sourceID: region.id, movingRegionIDs: Set(moving.map(\.id)))
         return true
     }
 
     func move(to point: NSPoint) {
         guard var value = drag, let source, let original = sourceTask,
-              let current = source.store?.task(id: original.id),
+              let store = source.store, let current = store.task(id: original.id),
+              source.window != nil,
               current.parentID == original.parentID,
-              current.isCompleted == original.isCompleted else { cancel(); return }
+              current.isCompleted == original.isCompleted,
+              current.isPinned == original.isPinned else { cancel(); return }
         value.offset = startPoint.y - point.y
-        value.targetID = nil
+        value.insertionRegionID = nil
+        value.targetTaskID = nil
         value.placement = nil
-        // Stay in this list/column, even when the same tasks appear in a detail pane.
-        if point.x >= sourceFrame.minX && point.x <= sourceFrame.maxX,
-           let target = regions.allObjects.first(where: { candidate in
-               guard candidate !== source, candidate.window === source.window,
-                     candidate.store === source.store,
-                     candidate.visibleScreenFrame.contains(point),
-                     let task = candidate.store?.task(id: candidate.taskID) else { return false }
-               return SubtaskOrder.canMove(current, relativeTo: task)
-           }) {
-            value.targetID = target.id
-            value.placement = point.y >= target.screenFrame.midY ? .before : .after
+
+        // Merge a root's visible descendants into its drop region. This accepts
+        // drops over children and between rows, with generous horizontal slack.
+        var grouped: [String: [(region: SubtaskRowRegion, frame: CGRect)]] = [:]
+        for candidate in regions.allObjects {
+            guard !value.movingRegionIDs.contains(candidate.id),
+                  candidate.belongsToSameList(as: source),
+                  let candidateTask = store.task(id: candidate.taskID),
+                  let target = TaskOrder.target(for: candidateTask, moving: current, in: store.tasks) else { continue }
+            let frame = candidate.visibleScreenFrame
+            guard !frame.isEmpty else { continue }
+            grouped[target.id, default: []].append((candidate, frame))
+        }
+        let groups = grouped.compactMap { taskID, rows -> TaskDragGeometry.Group? in
+            guard let top = rows.max(by: { $0.frame.maxY < $1.frame.maxY }),
+                  let bottom = rows.min(by: { $0.frame.minY < $1.frame.minY }) else { return nil }
+            let frame = rows.reduce(CGRect.null) { $0.union($1.frame) }
+            return TaskDragGeometry.Group(taskID: taskID, frame: frame,
+                                          topRegionID: top.region.id, bottomRegionID: bottom.region.id)
+        }
+        if let insertion = TaskDragGeometry.insertion(at: point, groups: groups, lane: sourceFrame) {
+            value.insertionRegionID = insertion.regionID
+            value.targetTaskID = insertion.taskID
+            value.placement = insertion.placement
         }
         // Pointer tracking must be immediate, independent of surrounding list animations.
         var transaction = Transaction(); transaction.disablesAnimations = true
@@ -134,20 +178,36 @@ private final class SubtaskReorderSession: ObservableObject {
         guard let value = drag else { return }
         let source = self.source
         let original = sourceTask
-        let target = regions.allObjects.first { $0.id == value.targetID }
+        let order = sortOrder
         withAnimation(source?.reduceMotion == true ? nil : WorkspaceMotion.taskReorder) {
             clear()
             guard let source, let original, let store = source.store,
                   let current = store.task(id: original.id),
                   current.parentID == original.parentID, current.isCompleted == original.isCompleted,
-                  let target, let placement = value.placement else { return }
-            _ = store.moveSubtask(id: original.id, relativeTo: target.taskID, placement: placement)
+                  current.isPinned == original.isPinned,
+                  let targetID = value.targetTaskID, let target = store.task(id: targetID),
+                  TaskOrder.canMove(current, relativeTo: target),
+                  let placement = value.placement else { return }
+            if store.moveTask(id: original.id, relativeTo: targetID, placement: placement, sortOrder: order),
+               original.parentID == nil {
+                TaskDragSortPreference.useManualOrder()
+            }
         }
     }
 
     func cancel() {
         guard drag != nil else { return }
         withAnimation(source?.reduceMotion == true ? nil : WorkspaceMotion.taskReorder) { clear() }
+    }
+
+    private func belongsToBranch(_ taskID: String, rootID: String, tasks: [TodoTask]) -> Bool {
+        var cursor: String? = taskID
+        var visited: Set<String> = []
+        while let id = cursor, visited.insert(id).inserted {
+            if id == rootID { return true }
+            cursor = tasks.first(where: { $0.id == id })?.parentID
+        }
+        return false
     }
 
     private func clear() { drag = nil; source = nil; sourceTask = nil }
@@ -181,6 +241,18 @@ private final class SubtaskRowRegion: NSView {
     var reduceMotion = false
     var screenFrame: NSRect { window?.convertToScreen(convert(bounds, to: nil)) ?? .zero }
     var visibleScreenFrame: NSRect { window?.convertToScreen(convert(bounds.intersection(visibleRect), to: nil)) ?? .zero }
+    func belongsToSameList(as other: SubtaskRowRegion) -> Bool {
+        guard window != nil, window === other.window, store === other.store else { return false }
+        if let scrollView = enclosingScrollView, let otherScrollView = other.enclosingScrollView {
+            guard scrollView === otherScrollView else { return false }
+        } else if enclosingScrollView != nil || other.enclosingScrollView != nil {
+            return false
+        }
+        // A scroll view may itself contain multiple columns. Compare their row
+        // lanes as well as scroll-view identity, independently of drop tolerance.
+        return abs(screenFrame.minX - other.screenFrame.minX) <= 24 &&
+            abs(screenFrame.maxX - other.screenFrame.maxX) <= 24
+    }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
@@ -193,7 +265,7 @@ private struct SubtaskGrip: NSViewRepresentable {
         view.taskID = taskID; view.store = store
         view.setAccessibilityElement(true)
         view.setAccessibilityRole(.button)
-        view.setAccessibilityLabel(L10n.tr("拖动排序：\(store.task(id: taskID)?.title ?? L10n.tr("子任务"))"))
+        view.setAccessibilityLabel(L10n.tr("拖动排序：\(store.task(id: taskID)?.title ?? L10n.tr("任务"))"))
         view.setAccessibilityIdentifier("subtask-drag-\(taskID)")
     }
     static func dismantleNSView(_ view: SubtaskGripView, coordinator: ()) { view.cancelTracking() }
