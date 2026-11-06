@@ -46,6 +46,7 @@ final class ToccataApplicationDelegate: NSObject, NSApplicationDelegate, NSWindo
             self?.openWorkbench(section: section)
         }
         dockIcon.applySavedPreference()
+        CapturePolicySettings.shared.onChange = { [refresher] in refresher.reloadCapturePolicy() }
         refresher.start()
         hydrationReminders.start(refresher: refresher)
         coreProcess.start(requestPermission: false)

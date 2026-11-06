@@ -57,6 +57,26 @@ impl Config {
             .unwrap_or_else(|| Self::data_dir().join("toccata.db"))
     }
 
+    pub fn policy_path() -> PathBuf {
+        Self::data_dir().join("capture-policy.json")
+    }
+
+    /// 配置指向数据目录之外时，这些文件不会被目录级权限覆盖。
+    pub fn database_files(&self) -> Vec<PathBuf> {
+        let database = self.db_path();
+        let cache = database.with_extension("statistics-cache.sqlite");
+        [database, cache]
+            .iter()
+            .flat_map(|path| {
+                ["", "-wal", "-shm"].map(|suffix| {
+                    let mut name = path.clone().into_os_string();
+                    name.push(suffix);
+                    PathBuf::from(name)
+                })
+            })
+            .collect()
+    }
+
     pub fn socket_path(&self) -> PathBuf {
         self.socket_path
             .as_ref()

@@ -30,6 +30,11 @@ extern "C" {
     fn CGEventTapIsEnabled(tap: CFMachPortRef) -> bool;
 }
 
+#[link(name = "Carbon", kind = "framework")]
+extern "C" {
+    fn IsSecureEventInputEnabled() -> u8;
+}
+
 static CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 thread_local! {
@@ -64,6 +69,12 @@ pub struct RawKeyEvent {
     pub kind: KeyKind,
     pub at: Instant,
     pub app: Option<String>,
+    pub secure_input: bool,
+}
+
+/// 系统全局状态：密码框或终端“安全键盘输入”开启时为真。
+fn secure_input_enabled() -> bool {
+    unsafe { IsSecureEventInputEnabled() != 0 }
 }
 
 pub fn preflight() -> bool {
@@ -165,6 +176,7 @@ pub(crate) fn send(sender: &Sender<WriterMsg>, keycode: i64, kind: KeyKind) {
         kind,
         at: Instant::now(),
         app: frontmost_app(),
+        secure_input: secure_input_enabled(),
     }));
 }
 

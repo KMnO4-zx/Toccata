@@ -10,6 +10,8 @@ mod config;
 mod hid;
 mod special_keys;
 mod ipc;
+mod permissions;
+mod policy;
 mod session;
 mod store;
 mod tap;
@@ -25,6 +27,7 @@ use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopTimer,
 
 use config::Config;
 use ipc::Broadcaster;
+use policy::{AppMode, CaptureGate, PolicyFile, REDACTED_KEYCODE};
 use session::SessionTracker;
 use store::{KeyEventRow, SessionRow, Store};
 use tap::RawKeyEvent;
@@ -33,6 +36,7 @@ use tracker::{KeyKind, Tracker};
 enum WriterMsg {
     Event(RawKeyEvent),
     Capture(bool),
+    ReloadPolicy { force: bool },
     Shutdown,
 }
 
@@ -70,6 +74,13 @@ static TIMER_TICKS: AtomicU64 = AtomicU64::new(0);
 static WRITER_READY: AtomicBool = AtomicBool::new(false);
 static WRITER_SENDER: OnceLock<Sender<WriterMsg>> = OnceLock::new();
 
+/// 暂停和规则修改要立即生效，不等周期检查。
+pub(crate) fn request_policy_reload() {
+    if let Some(sender) = WRITER_SENDER.get() {
+        let _ = sender.send(WriterMsg::ReloadPolicy { force: true });
+    }
+}
+
 pub(crate) fn writer_ready() -> bool {
     WRITER_READY.load(Ordering::SeqCst)
 }
@@ -94,6 +105,11 @@ extern "C" fn runloop_tick(_timer: CFRunLoopTimerRef, _info: *mut std::ffi::c_vo
         return;
     }
     let tick = TIMER_TICKS.fetch_add(1, Ordering::Relaxed) + 1;
+    if tick % 5 == 0 {
+        if let Some(sender) = WRITER_SENDER.get() {
+            let _ = sender.send(WriterMsg::ReloadPolicy { force: false });
+        }
+    }
     if tick % 10 == 0 {
         tap::watchdog_check();
         if let Some(sender) = WRITER_SENDER.get() {
@@ -103,12 +119,14 @@ extern "C" fn runloop_tick(_timer: CFRunLoopTimerRef, _info: *mut std::ffi::c_vo
 }
 
 fn main() {
+    permissions::restrict_new_files();
     let cfg = Config::load();
     let data_dir = Config::data_dir();
     if let Err(e) = std::fs::create_dir_all(&data_dir) {
         eprintln!("[toccata-core] 无法创建数据目录 {data_dir:?}: {e}");
         std::process::exit(1);
     }
+    permissions::harden(&data_dir, &cfg.database_files());
 
     // 单实例锁：第二个实例直接退出，避免双写数据库（flock 在进程退出时自动释放）
     let _instance_lock = acquire_instance_lock(&data_dir);
@@ -231,6 +249,8 @@ fn writer_main(rx: Receiver<WriterMsg>, cfg: Config, broadcaster: Broadcaster) {
             return;
         }
     };
+    let mut policy_file = PolicyFile::new(Config::policy_path());
+    let mut gate = CaptureGate::new(policy_file.reload(true).unwrap_or_default());
     WRITER_READY.store(true, Ordering::SeqCst);
     let mut tracker = Tracker::new();
     let mut sessions = SessionTracker::new(cfg.idle_gap_secs, cfg.trailing_grace_secs);
@@ -242,7 +262,7 @@ fn writer_main(rx: Receiver<WriterMsg>, cfg: Config, broadcaster: Broadcaster) {
     loop {
         match rx.recv_timeout(flush_schedule.remaining(Instant::now())) {
             Ok(WriterMsg::Event(ev)) => {
-                handle_event(&ev, &mut tracker, &mut sessions, &mut store, &broadcaster);
+                handle_event(&ev, &mut gate, &mut tracker, &mut sessions, &mut store, &broadcaster);
                 if store.pending() >= cfg.flush_batch_size {
                     flush_store(&mut store, &broadcaster);
                 }
@@ -250,6 +270,11 @@ fn writer_main(rx: Receiver<WriterMsg>, cfg: Config, broadcaster: Broadcaster) {
             Ok(WriterMsg::Capture(active)) => {
                 let line = capture_json(active, writer_ready(), tap::permission_required());
                 broadcaster.broadcast(&line);
+            }
+            Ok(WriterMsg::ReloadPolicy { force }) => {
+                if let Some(policy) = policy_file.reload(force) {
+                    gate.set_policy(policy);
+                }
             }
             Ok(WriterMsg::Shutdown) => {
                 settle_open_session(&mut sessions, &mut store);
@@ -280,6 +305,7 @@ fn capture_json(capture_active: bool, ready: bool, permission_required: bool) ->
 
 fn handle_event(
     ev: &RawKeyEvent,
+    gate: &mut CaptureGate,
     tracker: &mut Tracker,
     sessions: &mut SessionTracker,
     store: &mut Store,
@@ -289,16 +315,21 @@ fn handle_event(
     if !tracked.accepted {
         return;
     }
+    let mode = gate.resolve(ev.keycode, ev.kind, ev.app.as_deref(), ev.ts_ms, ev.secure_input);
+    if mode == AppMode::Ignore {
+        return;
+    }
+    let keycode = if mode == AppMode::Redact { REDACTED_KEYCODE } else { ev.keycode };
     store.push_key_event(KeyEventRow {
         ts_ms: ev.ts_ms,
-        keycode: ev.keycode,
+        keycode,
         kind: ev.kind.as_int(),
         hold_ms: tracked.hold_ms.map(|v| v as i64),
         app: ev.app.clone(),
     });
     let line = serde_json::json!({
         "type": "key",
-        "keycode": ev.keycode,
+        "keycode": keycode,
         "kind": ev.kind.as_str(),
         "ts": ev.ts_ms,
         "app": ev.app,
@@ -337,6 +368,7 @@ fn flush_store(store: &mut Store, broadcaster: &Broadcaster) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::policy::CapturePolicy;
 
     #[test]
     fn background_permission_policy_preserves_standalone_cli_behavior() {
@@ -364,6 +396,7 @@ mod tests {
 
     #[test]
     fn duplicate_fn_down_does_not_persist_or_extend_the_session() {
+        let mut gate = CaptureGate::new(CapturePolicy::default());
         let mut tracker = Tracker::new();
         let mut sessions = SessionTracker::new(60, 5);
         let mut store = Store::open(std::path::Path::new(":memory:"), 500).unwrap();
@@ -376,13 +409,56 @@ mod tests {
                 kind: KeyKind::Down,
                 at: start + Duration::from_millis(ts_ms as u64),
                 app: Some("test.app".into()),
+                secure_input: false,
             };
-            handle_event(&event, &mut tracker, &mut sessions, &mut store, &broadcaster);
+            handle_event(&event, &mut gate, &mut tracker, &mut sessions, &mut store, &broadcaster);
         }
         assert_eq!(store.pending(), 1, "only the first down may be persisted");
         let settled = sessions.flush().unwrap();
         assert_eq!(settled.key_count, 1);
         assert_eq!(settled.end_ms, 6_000, "a duplicate down must not extend activity");
+    }
+
+    fn capture(policy: &str, secure_input: bool) -> (Vec<(i64, i64, Option<i64>)>, Option<u64>) {
+        let mut gate = CaptureGate::new(CapturePolicy::parse(policy).unwrap());
+        let mut tracker = Tracker::new();
+        let mut sessions = SessionTracker::new(60, 5);
+        let mut store = Store::open(std::path::Path::new(":memory:"), 500).unwrap();
+        let broadcaster = Broadcaster::empty();
+        let start = Instant::now();
+        for (ts_ms, kind) in [(1_000, KeyKind::Down), (1_100, KeyKind::Up)] {
+            let event = RawKeyEvent {
+                ts_ms,
+                keycode: 13,
+                kind,
+                at: start + Duration::from_millis(ts_ms as u64),
+                app: Some("test.app".into()),
+                secure_input,
+            };
+            handle_event(&event, &mut gate, &mut tracker, &mut sessions, &mut store, &broadcaster);
+        }
+        store.flush().unwrap();
+        (store.key_rows(), sessions.flush().map(|settled| settled.key_count))
+    }
+
+    #[test]
+    fn redacted_events_keep_timing_but_not_the_keycode() {
+        let (rows, keys) = capture(r#"{"version":1,"apps":{"test.app":"redact"}}"#, false);
+        assert_eq!(rows, vec![(REDACTED_KEYCODE, 0, None), (REDACTED_KEYCODE, 1, Some(100))]);
+        assert_eq!(keys, Some(1));
+    }
+
+    #[test]
+    fn ignored_paused_and_secure_input_events_leave_no_record() {
+        for (policy, secure) in [
+            (r#"{"version":1,"apps":{"test.app":"ignore"}}"#, false),
+            (r#"{"version":1,"paused_until_ms":5000}"#, false),
+            (r#"{"version":1}"#, true),
+        ] {
+            let (rows, session) = capture(policy, secure);
+            assert!(rows.is_empty(), "{policy} must not persist keys");
+            assert_eq!(session, None, "{policy} must not extend sessions");
+        }
     }
 
     #[test]

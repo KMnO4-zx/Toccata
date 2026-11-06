@@ -3,6 +3,7 @@ import SwiftUI
 
 struct CaptureStatusView: View {
     @ObservedObject private var interfaceLanguage = LanguageSettings.shared
+    @ObservedObject private var capturePolicy = CapturePolicySettings.shared
     @EnvironmentObject private var refresher: LiveRefresher
     var connectedText = L10n.tr("键盘记录已连接")
 
@@ -13,7 +14,10 @@ struct CaptureStatusView: View {
             Label(L10n.tr("演示数据"), systemImage: "sparkles")
                 .foregroundStyle(.secondary)
 #else
-            if refresher.captureEnabled {
+            if capturePolicy.isPaused {
+                Label(L10n.tr("键盘记录已暂停"), systemImage: "pause.circle")
+                    .foregroundStyle(.secondary)
+            } else if refresher.captureEnabled {
                 Label(connectedText, systemImage: "circle.fill")
                     .foregroundStyle(.green)
             } else if refresher.isConnected {
@@ -37,6 +41,7 @@ struct CaptureStatusView: View {
     }
 
     private var helpText: String {
+        if let status = capturePolicy.pauseStatusText { return status }
         if refresher.permissionRequired {
             return L10n.tr("打开输入监控设置，允许 Toccata 记录键盘")
         }

@@ -11,12 +11,15 @@
 | 文件 | 用途 |
 |---|---|
 | `config.json` | 后台服务配置，Studio 也从此处读取路径和活跃计算参数 |
+| `capture-policy.json` | 采集策略，由 Studio 写入，后台服务只读，见下文 |
 | `toccata.db` | 键盘统计 SQLite 数据库，受非空 `db_path` 配置覆盖 |
 | `toccata.statistics-cache.sqlite` | 默认键盘数据库的按天统计衍生缓存，由 Studio 维护 |
 | `toccata.sock` | Unix socket，受非空 `socket_path` 配置覆盖 |
 | `tasks.sqlite` | Studio 任务 SQLite 数据库 |
 | `toccata.lock` | 后台服务的排他实例锁 |
 | `core.log` | 由 App 启动的 helper 的启动、权限与写入错误日志，不记录键名或文本 |
+
+后台服务启动时设置 `umask 077`，将数据目录改为 `0700`、目录内文件改为 `0600`（不递归，跳过符号链接和非当前用户的文件）。`db_path` 指向目录外时只修改数据库和缓存文件，不修改所在目录。这只阻止其他本机用户读取，同一用户的进程仍可访问。
 
 `db_path` / `socket_path` 建议填写非空绝对路径；省略或设为 `null` 时使用默认文件。它们不改变任务库的位置。布局标签和日历主题从 Studio 资源包读取，见 [README.md](README.md)。
 
@@ -32,7 +35,13 @@
 {"cmd":"subscribe"}
 ```
 
-连接后发送一次完成订阅。第一条消息必须为此命令；当前版本没有写入任务或查询统计的 socket 命令。
+连接后发送一次完成订阅。第一条消息必须为此命令。订阅后可发送：
+
+```json
+{"cmd":"reload_policy"}
+```
+
+服务立即重新读取 `capture-policy.json`，不回复。旧版本服务会忽略此命令，并且未连接时不需要发送：服务启动时读取此文件，运行中每 5 秒检查一次变化。当前版本没有写入任务或查询统计的 socket 命令。
 
 ### 后台服务 → 客户端
 
@@ -57,7 +66,7 @@
 
 | 字段 | 含义 |
 |---|---|
-| `keycode` | macOS CGKeyCode；Lock / Power 归一化为 `127` |
+| `keycode` | macOS CGKeyCode；Lock / Power 归一化为 `127`；脱敏事件为 `-1` |
 | `kind` | `down` 或 `up` |
 | `ts` | Unix epoch 毫秒 |
 | `app` | 事件发生时前台应用的 bundle ID，可能为 `null` |
@@ -81,7 +90,7 @@ F1–F12、Caps Lock 和 Lock 由进程内非独占 IOHIDManager 补充监听，
 ```sql
 CREATE TABLE IF NOT EXISTS key_events (
   ts_ms     INTEGER NOT NULL, -- Unix epoch 毫秒
-  keycode   INTEGER NOT NULL, -- macOS CGKeyCode
+  keycode   INTEGER NOT NULL, -- macOS CGKeyCode；-1 = 已脱敏
   kind      INTEGER NOT NULL, -- 0 = down, 1 = up
   hold_ms   INTEGER,          -- 配对成功的 up 行保存按住毫秒数
   app       TEXT             -- 前台应用 bundle ID，可为 NULL
@@ -98,6 +107,35 @@ CREATE INDEX IF NOT EXISTS idx_app_sessions_start ON app_sessions(start_ms);
 ```
 
 按住时间在服务进程内以单调时钟配对计算；孤立的 `up` 没有 `hold_ms`。Fn 的键码为 `63`，重复 `down` 保留首次按下时间。左右 Command、Shift、Option、Control 分别判定，避免另一侧仍按住时将松开误记为按下。
+
+### 采集策略：capture-policy.json
+
+```json
+{
+  "version": 1,
+  "paused_until_ms": 1760058000000,
+  "apps": {
+    "com.apple.Terminal": "redact",
+    "com.example.Secret": "ignore"
+  }
+}
+```
+
+| 字段 | 含义 |
+|---|---|
+| `version` | 必须为 `1` |
+| `paused_until_ms` | 可省略。事件时间早于此值时不记录；手动恢复前的暂停写入 Int64 最大值 |
+| `apps` | 可省略。bundle ID 到模式的映射 |
+
+| 模式 | `key_events` 与实时广播 | `app_sessions` | 统计 |
+|---|---|---|---|
+| `record` | 完整键码 | 记录 | 全部计入 |
+| `redact` | `keycode = -1`，保留时间、按住时长和应用 | 记录 | 计入次数和时长，不计入逐键统计 |
+| `ignore` | 不写入、不广播 | 不记录 | 不计入 |
+
+服务内置密码管理器的 `ignore` 规则，文件中的同名规则优先。暂停期间和系统安全输入开启时，所有事件都按 `ignore` 处理。文件不存在时使用内置规则；文件存在但无法读取或解析时暂停全部采集，服务写入 `core.log`，Studio 提示用户并在恢复时重建文件。
+
+一次按键的按下和松开沿用按下时的模式：松开发生在其他应用或策略已变化时，处理方式不变；没有对应按下记录的松开事件使用当前模式。真实键码只在内存中用于按住配对。
 
 ### 活跃时间口径
 

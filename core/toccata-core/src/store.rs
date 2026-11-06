@@ -98,6 +98,18 @@ impl Store {
 }
 
 #[cfg(test)]
+impl Store {
+    pub fn key_rows(&self) -> Vec<(i64, i64, Option<i64>)> {
+        let mut statement = self.conn
+            .prepare("SELECT keycode, kind, hold_ms FROM key_events ORDER BY rowid")
+            .unwrap();
+        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap();
+        rows.map(Result::unwrap).collect()
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

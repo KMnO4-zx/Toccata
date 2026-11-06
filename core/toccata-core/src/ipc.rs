@@ -112,6 +112,13 @@ fn accept_loop(listener: UnixListener, broadcaster: Broadcaster) {
     }
 }
 
+fn is_command(line: &str, name: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(line)
+        .ok()
+        .and_then(|v| v.get("cmd")?.as_str().map(|s| s == name))
+        .unwrap_or(false)
+}
+
 fn client_loop(id: u64, stream: UnixStream, broadcaster: Broadcaster) {
     // Broadcasting shares the persistence writer. A paused subscriber must not
     // indefinitely prevent recording keys, serving other clients, or shutdown.
@@ -128,11 +135,7 @@ fn client_loop(id: u64, stream: UnixStream, broadcaster: Broadcaster) {
         Ok(0) | Err(_) => return,
         Ok(_) => {}
     }
-    let is_subscribe = serde_json::from_str::<serde_json::Value>(&line)
-        .ok()
-        .and_then(|v| v.get("cmd")?.as_str().map(|s| s == "subscribe"))
-        .unwrap_or(false);
-    if !is_subscribe {
+    if !is_command(&line, "subscribe") {
         return;
     }
     {
@@ -148,13 +151,17 @@ fn client_loop(id: u64, stream: UnixStream, broadcaster: Broadcaster) {
         }
     }
     broadcaster.clients.lock().unwrap().push(Client { id, stream });
-    // 持续读以探测断连（协议上客户端此后无需再发数据）
+    // 持续读以探测断连，并接收采集策略重载通知
     let mut buf = String::new();
     loop {
         buf.clear();
         match reader.read_line(&mut buf) {
             Ok(0) | Err(_) => break,
-            Ok(_) => {}
+            Ok(_) => {
+                if is_command(&buf, "reload_policy") {
+                    crate::request_policy_reload();
+                }
+            }
         }
     }
     broadcaster.remove(id);
