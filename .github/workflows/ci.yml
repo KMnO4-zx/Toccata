@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Prepare toolchains and resources
+        run: |
+          source scripts/macos-toolchain.sh
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          ./scripts/sync-assets.sh
+      - name: Test scripts
+        run: |
+          source scripts/macos-toolchain.sh
+          python3 scripts/tests/test_release.py
+          python3 scripts/tests/test_build_info.py
+          python3 scripts/tests/test_macos_toolchain.py
+          python3 scripts/tests/test_update_installer.py
+      - name: Test core
+        run: |
+          source scripts/macos-toolchain.sh
+          cargo test --locked
+      - name: Test Studio logic
+        run: |
+          source scripts/macos-toolchain.sh
+          # WebKit integration tests require a local interactive desktop.
+          swift test --package-path apps/toccata-studio --sdk "$SDKROOT" --skip MarkdownWebEditorTests
