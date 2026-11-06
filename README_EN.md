@@ -53,7 +53,7 @@ I want to use the keyboard to record the time I spend putting something out into
 
 - **Keyboard heatmap**: see which keys you use most, with live feedback as you press them.
 - **Activity timeline**: see when you were typing throughout the day, and look back at your app usage and Fn hold time.
-- **Local records**: key codes, timestamps, hold durations, and associated apps are recorded on your Mac. Capture takes no screenshots and records no audio.
+- **Local records**: key codes, timestamps, hold durations, and associated apps are recorded on your Mac. Capture takes no screenshots and records no audio. Key code sequences can reveal what you typed, so General settings lets you pause recording or redact and exclude individual apps. Password managers and system secure input are not recorded by default.
 
 ![Keyboard activity: per-key heatmap and activity timelines for the last seven days](images/keyboard-activity.png)
 

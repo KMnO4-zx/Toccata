@@ -143,9 +143,12 @@ launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.toccata.core.
 | `toccata.statistics-cache.sqlite` | Studio 维护的按天统计缓存，可由原始事件重建 |
 | `toccata.sock` | 后台服务的实时 JSON Lines 订阅接口 |
 | `config.json` | 服务配置；Studio 也读取其中的路径及活跃估算参数 |
+| `capture-policy.json` | 暂停时间和应用规则，由 Studio 写入，服务只读 |
 | `toccata.lock` | 后台服务的单实例锁 |
 | `core.log` | App 启动的服务日志，包含启动、权限与写入错误，不记录键名或文本 |
 | `studio-preflight.log` | App 启动内嵌服务时记录的输入监控权限预检查结果 |
+
+服务启动时将数据目录收紧为 `0700`、目录内文件收紧为 `0600`。这只阻止其他本机用户读取，同一用户的进程仍可访问。`key_events` 的键码序列可能还原输入内容，修改、导出或上传时要按敏感数据处理。
 
 SQLite 使用 WAL 模式。任务库与键盘库相互独立，统计缓存不会清理或压缩原始记录。缓存随时区、统计策略或源数据库身份变化重建；缓存不可用时回退原始查询。
 
@@ -191,6 +194,16 @@ SQLite 使用 WAL 模式。任务库与键盘库相互独立，统计缓存不�
 | 活跃日历 | 按本地日期统计原始 `kind = 0` 行数，保留历史计数方式，不对数据库中的重复行去重 |
 
 采集层已过滤正常的长按重复输入；如果历史库或导入数据本身包含重复行，活跃日历与键盘概览的次数可能不同。实时键帽动画和 `+1` 气泡只负责展示，不额外写入事件或增加次数。
+
+### 暂停与应用规则
+
+“设置 → 通用配置 → 键盘记录隐私”可以暂停记录，并为应用设置完整记录、脱敏或不记录；状态栏右键菜单也提供暂停和恢复。密码管理器默认不记录，系统安全输入开启时也不记录。
+
+- 暂停和“不记录”的事件既不写入也不广播，因此不计入次数、活跃时长、应用排行和喝水提醒，之后也不会补算。
+- 脱敏事件的 `keycode` 为 `-1`，计入总次数和活跃时长，但不进入逐键热力图。脱敏应用中的 Fn 不再计入单独的 Fn 按住时长。
+- 规则按前台应用判断。终端中的 `sudo` 密码不一定处于系统安全输入状态。如有顾虑，把终端设为脱敏或不记录，或开启终端的“安全键盘输入”。
+
+策略字段和优先级见 [shared/protocol.md](shared/protocol.md#采集策略capture-policyjson)。
 
 ### 活跃时长
 
@@ -308,7 +321,7 @@ swift test --package-path apps/toccata-studio --sdk "$SDKROOT"
 git diff --check
 ```
 
-`MarkdownWebEditorTests` 需要本机可交互桌面的 WebKit 环境。发布工作流使用 `swift test --package-path apps/toccata-studio --skip MarkdownWebEditorTests`；修改 Markdown 编辑器时仍需在本机补齐这部分验证。
+`MarkdownWebEditorTests` 需要本机可交互桌面的 WebKit 环境。`.github/workflows/ci.yml` 在 Pull Request 和推送到 `main` 时运行脚本、Rust 和 Swift 测试；CI 与发布工作流都使用 `swift test --package-path apps/toccata-studio --skip MarkdownWebEditorTests`；修改 Markdown 编辑器时仍需在本机补齐这部分验证。
 
 `test_update_installer.py` 在隔离目录验证退出等待、替换、回退及并发替换保护，模拟签名和启动命令，不启动正式应用。真实下载与校验可选用 `UpdateDownloadSmokeTests`：先将构建好的 App 复制到 `.build/updater-smoke/Toccata.app`，只将该副本版本改为 `0.0.0` 并重新 ad-hoc 签名，再用 `TOCCATA_UPDATE_SMOKE_APP="$PWD/.build/updater-smoke/Toccata.app" swift test --package-path apps/toccata-studio --sdk "$SDKROOT" --filter UpdateDownloadSmokeTests` 运行。此测试下载并准备最新版，但不会安装或启动；平时跳过。遇到 API 限流时，可用 `TOCCATA_UPDATE_SMOKE_RELEASE_JSON` 指向先前保存的 GitHub Release JSON，仅复用发布元数据，仍真实下载安装包。
 
