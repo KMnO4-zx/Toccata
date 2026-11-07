@@ -305,6 +305,7 @@ final class TaskMenuController: NSObject, ObservableObject {
         appearanceItem.submenu = appearanceMenu
         menu.addItem(appearanceItem)
         menu.addItem(settingsItem(L10n.tr("喝水提醒…"), action: #selector(openHydrationSettings)))
+        menu.addItem(capturePauseItem())
         menu.addItem(.separator())
 
         let loginItem = settingsItem(L10n.tr("登录时启动"), action: #selector(toggleLoginItem))
@@ -334,6 +335,21 @@ final class TaskMenuController: NSObject, ObservableObject {
         NSMenu.popUpContextMenu(menu, with: event, for: button)
     }
 
+    private func capturePauseItem() -> NSMenuItem {
+        if CapturePolicySettings.shared.isPaused {
+            return settingsItem(L10n.tr("恢复键盘记录"), action: #selector(resumeCapture))
+        }
+        let item = NSMenuItem(title: L10n.tr("暂停键盘记录"), action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        for duration in CapturePauseDuration.allCases {
+            let option = settingsItem(duration.title, action: #selector(pauseCapture(_:)))
+            option.representedObject = duration.rawValue
+            submenu.addItem(option)
+        }
+        item.submenu = submenu
+        return item
+    }
+
     private func settingsItem(_ title: String, action: Selector) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
@@ -343,6 +359,14 @@ final class TaskMenuController: NSObject, ObservableObject {
     @objc private func openWorkbenchFromSettings() { openWorkbenchAction?(nil) }
     @objc private func openAboutFromSettings() { openAboutAction?() }
     @objc private func openHydrationSettings() { openHydrationSettingsAction?() }
+
+    @objc private func pauseCapture(_ item: NSMenuItem) {
+        guard let value = item.representedObject as? String,
+              let duration = CapturePauseDuration(rawValue: value) else { return }
+        CapturePolicySettings.shared.pause(duration)
+    }
+
+    @objc private func resumeCapture() { CapturePolicySettings.shared.resume() }
 
     @objc private func selectAppearance(_ item: NSMenuItem) {
         guard let value = item.representedObject as? String, let mode = AppearanceMode(rawValue: value) else { return }

@@ -199,8 +199,9 @@ enum ActivityCalculator {
         active = merge(active.compactMap { $0.clipped(to: window) })
         voice = merge(voice.compactMap { $0.clipped(to: window) })
         let downs = ordered.filter { $0.kind == 0 && $0.timestampMs >= window.startMs && $0.timestampMs < window.endMs }
+        // Redacted keys still count toward totals, but never appear per key.
         let keyCounts = downs.reduce(into: [Int: Int]()) { counts, event in
-            counts[event.keycode, default: 0] += 1
+            if event.keycode != CapturePolicyDocument.redactedKeycode { counts[event.keycode, default: 0] += 1 }
         }
 
         var days: [ActivityDay] = []

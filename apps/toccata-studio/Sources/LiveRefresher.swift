@@ -28,6 +28,16 @@ final class LiveRefresher: ObservableObject {
         self.refreshInterval = refreshInterval
     }
 
+    /// Pauses must apply at once. While disconnected, the service reads the file
+    /// on its next check or start.
+    func reloadCapturePolicy() {
+        let command = Array("{\"cmd\":\"reload_policy\"}\n".utf8)
+        lock.lock()
+        defer { lock.unlock() }
+        guard currentFD >= 0 else { return }
+        _ = command.withUnsafeBufferPointer { Darwin.send(currentFD, $0.baseAddress!, $0.count, 0) }
+    }
+
     private enum PendingLiveUpdate {
         case connection(connected: Bool, enabled: Bool, permissionRequired: Bool)
         case capture(enabled: Bool, permissionRequired: Bool)

@@ -41,7 +41,7 @@
 
 任务完成规则、按键计数和活跃时长计算保持一致。当前契约中的键码、应用标识和通信方式包含 macOS 约定，Windows 的映射、应用识别、进程通信及 Fn 等特殊键行为需要分别确认。
 
-键盘活动保存在本机，采集过程不截图、不录音、不保存输入文本。「思维净活跃时长」根据键盘活动估算，不能直接测量思维，也无法覆盖阅读、思考等全部投入。
+键盘活动保存在本机，采集过程不截图、不录音，也不解析或保存字符内容。按键序列仍可能还原输入内容，修改采集或存储时应按敏感数据处理。「思维净活跃时长」根据键盘活动估算，不能直接测量思维，也无法覆盖阅读、思考等全部投入。
 
 ## 验证改动
 
@@ -58,6 +58,6 @@ Contributions to code, documentation, translations, and testing are welcome. For
 
 The Windows client is currently in planning and has no runnable implementation. Join [Windows support #1](https://github.com/KMnO4-zx/Toccata/issues/1) to discuss the stack and scope, and use [apps/toccata-windows/](apps/toccata-windows/README.md#english) for the client. Tasks, statistics, and privacy principles should stay consistent across platforms; key codes, app identifiers, capture, and IPC need platform-specific design.
 
-Include the related issue, the resulting behavior, build instructions, test results, and screenshots for UI changes. Windows contributions should state the Windows version, CPU architecture, and toolchain used. Keep keyboard activity records local; capture must not take screenshots, record audio, or save typed text.
+Include the related issue, the resulting behavior, build instructions, test results, and screenshots for UI changes. Windows contributions should state the Windows version, CPU architecture, and toolchain used. Keep keyboard activity records local; capture must not take screenshots, record audio, or decode typed characters. Key sequences can still reveal typed content, so treat them as sensitive.
 
 For macOS builds, use macOS SDK **26.5** and the commands in the [developer guide (Chinese)](develop.md). Run checks appropriate to the change, keep documentation links working, and update Chinese and English text together.

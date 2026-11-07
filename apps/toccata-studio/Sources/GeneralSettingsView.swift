@@ -87,6 +87,10 @@ struct GeneralSettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                settingsCard(L10n.tr("键盘记录隐私"), symbol: "hand.raised") {
+                    CapturePrivacySettingsView()
+                }
+
                 settingsCard(L10n.tr("喝水提醒"), symbol: "drop") {
                     HydrationReminderSettingsView(reminders: reminders, showsTitle: false)
                 }
