@@ -17,13 +17,7 @@ struct CapturePrivacySettingsView: View {
                     Button(L10n.tr("恢复记录")) { policy.resume() }
                         .accessibilityIdentifier("settings-capture-resume")
                 } else {
-                    Menu(L10n.tr("暂停记录")) {
-                        ForEach(CapturePauseDuration.allCases) { duration in
-                            Button(duration.title) { policy.pause(duration) }
-                        }
-                    }
-                    .fixedSize()
-                    .accessibilityIdentifier("settings-capture-pause")
+                    pauseMenu
                 }
             }
             note(L10n.tr("暂停期间不写入按键，活跃时长和喝水提醒也不会计入。"))
@@ -45,16 +39,51 @@ struct CapturePrivacySettingsView: View {
         }
     }
 
-    private var addAppMenu: some View {
-        Menu(L10n.tr("添加应用")) {
-            ForEach(runningApps, id: \.bundleID) { app in
-                Button(app.name) { policy.setMode(.redact, for: app.bundleID) }
+    private var pauseMenu: some View {
+        let title = L10n.tr("暂停记录")
+        return SettingsPopoverButton(label: title) { dismiss in
+            SettingsPopoverOptions(title: title, options: CapturePauseDuration.allCases, selection: nil,
+                                   optionTitle: \.title) { duration in
+                dismiss()
+                policy.pause(duration)
             }
-            if !runningApps.isEmpty { Divider() }
-            Button(L10n.tr("选择其他应用…"), action: chooseApp)
+            .frame(width: language.language == .english ? 220 : 170)
         }
-        .fixedSize()
+        .accessibilityIdentifier("settings-capture-pause")
+    }
+
+    private var addAppMenu: some View {
+        let title = L10n.tr("添加应用")
+        return SettingsPopoverButton(label: title) { dismiss in
+            let choices = runningApps.map { AppChoice.running(name: $0.name, bundleID: $0.bundleID) } + [.other]
+            let options = SettingsPopoverOptions(title: title, options: choices, selection: nil,
+                                                 optionTitle: \.title) { choice in
+                dismiss()
+                switch choice {
+                case .running(_, let bundleID): policy.setMode(.redact, for: bundleID)
+                case .other: chooseApp()
+                }
+            }
+            ViewThatFits(in: .vertical) {
+                options
+                ScrollView { options }
+            }
+            .frame(width: 240)
+            .frame(maxHeight: 320)
+        }
         .accessibilityIdentifier("settings-capture-add-app")
+    }
+
+    private enum AppChoice: Hashable {
+        case running(name: String, bundleID: String)
+        case other
+
+        var title: String {
+            switch self {
+            case .running(let name, _): return name
+            case .other: return L10n.tr("选择其他应用…")
+            }
+        }
     }
 
     private var runningApps: [(name: String, bundleID: String)] {
